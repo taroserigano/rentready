@@ -48,7 +48,6 @@ from settings import DATA_DIR  # noqa: E402
 
 SEED = rr.SEED
 RESIDENTS_PER_PROPERTY = 25
-GEN_MONTHS = rr.HISTORY_MONTHS + rr.LABEL_HORIZON_MONTHS  # 60 history + 3 future
 DATA_PATH = DATA_DIR / "residents.json"
 
 # Monthly trouble log-odds weights (direction mirrors the feature policy).
@@ -108,11 +107,9 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
     import graph
 
     props = {p["id"]: p for p in graph.load_properties()}
-    # Last history month = the month before the snapshot (all history strictly
-    # precedes the snapshot -> airtight leakage guard).
-    last_hist = _add_months(snapshot, -1)
-    # Oldest generated month so the panel is [history..., future...].
-    first_month = _add_months(last_hist, -(rr.HISTORY_MONTHS - 1))
+    # History ends the month BEFORE the snapshot (all history strictly precedes
+    # the snapshot -> airtight leakage guard). Each resident's first ledger month
+    # is computed per-resident from their own tenure below.
 
     metas = []
     idx = 0
@@ -140,10 +137,16 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
                 0.0, 1.0,
             ))
 
-            # Tenure & lease timing (staggered so ~half are churn-eligible).
-            tenure_months = int(rng.integers(3, rr.HISTORY_MONTHS + 1))
+            # TRUE tenure (months since move-in): a realistic spread from
+            # brand-new (~2-3 months) up to long-term (capped ~96 months). The
+            # serialized ledger holds only the resident's ACTUAL months, capped
+            # at HISTORY_MONTHS — so a 10-month resident has a 10-entry ledger
+            # and a 7-year resident keeps the most recent 60.
+            true_tenure = int(np.clip(round(rng.gamma(2.2, 22.0)), 2, 96))
+            hist_len = min(true_tenure, rr.HISTORY_MONTHS)   # == serialized ledger length
+            gen_months = hist_len + rr.LABEL_HORIZON_MONTHS  # +3 future months for labels
             lease_term = int(rng.choice([12, 12, 12, 6, 18, 24]))
-            move_in = _add_months(snapshot, -tenure_months)
+            move_in = _add_months(snapshot, -true_tenure)
             # Current lease end: next term boundary strictly after the snapshot.
             renewals = 0
             lease_end = _add_months(move_in, lease_term)
@@ -160,30 +163,35 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
             logins = int(np.clip(rng.poisson(2 + 18 * engagement), 0, 120))
             unit_beds = int(np.clip(base_beds + rng.integers(-1, 2), 0, 5))
 
-            # Fixed per-month random draws (so the intercept bisection is
-            # deterministic in the intercepts, with feedback through ρ).
-            u_trouble = rng.random(GEN_MONTHS)
-            u_sev = rng.random(GEN_MONTHS)
-            u_kind = rng.random(GEN_MONTHS)      # partial vs missed split
-            frac_draw = rng.uniform(0.2, 0.8, GEN_MONTHS)
-            days_mild = rng.gamma(2.0, 5.0, GEN_MONTHS)   # paid_late days
-            days_severe = rng.gamma(3.0, 12.0, GEN_MONTHS)
-            catchup_draw = rng.uniform(0.3, 0.7, GEN_MONTHS)
-            notice_resp = rng.random(GEN_MONTHS)
+            # Fixed per-month random draws over the resident's own panel length
+            # (hist_len history + 3 future). The intercept bisection stays
+            # deterministic in the intercepts, with feedback through ρ.
+            u_trouble = rng.random(gen_months)
+            u_sev = rng.random(gen_months)
+            u_kind = rng.random(gen_months)      # partial vs missed split
+            frac_draw = rng.uniform(0.2, 0.8, gen_months)
+            days_mild = rng.gamma(2.0, 5.0, gen_months)   # paid_late days
+            days_severe = rng.gamma(3.0, 12.0, gen_months)
+            catchup_draw = rng.uniform(0.3, 0.7, gen_months)
+            notice_resp = rng.random(gen_months)
             # Shocks: additive burden spikes lasting 1–3 months.
-            shock = np.zeros(GEN_MONTHS)
+            shock = np.zeros(gen_months)
             m = 0
-            while m < GEN_MONTHS:
+            while m < gen_months:
                 if rng.random() < 0.04:
                     dur = int(rng.integers(1, 4))
                     mag = float(rng.uniform(0.8, 1.8))
-                    for k in range(m, min(m + dur, GEN_MONTHS)):
+                    for k in range(m, min(m + dur, gen_months)):
                         shock[k] += mag
                     m += dur
                 else:
                     m += 1
             u_churn = float(rng.random())
             u_flip = rng.random(3)
+            # History is a contiguous run of hist_len months ENDING at the
+            # snapshot month; the 3 label months follow it (t+1..t+3) and are
+            # never serialized. First ledger period = snapshot - (hist_len - 1).
+            first_month = _add_months(snapshot, -(hist_len - 1))
 
             metas.append({
                 "idx": idx,
@@ -204,6 +212,9 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
                 "lease_start": move_in.isoformat(),
                 "lease_end": lease_end.isoformat(),
                 "months_to_lease_end": months_to_lease_end,
+                "true_tenure": true_tenure,
+                "hist_len": hist_len,
+                "gen_months": gen_months,
                 "maintenance_requests_12mo": maint,
                 "complaints_12mo": complaints,
                 "portal_logins_90d": logins,
@@ -234,22 +245,26 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
 # Panel simulation (deterministic given the intercepts + fixed draws)
 # --------------------------------------------------------------------------
 def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
-    """Simulate the full GEN_MONTHS panel. Returns the 60-month serialized
-    ledger plus raw future-window quantities for label computation."""
+    """Simulate the resident's own panel (hist_len history + 3 future months).
+    Returns the serialized ledger (exactly hist_len entries) plus raw
+    future-window quantities for label computation. The 3 future months are
+    ALWAYS simulated (labels need them) but never serialized."""
     base_rent = meta["base_rent"]
     rel = meta["reliability"]
     burden = meta["rent_burden"]
     unstable = 1.0 - meta["income_stability"]
     shock = meta["shock"]
     first_month = meta["first_month"]
-    snapshot = _add_months(first_month, rr.HISTORY_MONTHS)  # month after last history month
+    hist_len = meta["hist_len"]
+    gen_months = meta["gen_months"]
+    snapshot = _add_months(first_month, hist_len - 1)  # last history month == snapshot month
 
     ledger = []
     balance = 0.0
     prev_trouble = 0
     future = []  # (status, days_late, balance_after) for the label window
 
-    for m in range(GEN_MONTHS):
+    for m in range(gen_months):
         period_date = _add_months(first_month, m)
         seasonal = _SEASONAL if period_date.month in (12, 1) else 0.0
         z = (
@@ -314,7 +329,7 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
             from datetime import timedelta
 
             settled = period_date + timedelta(days=days_late)
-            paid_date = settled.isoformat() if settled < snapshot else None
+            paid_date = settled.isoformat() if settled <= snapshot else None
 
         entry = {
             "period": f"{period_date.year:04d}-{period_date.month:02d}",
@@ -329,7 +344,7 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
             "notices_sent": int(notices_sent),
             "notice_responded": int(notice_responded),
         }
-        if m < rr.HISTORY_MONTHS:
+        if m < hist_len:
             ledger.append(entry)
         else:
             future.append({"status": status, "days_late": int(days_late), "balance_after": round(balance, 2)})
@@ -522,24 +537,65 @@ def _base_rates(labels: list) -> dict:
     }
 
 
+def _verify(residents: list, snapshot: date) -> dict:
+    """Assert the committed dataset's invariants. Returns a small summary."""
+    snap_month = (snapshot.year, snapshot.month)
+    tenures = []
+    n_after = 0
+    n_bad_len = 0
+    n_bad_contig = 0
+    n_bad_end = 0
+    for r in residents:
+        led = r["ledger"]
+        tenure = rr._months_between(rr._to_date(r["move_in_date"]), snapshot)
+        tenures.append(tenure)
+        # Invariant 1: ledger length == min(tenure, HISTORY_MONTHS).
+        if len(led) != min(tenure, rr.HISTORY_MONTHS):
+            n_bad_len += 1
+        # Parse periods.
+        months = [tuple(int(x) for x in e["period"].split("-")) for e in led]
+        # Invariant 2: contiguous months.
+        for a, b in zip(months, months[1:]):
+            if _add_months(date(a[0], a[1], 1), 1) != date(b[0], b[1], 1):
+                n_bad_contig += 1
+                break
+        # Invariant 3: last period == snapshot month.
+        if months and months[-1] != snap_month:
+            n_bad_end += 1
+        # Leakage guard: no entry dated AFTER the snapshot (period or paid_date).
+        for e in led:
+            y, m = (int(x) for x in e["period"].split("-"))
+            if date(y, m, 1) > snapshot:
+                n_after += 1
+            if e["paid_date"] and rr._to_date(e["paid_date"]) > snapshot:
+                n_after += 1
+    tenures.sort()
+    assert n_bad_len == 0, f"{n_bad_len} residents violate len(ledger)==min(tenure,60)"
+    assert n_bad_contig == 0, f"{n_bad_contig} residents have non-contiguous ledgers"
+    assert n_bad_end == 0, f"{n_bad_end} residents do not end at the snapshot month"
+    assert n_after == 0, f"LEAKAGE: {n_after} ledger entries dated after snapshot {snapshot}"
+    mid = tenures[len(tenures) // 2]
+    return {
+        "tenure_min": tenures[0],
+        "tenure_median": mid,
+        "tenure_max": tenures[-1],
+        "count_tenure_lt_60": sum(1 for t in tenures if t < rr.HISTORY_MONTHS),
+        "count_tenure_ge_60": sum(1 for t in tenures if t >= rr.HISTORY_MONTHS),
+        "ledger_len_range": (min(len(r["ledger"]) for r in residents), max(len(r["ledger"]) for r in residents)),
+    }
+
+
 if __name__ == "__main__":
     info = write_dataset()
-    residents, labels = build_training_frame()
     snap = rr.RESIDENT_SNAPSHOT
-    # Leakage guard: no ledger entry dated on/after the snapshot.
-    bad = 0
-    ledger_lens = set()
-    for r in residents:
-        ledger_lens.add(len(r["ledger"]))
-        for e in r["ledger"]:
-            y, m = (int(x) for x in e["period"].split("-"))
-            if date(y, m, 1) >= snap:
-                bad += 1
-            if e["paid_date"] and rr._to_date(e["paid_date"]) >= snap:
-                bad += 1
-    assert bad == 0, f"LEAKAGE: {bad} ledger entries dated on/after snapshot {snap}"
-    assert ledger_lens == {rr.HISTORY_MONTHS}, f"ledger length not exactly {rr.HISTORY_MONTHS}: {ledger_lens}"
+    committed = json.loads(DATA_PATH.read_text())["residents"]
+    summary = _verify(committed, snap)
+    _residents, labels = build_training_frame()  # larger cohort for base-rate sanity
     print(f"Wrote {info['path']}")
-    print(f"residents={info['residents']} properties={info['properties']} ledger_len={sorted(ledger_lens)}")
-    print(f"leakage_guard: PASS (0 entries on/after snapshot {snap})")
+    print(f"residents={info['residents']} properties={info['properties']}")
+    print(f"invariants: PASS  len(ledger)==min(tenure,60) for all; contiguous; end at snapshot month {snap}")
+    print(f"leakage_guard: PASS (0 entries dated after snapshot {snap})")
+    print(f"tenure distribution: min={summary['tenure_min']} median={summary['tenure_median']} "
+          f"max={summary['tenure_max']} | tenure<60: {summary['count_tenure_lt_60']} "
+          f"tenure>=60: {summary['count_tenure_ge_60']} | ledger_len_range={summary['ledger_len_range']}")
     print(f"label base rates: {_base_rates(labels)}")

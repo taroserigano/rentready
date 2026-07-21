@@ -19,9 +19,11 @@ import {
 export function RiskDisclaimer({
   variant = "inline",
   onViewModelCard,
+  text = RISK_DISCLAIMER,
 }: {
   variant?: "banner" | "inline";
   onViewModelCard?: () => void;
+  text?: string;
 }) {
   const link = onViewModelCard && (
     <button
@@ -39,7 +41,7 @@ export function RiskDisclaimer({
       <div className="alert warn" role="note">
         <Info size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
         <div>
-          {RISK_DISCLAIMER} {link}
+          {text} {link}
         </div>
       </div>
     );

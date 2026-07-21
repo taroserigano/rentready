@@ -12,7 +12,7 @@ import type {
 import { RiskDisclaimer } from "../risk/RiskCard";
 import { ResidentDetail } from "./ResidentDetail";
 import { ResidentModelCard } from "./ResidentModelCard";
-import { BAND_LABEL, BAND_TONE, churnTone, pct, usd } from "./residentsTone";
+import { BAND_LABEL, BAND_TONE, RESIDENT_DISCLAIMER, churnTone, pct, usd } from "./residentsTone";
 
 const ROW_CAP = 25;
 
@@ -179,7 +179,7 @@ export function Residents({
         </p>
       </header>
 
-      <RiskDisclaimer variant="banner" onViewModelCard={card ? scrollToModelCard : undefined} />
+      <RiskDisclaimer variant="banner" text={RESIDENT_DISCLAIMER} onViewModelCard={card ? scrollToModelCard : undefined} />
 
       {loading && (
         <div className="card">

@@ -9,7 +9,7 @@ import {
   LatePredictionCard,
   SeriousPredictionCard,
 } from "./PredictionCards";
-import { STATUS_STYLE, usd } from "./residentsTone";
+import { RESIDENT_DISCLAIMER, STATUS_STYLE, usd } from "./residentsTone";
 
 const LEDGER_PREVIEW = 12;
 
@@ -202,7 +202,7 @@ export function ResidentDetail({
         )}
       </div>
 
-      <RiskDisclaimer onViewModelCard={onViewModelCard} />
+      <RiskDisclaimer text={RESIDENT_DISCLAIMER} onViewModelCard={onViewModelCard} />
     </div>
   );
 }

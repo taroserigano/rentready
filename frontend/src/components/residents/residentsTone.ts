@@ -33,6 +33,19 @@ export function bandLabel(band: RiskBand): string {
 }
 
 /**
+ * Resident-specific decision-support disclaimer (the applicant model's wording
+ * about "the application" / "lease" doesn't fit current residents). Passed to
+ * <RiskDisclaimer text=…>.
+ */
+export const RESIDENT_DISCLAIMER =
+  "Decision-support only — not an automated decision. Forward-looking estimates " +
+  "from a model trained on synthetic data, meant to help a person prioritise " +
+  "proactive outreach and retention. They never trigger eviction, denial, " +
+  "pricing, or any automated action; serious-delinquency flags route to a human " +
+  "reviewer, and the model never uses race, national origin, sex, familial " +
+  "status, disability, age, or location.";
+
+/**
  * Payment-status → presentation. `tone` is the semantic bucket; `token` is the
  * CSS custom property that colours the timeline cell (NO hardcoded colours);
  * `label` is the human string used in the legend and hover tooltip.
