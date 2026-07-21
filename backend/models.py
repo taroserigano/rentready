@@ -7,7 +7,7 @@ language.
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApplicantProfile(BaseModel):
@@ -300,6 +300,75 @@ class RiskScoreRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Residents — current-resident risk (5-year rent ledger; multi-target model)
+#
+# Committed records store ONLY the rent ledger + immutable facts. Everything
+# time-relative (current balance, tenure, arrears, response rate) is DERIVED at
+# scoring time from the ledger + a pinned snapshot date, so training and serving
+# see the exact same computation and no future information leaks in.
+# ---------------------------------------------------------------------------
+
+
+class LedgerEntry(BaseModel):
+    """One month of a resident's rent ledger. Oldest→newest, ending at (and
+    never after) the snapshot month. This is a committed fact — payment
+    outcomes only, no derived/forward-looking fields."""
+
+    period: str  # "YYYY-MM"
+    rent_charged: float = Field(ge=0.0)
+    amount_paid: float = Field(ge=0.0)
+    paid_date: Optional[str] = None  # ISO date; None when nothing was paid
+    days_late: int = Field(default=0, ge=0)
+    late_fee: float = Field(default=0.0, ge=0.0)
+    on_time: bool = True
+    status: Literal["paid", "paid_late", "partial", "missed"] = "paid"
+    balance_after: float = 0.0  # running arrears after this month (>=0)
+    notices_sent: int = Field(default=0, ge=0)
+    notice_responded: int = Field(default=0, ge=0)
+
+
+class Resident(BaseModel):
+    """A current resident: committed ledger + immutable facts ONLY.
+
+    Time-relative statistics (current balance, tenure, arrears, notice-response
+    rate) are intentionally NOT stored — they are derived at scoring time from
+    ``ledger`` + the snapshot so train/serve cannot skew and the future cannot
+    leak. Protected-class attributes are never stored here at all."""
+
+    # Identity / unit
+    resident_id: str  # "RES-0001"
+    property_id: str
+    unit_id: str
+    unit_bedrooms: int = Field(default=1, ge=0)
+    base_rent: float = Field(ge=0.0)
+
+    # Lease
+    lease_start: str  # ISO date
+    lease_end: str  # ISO date
+    lease_term_months: int = Field(default=12, ge=1)
+    renewal_offer_sent: bool = False
+    autopay_enrolled: bool = False
+    deposit_held: float = Field(default=0.0, ge=0.0)
+    move_in_date: str  # ISO date
+    prior_renewals: int = Field(default=0, ge=0)
+
+    # Financial (snapshot facts)
+    monthly_income: float = Field(default=0.0, ge=0.0)
+    other_income_monthly: float = Field(default=0.0, ge=0.0)
+    income_verified: bool = False
+
+    # Engagement (stored counts, immutable facts as of snapshot)
+    maintenance_requests_12mo: int = Field(default=0, ge=0)
+    complaints_12mo: int = Field(default=0, ge=0)
+    portal_logins_90d: int = Field(default=0, ge=0)
+
+    # History
+    ledger: list[LedgerEntry] = Field(default_factory=list)
+
+    dgp_version: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Risk Chat — the decision-support agent embedded in the Risk page.
 # Mirrors the concierge request/response shapes. The ``artifact`` is a plain
 # dict built by ``risk_agent``; its runtime shape is a discriminated union
@@ -336,3 +405,204 @@ class RiskChatResponse(BaseModel):
     artifact: dict = Field(default_factory=lambda: {"kind": "none"})
     follow_ups: list[str] = Field(default_factory=list)
     source: Literal["rules", "anthropic"] = "rules"
+
+
+# ---------------------------------------------------------------------------
+# Residents API — response schemas.
+#
+# These mirror ``residents_risk.predict_resident``'s output faithfully (one
+# sub-model per target) plus the portfolio/rollup aggregates the API layer
+# computes. Endpoints ALWAYS return 200 (the model degrades to a transparent
+# heuristic server-side); the only typed error is 404 for a genuinely unknown
+# resident id on the detail route.
+# ---------------------------------------------------------------------------
+
+
+class LatePrediction(BaseModel):
+    """P(any late payment next quarter) — calibrated classifier."""
+
+    probability: float
+    band: Literal["low", "medium", "high"]
+    range: list[float] = Field(default_factory=list)  # [lo, hi]
+    reason_codes: list[ReasonCode] = Field(default_factory=list)
+    confidence: Literal["high", "low"]
+    source: Literal["model", "heuristic"]
+    model_type: str = "heuristic"
+
+
+class ArrearsPrediction(BaseModel):
+    """Expected $ balance at the end of next quarter — regressor + interval."""
+
+    expected_balance: float
+    interval: list[float] = Field(default_factory=list)  # [lo, hi]
+    reason_codes: list[ReasonCode] = Field(default_factory=list)
+    confidence: Literal["high", "low"]
+    source: Literal["model", "heuristic"]
+    model_type: str = "heuristic"
+
+
+class ChurnPrediction(BaseModel):
+    """P(non-renewal) for leases ending within the horizon; ``probability`` is
+    None and ``band`` is ``"not_applicable"`` when the lease ends further out."""
+
+    probability: Optional[float] = None  # None when not applicable
+    band: Literal["low", "medium", "high", "not_applicable"]
+    months_to_lease_end: Optional[float] = None
+    reason_codes: list[ReasonCode] = Field(default_factory=list)
+    confidence: Literal["high", "low"]
+    source: Literal["model", "heuristic", "not_applicable"]
+
+
+class SeriousPrediction(BaseModel):
+    """P(serious delinquency: 30+ days late or a full month in arrears). Always
+    routes to a human reviewer — never an automated action."""
+
+    probability: float
+    band: Literal["low", "medium", "high"]
+    range: list[float] = Field(default_factory=list)
+    reason_codes: list[ReasonCode] = Field(default_factory=list)
+    confidence: Literal["high", "low"]
+    source: Literal["model", "heuristic"]
+    model_type: str = "heuristic"
+    routes_to_review: bool = True
+
+
+class ResidentPredictions(BaseModel):
+    """The full multi-target result for one resident — mirrors the dict returned
+    by ``residents_risk.predict_resident`` exactly."""
+
+    resident_id: str = ""
+    property_id: str = ""
+    snapshot_date: str = ""
+    late: LatePrediction
+    arrears: ArrearsPrediction
+    churn: ChurnPrediction
+    serious: SeriousPrediction
+    scored_at: Optional[str] = None
+
+
+class ResidentRow(BaseModel):
+    """One row of the portfolio residents table — a flattened, at-a-glance view
+    of the four predictions for a single resident."""
+
+    resident_id: str
+    property_id: str
+    unit_id: str
+    base_rent: float
+    tenure_months: int
+    late_probability: float
+    late_band: Literal["low", "medium", "high"]
+    expected_arrears: float
+    churn_probability: Optional[float] = None
+    churn_status: Literal["low", "medium", "high", "not_applicable"]
+    serious_probability: float
+    serious_band: Literal["low", "medium", "high"]
+    current_balance: float
+    top_driver: str = ""
+
+
+class ResidentListResponse(BaseModel):
+    residents: list[ResidentRow] = Field(default_factory=list)
+    count: int = 0
+    property_id: Optional[str] = None  # set when the list was filtered
+    source: Literal["model", "heuristic"] = "heuristic"
+
+
+class LedgerStats(BaseModel):
+    """Time-relative statistics DERIVED from the ledger + snapshot at read time
+    (never stored on the record). Computed via the same feature extraction the
+    models use, so what the UI shows and what the model saw cannot diverge."""
+
+    ledger_months: int
+    tenure_months: int
+    current_balance: float
+    current_balance_ratio: float
+    balance_trend_6mo: float
+    times_late_3mo: int
+    times_late_6mo: int
+    times_late_12mo: int
+    times_late_24mo: int
+    missed_count_12mo: int
+    partial_count_12mo: int
+    on_time_streak_months: int
+    months_since_last_late: int
+    max_days_late_12mo: int
+    avg_days_late_12mo: float
+    late_fees_12mo: float
+    notice_response_rate: float
+    rent_to_income: float
+    autopay_enrolled: bool
+    income_verified: bool
+    lifetime_paid: float
+    lifetime_late_fees: float
+
+
+class ResidentDetail(BaseModel):
+    """Full drill-down for one resident: the committed record, the four
+    predictions, and derived ledger statistics."""
+
+    resident: Resident
+    predictions: ResidentPredictions
+    ledger_stats: LedgerStats
+    source: Literal["model", "heuristic"] = "heuristic"
+
+
+class BandDistribution(BaseModel):
+    low: int = 0
+    medium: int = 0
+    high: int = 0
+    not_applicable: int = 0  # churn only
+
+
+class ResidentRollup(BaseModel):
+    """Aggregate view over a set of residents (one property, or the portfolio)."""
+
+    resident_count: int = 0
+    predicted_late_rate: float = 0.0  # mean P(late) next quarter
+    total_expected_arrears: float = 0.0  # sum of expected balances next quarter
+    avg_serious_probability: float = 0.0
+    churn_eligible_count: int = 0  # leases ending within the churn horizon
+    churn_risk_count: int = 0  # of eligible, band == "high"
+    serious_flag_count: int = 0  # band == "high" -> routes to review
+    late_bands: BandDistribution = Field(default_factory=BandDistribution)
+    serious_bands: BandDistribution = Field(default_factory=BandDistribution)
+    churn_bands: BandDistribution = Field(default_factory=BandDistribution)
+
+
+class PropertyResidentRollup(ResidentRollup):
+    property_id: str
+
+
+class PropertyResidentsResponse(BaseModel):
+    property_id: str
+    residents: list[ResidentRow] = Field(default_factory=list)
+    count: int = 0
+    rollup: PropertyResidentRollup
+    source: Literal["model", "heuristic"] = "heuristic"
+
+
+class PortfolioSummary(BaseModel):
+    properties: list[PropertyResidentRollup] = Field(default_factory=list)
+    overall: ResidentRollup = Field(default_factory=ResidentRollup)
+    property_count: int = 0
+    resident_count: int = 0
+    snapshot_date: str = ""
+    source: Literal["model", "heuristic"] = "heuristic"
+    generated_at: Optional[str] = None
+
+
+class ResidentModelCard(BaseModel):
+    """The resident-risk model card. Loosely typed (``extra='allow'``) so the
+    rich per-target detail from ``residents_risk.model_card`` passes through
+    untouched for the frontend."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = ""
+    version: str = ""
+    description: str = ""
+    intended_use: str = ""
+    targets: list[dict] = Field(default_factory=list)
+    excluded: list[dict] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    source: str = "heuristic"

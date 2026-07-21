@@ -42,6 +42,8 @@ import knowledge
 import concierge_api
 import risk
 import risk_api
+import residents_risk
+import resident_api
 import monitoring
 from evals import judges
 
@@ -63,6 +65,7 @@ app.include_router(dashboard_api.router)
 app.include_router(tours_api.router)
 app.include_router(concierge_api.router)
 app.include_router(risk_api.router)
+app.include_router(resident_api.router)
 
 
 @app.on_event("startup")
@@ -89,6 +92,14 @@ def _startup() -> None:
         print(f"Risk model: {risk_result}")
     except Exception as exc:  # noqa: BLE001
         print(f"Risk model ensure failed ({type(exc).__name__}: {exc}); continuing.")
+    # Best-effort: train the resident-risk bundle if its artifact is missing.
+    # Wrapped so a training hiccup never blocks startup (scoring degrades to the
+    # transparent heuristic).
+    try:
+        residents_result = residents_risk.ensure_model()
+        print(f"Residents model: {residents_result}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Residents model ensure failed ({type(exc).__name__}: {exc}); continuing.")
 
 
 def _process_pdf(pdf_bytes: bytes) -> UploadResponse:
@@ -418,4 +429,5 @@ def health() -> dict:
         "tours_loaded": len(store.list_agents()),
         "knowledge_indexed": knowledge.count(),
         "risk_model": risk.status(),
+        "residents_model": residents_risk.status(),
     }

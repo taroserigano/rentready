@@ -51,6 +51,7 @@ import { Tours } from "./components/Tours";
 import { Concierge } from "./components/Concierge";
 import { Risk } from "./components/risk/Risk";
 import { RiskCard } from "./components/risk/RiskCard";
+import { Residents } from "./components/residents/Residents";
 
 type View =
   | "workspace"
@@ -62,6 +63,7 @@ type View =
   | "ask"
   | "dashboard"
   | "risk"
+  | "residents"
   | "evaluations"
   | "monitoring"
   | "ab"
@@ -103,6 +105,10 @@ export default function App() {
   // When the Risk page is opened from an applicant it lands with that person
   // pre-selected; null means "rank everyone".
   const [riskApplicantId, setRiskApplicantId] = useState<string | null>(null);
+  // When the Residents page is opened from elsewhere it can land pre-scoped to
+  // a property and/or a specific resident; null means "whole portfolio".
+  const [residentPropertyId, setResidentPropertyId] = useState<string | null>(null);
+  const [residentId, setResidentId] = useState<string | null>(null);
   const [view, setView] = useState<View>(() =>
     parsePropertyHash() ? "property" : "workspace",
   );
@@ -156,6 +162,14 @@ export default function App() {
     clearPropertyHash();
   }
 
+  /** Open the Residents page, optionally scoped to a property and/or resident. */
+  function goToResidents(opts?: { propertyId?: string; residentId?: string }) {
+    setResidentPropertyId(opts?.propertyId ?? null);
+    setResidentId(opts?.residentId ?? null);
+    setView("residents");
+    clearPropertyHash();
+  }
+
   /** Nav switcher that also drops the property hash when leaving the page. */
   function navigate(v: View) {
     if (v !== "property") {
@@ -165,6 +179,10 @@ export default function App() {
     if (v !== "tours") setTourPropertyId(null);
     if (v !== "ask") setAskPropertyId(null);
     if (v !== "risk") setRiskApplicantId(null);
+    if (v !== "residents") {
+      setResidentPropertyId(null);
+      setResidentId(null);
+    }
     setView(v);
   }
 
@@ -222,6 +240,7 @@ export default function App() {
       ["ask", "Ask"],
       ["dashboard", "Dashboard"],
       ["risk", "Risk"],
+      ["residents", "Residents"],
       ["evaluations", "Evaluations"],
       ["monitoring", "Monitoring"],
       ["ab", "A/B Lab"],
@@ -244,6 +263,12 @@ export default function App() {
         },
       });
     }
+    cmds.push({
+      id: "residents-portfolio",
+      label: "Residents: open portfolio overview",
+      group: "Navigate",
+      run: () => goToResidents(),
+    });
     cmds.push({
       id: "theme",
       label: "Toggle light / dark theme",
@@ -340,6 +365,18 @@ export default function App() {
       <>
         <Nav view={view} setView={navigate} commands={commands} />
         <Risk initialApplicantId={riskApplicantId ?? undefined} />
+      </>
+    );
+  }
+
+  if (view === "residents") {
+    return (
+      <>
+        <Nav view={view} setView={navigate} commands={commands} />
+        <Residents
+          initialPropertyId={residentPropertyId ?? undefined}
+          initialResidentId={residentId ?? undefined}
+        />
       </>
     );
   }
@@ -573,6 +610,7 @@ function Nav({
       {tab("ask", "Ask")}
       {tab("dashboard", "Dashboard")}
       {tab("risk", "Risk")}
+      {tab("residents", "Residents")}
       {tab("evaluations", "Evaluations")}
       {tab("monitoring", "Monitoring")}
       {tab("ab", "A/B Lab")}

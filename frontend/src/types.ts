@@ -663,3 +663,236 @@ export interface DashboardStats {
   };
   feedback: { up: number; down: number };
 }
+
+// --- Residents: current-resident risk assessment (decision-support) --------
+//
+// A NEW feature, separate from applicant-screening Risk above. Forward-looking
+// risk on CURRENT residents from 5 years (60 months) of rent-ledger history.
+// Four independent predictions per resident (late / arrears / churn / serious),
+// each degrading to a transparent heuristic. Reuses RiskBand + ReasonCode.
+
+/** One month's status in a resident's rent ledger. */
+export type LedgerStatus = "paid" | "paid_late" | "partial" | "missed";
+
+/**
+ * Churn applicability. Churn is only labeled/scored for leases ending within
+ * the 6-month horizon; otherwise the API returns "not_applicable".
+ */
+export type ChurnBand = RiskBand | "not_applicable";
+
+/** One month of the 60-month rent ledger (oldest → newest, ending at snapshot). */
+export interface LedgerEntry {
+  /** "YYYY-MM". */
+  period: string;
+  rent_charged: number;
+  amount_paid: number;
+  /** ISO date the payment posted; null when nothing was paid that month. */
+  paid_date?: string | null;
+  days_late: number;
+  late_fee: number;
+  on_time: boolean;
+  status: LedgerStatus;
+  /** Rolling balance owed after this month's activity. */
+  balance_after: number;
+  notices_sent: number;
+  notice_responded: number;
+}
+
+/**
+ * A full committed resident record: immutable facts + the 60-month ledger.
+ * Time-relative stats (current_balance / tenure / arrears / response rate) are
+ * derived at scoring; the detail endpoint may echo them back as optional fields.
+ */
+export interface Resident {
+  resident_id: string;
+  property_id: string;
+  unit_id: string;
+  unit_bedrooms: number;
+  base_rent: number;
+  // lease
+  lease_start: string;
+  lease_end: string;
+  lease_term_months: number;
+  renewal_offer_sent: boolean;
+  autopay_enrolled: boolean;
+  deposit_held: number;
+  move_in_date: string;
+  prior_renewals: number;
+  // financial (snapshot)
+  monthly_income: number;
+  other_income_monthly: number;
+  income_verified: boolean;
+  // engagement (stored counts)
+  maintenance_requests_12mo: number;
+  complaints_12mo: number;
+  portal_logins_90d: number;
+  // history
+  ledger: LedgerEntry[];
+  dgp_version?: string;
+  // derived-at-scoring stats (present on the detail response; optional)
+  tenure_months?: number;
+  current_balance?: number;
+  expected_arrears?: number;
+  notice_response_rate?: number;
+  on_time_streak_months?: number;
+  [k: string]: unknown;
+}
+
+/** One row in the portfolio / property resident listing. */
+export interface ResidentRow {
+  resident_id: string;
+  property_id: string;
+  unit_id: string;
+  base_rent: number;
+  tenure_months: number;
+  /** Calibrated P(any late payment next quarter), 0..1. */
+  late_probability: number;
+  late_band: RiskBand;
+  /** Expected $ balance owed at the end of next quarter. */
+  expected_arrears: number;
+  /** null when the lease isn't ending within the churn horizon. */
+  churn_probability: number | null;
+  churn_status: ChurnBand;
+  serious_probability: number;
+  serious_band: RiskBand;
+  current_balance: number;
+  /** Strongest driver label for a compact table cell. */
+  top_driver: string;
+}
+
+export interface ResidentListResponse {
+  residents: ResidentRow[];
+  count: number;
+  property_id?: string | null;
+  source: string;
+}
+
+/** Binary-classifier prediction (late / serious) — shape reused by RiskGauge. */
+export interface ResidentClassPrediction {
+  probability: number;
+  band: RiskBand;
+  /** [low, high] calibration spread — UI shows "~20% (12–28%)". */
+  range: [number, number];
+  reason_codes: ReasonCode[];
+  confidence: "high" | "low";
+  source: string;
+  model_type: string;
+}
+
+/** Serious-delinquency prediction always routes to a human reviewer. */
+export interface ResidentSeriousPrediction extends ResidentClassPrediction {
+  routes_to_review: boolean;
+}
+
+/** Expected-arrears regression prediction ($ owed next quarter). */
+export interface ResidentArrearsPrediction {
+  expected_balance: number;
+  /** Prediction interval [low, high] in dollars. */
+  interval: [number, number];
+  reason_codes: ReasonCode[];
+  confidence: "high" | "low";
+  source: string;
+}
+
+/** Churn prediction — null / "not_applicable" when the lease isn't ending soon. */
+export interface ResidentChurnPrediction {
+  probability: number | null;
+  band: ChurnBand;
+  months_to_lease_end: number;
+  reason_codes: ReasonCode[];
+  confidence: "high" | "low";
+  source: string;
+}
+
+/** The four forward-looking predictions for one resident. */
+export interface ResidentPredictions {
+  late: ResidentClassPrediction;
+  arrears: ResidentArrearsPrediction;
+  churn: ResidentChurnPrediction;
+  serious: ResidentSeriousPrediction;
+}
+
+/** GET /residents/{id} — full resident record + the four predictions. */
+export interface ResidentDetail {
+  resident: Resident;
+  predictions: ResidentPredictions;
+}
+
+/** Per-property rollup used by the selector and the property drill-down. */
+export interface PropertyResidentRollup {
+  property_id?: string;
+  name?: string;
+  count: number;
+  predicted_late_rate?: number;
+  total_expected_arrears?: number;
+  churn_risk_count?: number;
+  serious_flag_count?: number;
+  [k: string]: unknown;
+}
+
+/** GET /properties/{id}/residents. */
+export interface PropertyResidentsResponse {
+  residents: ResidentRow[];
+  rollup: PropertyResidentRollup;
+}
+
+/** One property's aggregates in the portfolio summary. */
+export interface PortfolioProperty {
+  property_id: string;
+  name?: string;
+  resident_count: number;
+  predicted_late_rate: number;
+  total_expected_arrears: number;
+  churn_risk_count: number;
+  serious_flag_count: number;
+  late_bands?: Record<string, number>;
+  serious_bands?: Record<string, number>;
+  churn_bands?: Record<string, number>;
+  [k: string]: unknown;
+}
+
+/** GET /residents/portfolio/summary. */
+export interface PortfolioSummary {
+  properties: PortfolioProperty[];
+  overall: {
+    resident_count: number;
+    predicted_late_rate: number;
+    total_expected_arrears: number;
+    churn_risk_count: number;
+    serious_flag_count: number;
+    late_bands?: Record<string, number>;
+    [k: string]: number | Record<string, number> | undefined;
+  };
+}
+
+/** One target's governance block inside the resident model card. */
+export interface ResidentTargetCard {
+  feature_order?: string[];
+  features?: string[];
+  metrics?: Record<string, number>;
+  bands?: RiskBandRange[];
+  model_type?: string;
+  source?: string;
+  [k: string]: unknown;
+}
+
+/**
+ * GET /residents/model-card. Multi-target (late / arrears / churn / serious)
+ * plus the shared structurally-excluded fields. Typed loosely and rendered
+ * defensively — it's best-effort, like the Risk model card.
+ */
+export interface ResidentModelCard {
+  name?: string;
+  version?: string;
+  dgp_version?: string;
+  generated_at?: string;
+  trained_at?: string;
+  description?: string;
+  intended_use?: string;
+  /** Keyed by target name: late / arrears / churn / serious. */
+  targets?: Record<string, ResidentTargetCard>;
+  excluded?: RiskExcludedField[];
+  limitations?: string[];
+  source?: string;
+  [k: string]: unknown;
+}

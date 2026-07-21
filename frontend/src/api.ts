@@ -30,6 +30,12 @@ import type {
   RiskChatRequest,
   RiskChatAnswer,
   RiskChatMeta,
+  ResidentListResponse,
+  ResidentDetail,
+  ResidentPredictions,
+  PropertyResidentsResponse,
+  PortfolioSummary,
+  ResidentModelCard,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -671,6 +677,55 @@ export async function askRiskChatStream(
   }
   // Flush any trailing frame that arrived without a terminating blank line.
   if (buffer.trim()) dispatch(buffer);
+}
+
+// --- Residents: current-resident risk assessment (decision-support) --------
+
+/**
+ * Portfolio-wide resident listing, ranked rows. Pass a `propertyId` to scope to
+ * one property. Always resolves 200 (the backend degrades gracefully).
+ */
+export async function listResidents(
+  propertyId?: string,
+): Promise<ResidentListResponse> {
+  const suffix = propertyId
+    ? `?property_id=${encodeURIComponent(propertyId)}`
+    : "";
+  return json(await fetch(`${BASE}/residents${suffix}`));
+}
+
+/** One resident's full record + the four predictions (404 if unknown). */
+export async function getResident(id: string): Promise<ResidentDetail> {
+  return json(await fetch(`${BASE}/residents/${encodeURIComponent(id)}`));
+}
+
+/** Residents for one property + that property's rollup. */
+export async function listPropertyResidents(
+  propertyId: string,
+): Promise<PropertyResidentsResponse> {
+  return json(
+    await fetch(`${BASE}/properties/${encodeURIComponent(propertyId)}/residents`),
+  );
+}
+
+/** Per-property + overall portfolio rollups (KPI tiles + selector). */
+export async function getResidentsPortfolio(): Promise<PortfolioSummary> {
+  return json(await fetch(`${BASE}/residents/portfolio/summary`));
+}
+
+export async function getResidentModelCard(): Promise<ResidentModelCard> {
+  return json(await fetch(`${BASE}/residents/model-card`));
+}
+
+/** Re-score one resident on demand; returns the four predictions. */
+export async function scoreResident(
+  id: string,
+): Promise<ResidentPredictions> {
+  return json(
+    await fetch(`${BASE}/residents/${encodeURIComponent(id)}/score`, {
+      method: "POST",
+    }),
+  );
 }
 
 export async function getLease(propertyId: string): Promise<LeaseDoc> {
