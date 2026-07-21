@@ -82,6 +82,15 @@ def _startup() -> None:
         print(f"Knowledge ingested: {k_result}")
     except Exception as exc:  # noqa: BLE001
         print(f"Knowledge ingest failed ({type(exc).__name__}: {exc}); continuing.")
+    # Warm the retrieval pipeline (LlamaIndex retriever + FlashRank ranker):
+    # both lazily load on first use, which otherwise costs the FIRST real
+    # concierge question several extra seconds. Pay that cost here instead.
+    try:
+        t0 = time.perf_counter()
+        knowledge.search("warm up the retrieval pipeline", k=1)
+        print(f"Knowledge search warmed up ({(time.perf_counter() - t0) * 1000:.0f}ms).")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Knowledge warm-up failed ({type(exc).__name__}: {exc}); continuing.")
     # Best-effort: train the risk model if its artifact is missing. Wrapped so a
     # training hiccup never blocks startup (scoring degrades to the heuristic).
     try:

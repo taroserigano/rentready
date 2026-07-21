@@ -98,7 +98,11 @@ _PETS_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Amenity keyword -> canonical amenity label in the data.
+# Amenity keyword -> canonical amenity label in the data. Covers every
+# amenity string that actually appears in the property data — a missing
+# entry here doesn't error, it silently drops that filter (compare_properties
+# just returns the cheapest homes instead), so keep this in sync with
+# whatever amenities the data contains.
 _AMENITY_MAP = [
     (re.compile(r"\b(gym|fitness)\b", re.I), "Gym", "has a gym"),
     (re.compile(r"\b(pool|swim)\b", re.I), "Pool", "has a pool"),
@@ -107,6 +111,15 @@ _AMENITY_MAP = [
     (re.compile(r"\bbike\b", re.I), "Bike Storage", "has bike storage"),
     (re.compile(r"\bplayground\b", re.I), "Playground", "has a playground"),
     (re.compile(r"\bpet park\b", re.I), "Pet Park", "has a pet park"),
+    (re.compile(r"\b(bbq|barbecue)\b", re.I), "BBQ Area", "has a BBQ area"),
+    (re.compile(r"\bclubhouse\b", re.I), "Clubhouse", "has a clubhouse"),
+    (re.compile(r"\bco[\s-]?working\b", re.I), "Coworking Space", "has a coworking space"),
+    (re.compile(r"\bdog park\b", re.I), "Dog Park", "has a dog park"),
+    (re.compile(r"\b(ev charg\w*|electric vehicle)\b", re.I), "EV Charging", "has EV charging"),
+    (re.compile(r"\bpackage (locker|room)s?\b", re.I), "Package Lockers", "has package lockers"),
+    (re.compile(r"\bsmart lock\w*\b", re.I), "Smart Locks", "has smart locks"),
+    (re.compile(r"\bstorage units?\b", re.I), "Storage Units", "has storage units"),
+    (re.compile(r"\byoga\b", re.I), "Yoga Studio", "has a yoga studio"),
 ]
 
 # Neighborhoods mentioned in the contract, plus any others discovered at runtime.
@@ -254,8 +267,10 @@ def _deterministic_property_answer(p: dict, question: str) -> str:
     name = p.get("name", "This property")
     q = question or ""
 
-    # "Does it have X?" style — yes/no on a concrete feature.
-    if re.search(r"\b(does|do|is there|are there|has|have)\b", q, re.I):
+    # "Does it have X?" / "Is it X?" / "Is there X?" style — yes/no on a
+    # concrete feature. Bare "is"/"are" catches the very common "Is it
+    # furnished?"/"Is the community gated?" phrasing, not just "is there".
+    if re.search(r"\b(does|do|is|are|has|have)\b", q, re.I):
         for rx, check, phrase in _FEATURE_CHECKS:
             if rx.search(q):
                 if check(p):
@@ -506,7 +521,14 @@ def _assemble(question: str, route_: str, prop: dict | None, property_id: str | 
     sources: list[dict] = []
 
     want_property = route_ in ("property", "both", "general")
-    want_lease = route_ in ("lease", "both", "general")
+    # For a truly unscoped "general" question (no property in view, no
+    # property/lease keyword the router recognized), retrieval has nothing
+    # real to search for — knowledge.search()'s hybrid ranking always returns
+    # its top-k regardless of relevance, so without this guard a vague
+    # question like "Hi there!" would confidently cite a random lease clause
+    # from an unrelated property. Scoped "general" questions still search the
+    # (correctly-filtered) lease, since at least the property is relevant.
+    want_lease = route_ in ("lease", "both") or (route_ == "general" and bool(property_id))
 
     if want_property and prop is not None:
         sheet = _fact_sheet(prop)

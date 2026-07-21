@@ -68,18 +68,44 @@ def test_specific_items_route_and_retrieval(kb):
     by_id = {it["id"]: it for it in res["items"]}
 
     # A property item routes correctly and finds a property source.
-    assert by_id["prop-gym"]["route_ok"]
-    assert by_id["prop-gym"]["retrieval_ok"]
+    assert by_id["prop-gym-yes-0"]["route_ok"]
+    assert by_id["prop-gym-yes-0"]["retrieval_ok"]
 
     # A lease item retrieves the expected section (proven with hash embedder).
-    assert by_id["lease-deposit"]["route_ok"]
-    assert by_id["lease-deposit"]["retrieval_ok"]
+    assert by_id["lease-deposit-0"]["route_ok"]
+    assert by_id["lease-deposit-0"]["retrieval_ok"]
 
     # A compare item routes to compare and finds the expected property.
-    assert by_id["compare-cheapest"]["route_ok"]
-    assert by_id["compare-cheapest"]["retrieval_ok"]
+    assert by_id["compare-cheapest-all-1"]["route_ok"]
+    assert by_id["compare-cheapest-all-1"]["retrieval_ok"]
+
+    # A "both" item (property+lease keyword collision) routes correctly.
+    assert by_id["both-rent-pet"]["route_ok"]
+
+    # An unscoped "general" question declines gracefully rather than forcing
+    # a spurious lease citation (see concierge._assemble's want_lease guard).
+    assert by_id["general-hi"]["route_ok"]
+    assert by_id["general-hi"]["retrieval_ok"]
+
+
+def test_all_items_pass_all_three_metrics(kb):
+    """Every item in the golden set should pass route/retrieval/groundedness
+    on the deterministic path — this is the full-dataset regression gate."""
+    res = concierge_eval.run(use_llm=False)
+    failing = [
+        it["id"] for it in res["items"]
+        if not (it["route_ok"] and it["retrieval_ok"] and it["grounded_ok"])
+    ]
+    assert not failing, f"{len(failing)} item(s) failed: {failing}"
 
 
 def test_dataset_kinds_are_covered():
     kinds = {item_kind(it) for it in CONCIERGE_DATASET}
     assert kinds == {"property", "lease", "compare"}
+
+
+def test_dataset_covers_all_routes():
+    """The golden set exercises every route the classifier can produce,
+    including 'both' and 'general' (absent from the original 11-item set)."""
+    routes = {it["expected_route"] for it in CONCIERGE_DATASET}
+    assert routes == {"property", "lease", "both", "compare", "general"}

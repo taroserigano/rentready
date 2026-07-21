@@ -45,7 +45,12 @@ def _retrieval_ok(item: dict, result: dict) -> bool:
     if kind == "compare":
         got = {c.get("id") for c in (result.get("comparison") or [])}
         return set(item["expected_property_ids"]).issubset(got)
-    # property
+    # property (default kind, also covers unscoped both/general items). A
+    # property-type source can only ever exist when a property was actually
+    # in scope; for a genuinely unscoped question, a graceful empty-sources
+    # decline IS the correct behavior (see concierge._assemble), not a miss.
+    if not item.get("property_id"):
+        return not sources
     return any(s.get("type") == "property" for s in sources)
 
 
