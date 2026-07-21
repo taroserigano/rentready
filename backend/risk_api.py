@@ -5,9 +5,11 @@ call. Scoring NEVER 500s — ``risk.predict`` degrades to a transparent heuristi
 server-side. The only typed error is 404 for an unknown applicant id.
 """
 
+import json
 import time
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 import risk
 import risk_chat
@@ -119,6 +121,65 @@ def chat(req: RiskChatRequest) -> RiskChatResponse:
         },
     )
     return result
+
+
+@router.post("/risk/chat/stream")
+def chat_stream(req: RiskChatRequest) -> StreamingResponse:
+    """Stream a risk decision-support answer as Server-Sent Events. Emits a
+    ``meta`` frame (the deterministic ``_RiskPlan`` pass — scope, intent,
+    follow-ups and the artifact) first, then ``token`` frames as the LLM prose
+    streams, then a final ``done``. Degrades to a single deterministic token on
+    any error — the generator never crashes the response. An unknown
+    ``applicant_id`` is NOT a 404: the agent deflects gracefully. Declared before
+    ``/risk/{applicant_id}`` so the literal path is not swallowed by the
+    catch-all."""
+    t0 = time.perf_counter()
+    history = [m.model_dump() for m in (req.history or [])]
+
+    def _event_stream():
+        intent = ""
+        source = "rules"
+        artifact_kind = ""
+        try:
+            for event in risk_chat.answer_stream(
+                question=req.question,
+                applicant_id=req.applicant_id,
+                history=history,
+            ):
+                etype = event.get("type")
+                if etype == "meta":
+                    intent = event.get("intent", "")
+                    artifact_kind = (event.get("artifact") or {}).get("kind", "")
+                elif etype == "done":
+                    source = event.get("source", "rules")
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:  # noqa: BLE001 — last-ditch guard
+            print(f"risk_api: stream failed ({type(exc).__name__}: {exc}).")
+            fallback = {
+                "type": "token",
+                "text": "Sorry, I hit a snag. Please try again.",
+            }
+            yield f"data: {json.dumps(fallback)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'source': 'rules'})}\n\n"
+        finally:
+            store.log_event(
+                endpoint="risk_chat_stream",
+                applicant_id=req.applicant_id or None,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                source=source,
+                meta={
+                    "intent": intent,
+                    "scope": "applicant" if req.applicant_id else "portfolio",
+                    "applicant_id": req.applicant_id or "",
+                    "artifact": artifact_kind,
+                },
+            )
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/risk/{applicant_id}")

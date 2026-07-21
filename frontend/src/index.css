@@ -2298,6 +2298,104 @@ button:active:not(:disabled),
   .ask-scope-select { max-width: 160px; }
 }
 
+/* ============================================================
+   Residents — property selector, payment-history heatmap, sparkline
+   Every band/status colour is a token (see --chart-*). Colour is never
+   the only cue: cells carry text tooltips, the legend labels each status.
+   ============================================================ */
+
+/* Property selector: horizontal strip of small selectable tiles */
+.res-prop-strip {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding-bottom: var(--s-2);
+  -webkit-overflow-scrolling: touch;
+}
+.res-prop-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  min-width: 150px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  color: var(--text-2);
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease, color .12s ease;
+}
+.res-prop-card:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--accent);
+  transform: none;
+  filter: none;
+}
+.res-prop-card.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.res-prop-name { font-size: var(--fs-sm); font-weight: var(--w-semi); }
+.res-prop-meta { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.res-prop-card.active .res-prop-meta { color: var(--accent-text); }
+
+/* 60-month heatmap: 12 columns (one year per row) */
+.pay-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
+  max-width: 520px;
+}
+.pay-cell {
+  aspect-ratio: 1 / 1;
+  min-width: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line-soft);
+  background: var(--field);
+}
+.pay-cell.is-paid    { background: var(--chart-2); border-color: var(--chart-2); }
+.pay-cell.is-late    { background: var(--chart-3); border-color: var(--chart-3); }
+.pay-cell.is-partial { background: var(--chart-5); border-color: var(--chart-5); }
+.pay-cell.is-missed  { background: var(--chart-4); border-color: var(--chart-4); }
+.pay-cell.is-empty   { background: var(--field); border-style: dashed; opacity: 0.5; }
+
+/* Legend: labelled swatches so meaning never rests on colour */
+.pay-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin-top: var(--s-3);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.pay-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pay-legend-item .pay-cell { width: 12px; height: 12px; aspect-ratio: auto; flex: 0 0 auto; }
+
+/* Balance sparkline (token stroke, no hardcoded colour) */
+.pay-spark { margin-top: var(--s-4); max-width: 520px; }
+.spark-svg { width: 100%; height: 36px; display: block; }
+.spark-line {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.pay-spark-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
 /* Honor prefers-reduced-motion globally (CSS transitions/animations) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
