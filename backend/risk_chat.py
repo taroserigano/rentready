@@ -1052,3 +1052,83 @@ def _answer(question: str, applicant_id: str | None, history) -> dict:
         "follow_ups": plan.follow_ups,
         "source": source,
     }
+
+
+# ---------------------------------------------------------------------------
+# STREAMING ENTRY POINT — a generator that can never crash the response
+# ---------------------------------------------------------------------------
+def answer_stream(question: str, applicant_id: str | None = None, history=None):
+    """Yield SSE event dicts: one ``meta`` (the deterministic ``_RiskPlan`` pass,
+    sent up front so the gauge can paint), then ``token`` events streaming the LLM
+    prose, then a final ``done``. Reuses ``_RiskPlan`` so the streamed artifact and
+    meta are IDENTICAL to what ``answer()`` returns. On any failure it degrades to a
+    single deterministic ``token`` + ``done`` (source="rules"). NEVER raises.
+    """
+    scope = "applicant" if applicant_id else "portfolio"
+    try:
+        plan = _RiskPlan(question, applicant_id)
+    except Exception as exc:  # noqa: BLE001 — never crash the stream
+        print(f"risk_chat: stream planning failed ({type(exc).__name__}: {exc}).")
+        try:
+            intent = route(question or "", applicant_id)
+        except Exception:  # noqa: BLE001
+            intent = "general"
+        yield {
+            "type": "meta",
+            "scope": scope,
+            "applicant_id": applicant_id or "",
+            "intent": intent,
+            "follow_ups": _follow_ups(intent),
+            "artifact": {"kind": "none"},
+        }
+        yield {
+            "type": "token",
+            "text": (
+                "Sorry, I hit a snag looking that up. Please try rephrasing, or "
+                "select an applicant to see their risk estimate."
+            ),
+        }
+        yield {"type": "done", "source": "rules"}
+        return
+
+    # META first — EXACTLY the field set the frontend expects (same artifact dict
+    # answer() returns).
+    yield {
+        "type": "meta",
+        "scope": plan.scope,
+        "applicant_id": applicant_id or "",
+        "intent": plan.intent,
+        "follow_ups": plan.follow_ups,
+        "artifact": plan.artifact,
+    }
+
+    # Try streaming the LLM prose; fall back to one deterministic token.
+    streamed_any = False
+    if plan.context_blocks:
+        llm = get_langchain_llm()
+        if llm is not None:
+            try:
+                messages = _build_messages(
+                    question, plan.context_blocks, history, plan.system
+                )
+                for chunk in llm.stream(messages):
+                    text = _coalesce(getattr(chunk, "content", ""))
+                    if text:
+                        streamed_any = True
+                        yield {"type": "token", "text": text}
+                if streamed_any:
+                    yield {"type": "done", "source": "anthropic"}
+                    return
+            except Exception as exc:  # noqa: BLE001 — degrade to deterministic
+                print(f"risk_chat: stream synthesis failed ({type(exc).__name__}).")
+
+    try:
+        det = plan.deterministic_answer()
+    except Exception as exc:  # noqa: BLE001
+        print(f"risk_chat: deterministic fallback failed ({type(exc).__name__}).")
+        det = (
+            "Sorry, I hit a snag looking that up. Please try rephrasing, or "
+            "select an applicant to see their risk estimate."
+        )
+    yield {"type": "token", "text": det}
+    yield {"type": "done", "source": "rules"}

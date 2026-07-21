@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Sparkles, User } from "lucide-react";
-import type { RiskBand, RiskChatRequest } from "../../types";
-import { askRiskChat } from "../../api";
+import type { RiskBand, RiskChatAnswer, RiskChatRequest } from "../../types";
+import { askRiskChat, askRiskChatStream } from "../../api";
 import { BAND_LABEL, BAND_TONE } from "./riskTone";
 import { RiskChatMessage, type RiskChatMsg } from "./RiskChatMessage";
 import { riskStarters } from "./riskChatStarters";
@@ -24,7 +24,9 @@ function errText(e: unknown): string {
  * injected and the starter chips re-seed. Grounded, decision-support only;
  * degrades to deterministic rules (offline badge) when no LLM is available.
  *
- * Phase 1 uses the NON-streaming `askRiskChat`; SSE streaming lands in Phase 3.
+ * Streams over SSE (`askRiskChatStream`): the router's `meta` frame arrives
+ * first so the artifact/gauge/reason-codes paint before the prose streams in;
+ * on a transport error it falls back to the non-streaming `askRiskChat`.
  */
 export function RiskChat({
   applicantId,
@@ -112,19 +114,56 @@ export function RiskChat({
     };
 
     try {
-      const res = await askRiskChat(request);
-      patchMsg(botId, (m) => ({
-        ...m,
-        text: res.answer,
-        pending: false,
-        res,
-      }));
-    } catch (e) {
-      patchMsg(botId, (m) => ({
-        ...m,
-        text: `Sorry — ${errText(e)}`,
-        pending: false,
-      }));
+      await askRiskChatStream(request, {
+        // Router pass arrives first: paint the artifact/gauge/reason-codes now,
+        // before any prose streams in. Keep answer synced to the text so far.
+        onMeta: (meta) =>
+          patchMsg(botId, (m) => ({
+            ...m,
+            res: {
+              answer: m.text,
+              scope: meta.scope,
+              applicant_id: meta.applicant_id,
+              intent: meta.intent,
+              follow_ups: meta.follow_ups,
+              artifact: meta.artifact,
+              source: "anthropic",
+            },
+          })),
+        onToken: (text) =>
+          patchMsg(botId, (m) => {
+            const next = m.text + text;
+            return {
+              ...m,
+              text: next,
+              pending: false,
+              res: m.res ? { ...m.res, answer: next } : m.res,
+            };
+          }),
+        onDone: (source) =>
+          patchMsg(botId, (m) => ({
+            ...m,
+            pending: false,
+            res: m.res ? { ...m.res, source: source as RiskChatAnswer["source"] } : m.res,
+          })),
+      });
+    } catch {
+      // Streaming failed (transport/unreachable) — fall back to non-streaming.
+      try {
+        const res = await askRiskChat(request);
+        patchMsg(botId, (m) => ({
+          ...m,
+          text: res.answer,
+          pending: false,
+          res,
+        }));
+      } catch (e) {
+        patchMsg(botId, (m) => ({
+          ...m,
+          text: `Sorry — ${errText(e)}`,
+          pending: false,
+        }));
+      }
     } finally {
       setBusy(false);
     }
