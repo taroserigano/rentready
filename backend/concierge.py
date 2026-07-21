@@ -449,6 +449,13 @@ def _compare_context(comparison: list[dict]):
             f"{c['bedrooms']}-bed / {c['bathrooms']}-bath {str(c['property_type']).lower()}, "
             f"{c['square_feet']} sq ft, {c['area']}; pets {pets}."
         )
+        if c.get("matched"):
+            # Without this, the LLM only sees rent/beds/baths/area/pets — so a
+            # filter on anything else (amenities, price ceiling, bedroom count)
+            # is invisible to it, and it denies the very match compare_properties()
+            # already found (e.g. "none of these have a gym" while the returned
+            # comparison list is six homes that do).
+            line += f" Matched this search on: {', '.join(c['matched'])}."
         context_blocks.append(f"Property record — {c['name']}:\n{line}")
         sources.append(
             {
