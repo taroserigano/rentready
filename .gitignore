@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ragas_cache/
+
+# Secrets
+.env
+
+# Data stores
+chroma_db/
+storage/
+uploads/
+rentready.db
+backend/evals/results/*.json
+
+# Trained model artifacts (regenerated via train_risk.py)
+backend/artifacts/
+
+# Phoenix
+.phoenix/
+
+# Node / React
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS
+.DS_Store
+
+# stale store copy
+chroma_db.bad-readonly/

@@ -1,0 +1,8 @@
+{"id": "elig-strong", "profile": {"monthly_income": 6000, "desired_rent": 1500, "credit_score": 700}, "expected_verdict": "qualified", "expected_ratio": 4.0}
+{"id": "elig-income-too-low", "profile": {"monthly_income": 2000, "desired_rent": 1500, "credit_score": 700}, "expected_verdict": "not_qualified", "expected_ratio": 1.33}
+{"id": "elig-no-credit", "profile": {"monthly_income": 6000, "desired_rent": 1500, "credit_score": null}, "expected_verdict": "needs_review", "expected_ratio": 4.0}
+{"id": "elig-low-credit", "profile": {"monthly_income": 5000, "desired_rent": 1500, "credit_score": 600}, "expected_verdict": "needs_review", "expected_ratio": 3.33}
+{"id": "elig-threshold-exact", "profile": {"monthly_income": 4500, "desired_rent": 1500, "credit_score": 650}, "expected_verdict": "qualified", "expected_ratio": 3.0}
+{"id": "elig-missing-fields", "profile": {"monthly_income": 0, "desired_rent": 0, "credit_score": null}, "expected_verdict": "needs_review", "expected_ratio": null}
+{"id": "elig-high-earner", "profile": {"monthly_income": 9000, "desired_rent": 2000, "credit_score": 780}, "expected_verdict": "qualified", "expected_ratio": 4.5}
+{"id": "elig-borderline-fail", "profile": {"monthly_income": 3000, "desired_rent": 1400, "credit_score": 640}, "expected_verdict": "not_qualified", "expected_ratio": 2.14}

@@ -1,0 +1,7 @@
+{"id": "qa-jordan-income", "slug": "jordan-rivera", "question": "What is the applicant's monthly income?", "ground_truth": "The applicant's monthly income is $6,200."}
+{"id": "qa-jordan-pets", "slug": "jordan-rivera", "question": "Does the applicant have any pets?", "ground_truth": "Yes, the applicant has one small dog."}
+{"id": "qa-jordan-rent", "slug": "jordan-rivera", "question": "How much rent does the applicant want to pay?", "ground_truth": "The applicant wants to pay $1,800 in rent."}
+{"id": "qa-alex-area", "slug": "alex-chen", "question": "Which area does the applicant prefer to live in?", "ground_truth": "The applicant prefers Downtown."}
+{"id": "qa-alex-pets", "slug": "alex-chen", "question": "Does the applicant have pets?", "ground_truth": "No, the applicant does not have pets."}
+{"id": "qa-sam-income", "slug": "sam-patel", "question": "What is the applicant's monthly income?", "ground_truth": "The applicant's monthly income is $3,000."}
+{"id": "qa-sam-pets", "slug": "sam-patel", "question": "Does the applicant have any pets?", "ground_truth": "Yes, the applicant has one cat."}

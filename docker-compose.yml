@@ -1,0 +1,25 @@
+# Neo4j Community Edition - the property graph database.
+# Works with Podman OR Docker:
+#     podman compose up -d        (or: docker compose up -d)
+#
+# After it's up:
+#   - Browser UI:  http://localhost:7474   (login neo4j / rentready123)
+#   - Bolt (app):  bolt://localhost:7687
+services:
+  neo4j:
+    image: docker.io/library/neo4j:5.26-community
+    container_name: rentready-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/rentready123
+      - NEO4J_server_memory_heap_max__size=512M
+      # APOC plugin (bundled in the image) - needed by langchain-neo4j schema.
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    ports:
+      - "7474:7474" # HTTP browser UI
+      - "7687:7687" # Bolt protocol (the app connects here)
+    volumes:
+      - rentready_neo4j_data:/data
+
+volumes:
+  rentready_neo4j_data:

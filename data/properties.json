@@ -1,0 +1,4388 @@
+[
+  {
+    "id": "PROP-001",
+    "name": "Maple Court Apartments",
+    "property_type": "Apartment",
+    "monthly_rent": 1450,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 650,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [
+      "Gym",
+      "Bike Storage"
+    ],
+    "year_built": 1972,
+    "security_deposit": 725.0,
+    "application_fee": 35.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 500.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": 25,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 24,
+    "availability_date": "2026-08-26",
+    "min_credit_score": 560,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 650,
+        "monthly_rent": 1450,
+        "available_units": 2,
+        "availability_date": "2026-08-26"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 910,
+        "monthly_rent": 1960,
+        "available_units": 8,
+        "availability_date": "2026-09-28"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1170,
+        "monthly_rent": 2465,
+        "available_units": 1,
+        "availability_date": "2026-09-05"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-002",
+    "name": "Riverside Lofts",
+    "property_type": "Loft",
+    "monthly_rent": 2200,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1100,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [
+      "Pool",
+      "Gym",
+      "Rooftop Deck"
+    ],
+    "year_built": 1982,
+    "security_deposit": 1100.0,
+    "application_fee": 60.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 80,
+    "availability_date": "2026-08-16",
+    "min_credit_score": 590,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 1100,
+        "monthly_rent": 2200,
+        "available_units": 6,
+        "availability_date": "2026-08-16"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1540,
+        "monthly_rent": 2970,
+        "available_units": 8,
+        "availability_date": "2026-09-15"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 1980,
+        "monthly_rent": 3740,
+        "available_units": 8,
+        "availability_date": "2026-09-11"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-003",
+    "name": "Oakwood Gardens",
+    "property_type": "Apartment",
+    "monthly_rent": 1650,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 980,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "surface",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "North Austin",
+      "city": "Austin",
+      "walk_score": 58,
+      "transit_score": 45
+    },
+    "amenities": [
+      "Pet Park",
+      "Playground"
+    ],
+    "year_built": 1968,
+    "security_deposit": 825.0,
+    "application_fee": 45.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 60,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 50.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "tile",
+    "heating": "gas",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 60,
+    "availability_date": "2026-08-19",
+    "min_credit_score": 570,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 980,
+        "monthly_rent": 1650,
+        "available_units": 1,
+        "availability_date": "2026-08-19"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1370,
+        "monthly_rent": 2230,
+        "available_units": 1,
+        "availability_date": "2026-09-26"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 1760,
+        "monthly_rent": 2805,
+        "available_units": 5,
+        "availability_date": "2026-09-24"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-004",
+    "name": "The Heights",
+    "property_type": "Apartment",
+    "monthly_rent": 1300,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 600,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "South Congress",
+      "city": "Austin",
+      "walk_score": 88,
+      "transit_score": 60
+    },
+    "amenities": [
+      "Bike Storage"
+    ],
+    "year_built": 1968,
+    "security_deposit": 975.0,
+    "application_fee": 75.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 200.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 25,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "mixed",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "hookups",
+    "floor_level": 3,
+    "unit_count": 240,
+    "availability_date": "2026-08-28",
+    "min_credit_score": 560,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 600,
+        "monthly_rent": 1300,
+        "available_units": 5,
+        "availability_date": "2026-08-28"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 840,
+        "monthly_rent": 1755,
+        "available_units": 7,
+        "availability_date": "2026-09-04"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-005",
+    "name": "Sunset Terrace",
+    "property_type": "Townhome",
+    "monthly_rent": 2800,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "bathroom_type": "full",
+    "square_feet": 1600,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "South Congress",
+      "city": "Austin",
+      "walk_score": 88,
+      "transit_score": 60
+    },
+    "amenities": [
+      "Pool",
+      "Gym",
+      "Pet Park"
+    ],
+    "year_built": 1991,
+    "security_deposit": 2100.0,
+    "application_fee": 35.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 6,
+    "availability_date": "2026-07-28",
+    "min_credit_score": 620,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1600,
+        "monthly_rent": 2800,
+        "available_units": 1,
+        "availability_date": "2026-07-28"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-006",
+    "name": "Lakeline Commons",
+    "property_type": "Apartment",
+    "monthly_rent": 1250,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 620,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "surface",
+    "pets_allowed": false,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "North Austin",
+      "city": "Austin",
+      "walk_score": 58,
+      "transit_score": 45
+    },
+    "amenities": [
+      "Gym"
+    ],
+    "year_built": 1972,
+    "security_deposit": 1250.0,
+    "application_fee": 45.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 35.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 2,
+    "unit_count": 60,
+    "availability_date": "2026-08-04",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 620,
+        "monthly_rent": 1250,
+        "available_units": 5,
+        "availability_date": "2026-08-04"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 870,
+        "monthly_rent": 1690,
+        "available_units": 8,
+        "availability_date": "2026-09-13"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-007",
+    "name": "Barton Springs Residences",
+    "property_type": "Condo",
+    "monthly_rent": 2400,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1150,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "covered",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Zilker",
+      "city": "Austin",
+      "walk_score": 75,
+      "transit_score": 50
+    },
+    "amenities": [
+      "Pool",
+      "Rooftop Deck",
+      "Pet Park"
+    ],
+    "year_built": 1990,
+    "security_deposit": 1200.0,
+    "application_fee": 50.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 200.0,
+    "pet_rent_monthly": 50.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 120,
+    "availability_date": "2026-09-06",
+    "min_credit_score": 590,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 1150,
+        "monthly_rent": 2400,
+        "available_units": 5,
+        "availability_date": "2026-09-06"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1610,
+        "monthly_rent": 3240,
+        "available_units": 0,
+        "availability_date": "2026-10-13"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-008",
+    "name": "Mueller Flats",
+    "property_type": "Apartment",
+    "monthly_rent": 1750,
+    "bedrooms": 2,
+    "bathrooms": 1.5,
+    "bathroom_type": "full",
+    "square_feet": 900,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "surface",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Mueller",
+      "city": "Austin",
+      "walk_score": 82,
+      "transit_score": 58
+    },
+    "amenities": [
+      "Bike Storage",
+      "Playground"
+    ],
+    "year_built": 1969,
+    "security_deposit": 875.0,
+    "application_fee": 45.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": 40,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 25.0,
+    "utilities_included": [
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "tile",
+    "heating": "electric",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 60,
+    "availability_date": "2026-07-08",
+    "min_credit_score": 570,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 900,
+        "monthly_rent": 1750,
+        "available_units": 3,
+        "availability_date": "2026-07-08"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1260,
+        "monthly_rent": 2360,
+        "available_units": 0,
+        "availability_date": "2026-07-14"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 1620,
+        "monthly_rent": 2975,
+        "available_units": 2,
+        "availability_date": "2026-07-10"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-009",
+    "name": "Domain Towers",
+    "property_type": "Apartment",
+    "monthly_rent": 3200,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1500,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": true,
+    "neighborhood": {
+      "name": "North Austin",
+      "city": "Austin",
+      "walk_score": 58,
+      "transit_score": 45
+    },
+    "amenities": [
+      "Pool",
+      "Gym",
+      "Concierge",
+      "Rooftop Deck"
+    ],
+    "year_built": 1994,
+    "security_deposit": 2400.0,
+    "application_fee": 60.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 175.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 1,
+    "unit_count": 24,
+    "availability_date": "2026-07-24",
+    "min_credit_score": 640,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1500,
+        "monthly_rent": 3200,
+        "available_units": 2,
+        "availability_date": "2026-07-24"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 2100,
+        "monthly_rent": 4320,
+        "available_units": 8,
+        "availability_date": "2026-08-06"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-010",
+    "name": "Cesar Chavez Studios",
+    "property_type": "Studio",
+    "monthly_rent": 1150,
+    "bedrooms": 0,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 450,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 6,
+    "furnished": true,
+    "neighborhood": {
+      "name": "East Austin",
+      "city": "Austin",
+      "walk_score": 80,
+      "transit_score": 55
+    },
+    "amenities": [
+      "Bike Storage"
+    ],
+    "year_built": 1970,
+    "security_deposit": 850.0,
+    "application_fee": 35.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 500.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": 60,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 3,
+    "unit_count": 180,
+    "availability_date": "2026-09-21",
+    "min_credit_score": 550,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 1,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "Studio",
+        "bedrooms": 0,
+        "bathrooms": 1.0,
+        "square_feet": 450,
+        "monthly_rent": 1150,
+        "available_units": 1,
+        "availability_date": "2026-09-21"
+      },
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 630,
+        "monthly_rent": 1550,
+        "available_units": 2,
+        "availability_date": "2026-11-03"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-011",
+    "name": "Zilker Park View",
+    "property_type": "Condo",
+    "monthly_rent": 1950,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 780,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "covered",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Zilker",
+      "city": "Austin",
+      "walk_score": 75,
+      "transit_score": 50
+    },
+    "amenities": [
+      "Gym",
+      "Pet Park"
+    ],
+    "year_built": 1978,
+    "security_deposit": 1950.0,
+    "application_fee": 50.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 500.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 24,
+    "availability_date": "2026-07-03",
+    "min_credit_score": 570,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 780,
+        "monthly_rent": 1950,
+        "available_units": 8,
+        "availability_date": "2026-07-03"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 1090,
+        "monthly_rent": 2630,
+        "available_units": 3,
+        "availability_date": "2026-08-15"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-012",
+    "name": "East Side Bungalows",
+    "property_type": "Townhome",
+    "monthly_rent": 2100,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1050,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "covered",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "East Austin",
+      "city": "Austin",
+      "walk_score": 80,
+      "transit_score": 55
+    },
+    "amenities": [
+      "Pet Park",
+      "Bike Storage"
+    ],
+    "year_built": 1978,
+    "security_deposit": 1050.0,
+    "application_fee": 50.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 50.0,
+    "pet_weight_limit_lbs": 40,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 50.0,
+    "utilities_included": [
+      "Trash",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 6,
+    "availability_date": "2026-09-08",
+    "min_credit_score": 600,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 1050,
+        "monthly_rent": 2100,
+        "available_units": 8,
+        "availability_date": "2026-09-08"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-013",
+    "name": "Congress Lofts",
+    "property_type": "Loft",
+    "monthly_rent": 1600,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 720,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "South Congress",
+      "city": "Austin",
+      "walk_score": 88,
+      "transit_score": 60
+    },
+    "amenities": [
+      "Rooftop Deck",
+      "Gym"
+    ],
+    "year_built": 1981,
+    "security_deposit": 1600.0,
+    "application_fee": 75.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 175.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 60,
+    "availability_date": "2026-07-19",
+    "min_credit_score": 590,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 720,
+        "monthly_rent": 1600,
+        "available_units": 7,
+        "availability_date": "2026-07-19"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 1010,
+        "monthly_rent": 2160,
+        "available_units": 5,
+        "availability_date": "2026-08-13"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1300,
+        "monthly_rent": 2720,
+        "available_units": 8,
+        "availability_date": "2026-08-07"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 1550,
+        "monthly_rent": 3200,
+        "available_units": 7,
+        "availability_date": "2026-08-11"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-014",
+    "name": "Mueller Family Homes",
+    "property_type": "Townhome",
+    "monthly_rent": 2600,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "bathroom_type": "full",
+    "square_feet": 1700,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Mueller",
+      "city": "Austin",
+      "walk_score": 82,
+      "transit_score": 58
+    },
+    "amenities": [
+      "Pool",
+      "Pet Park",
+      "Playground"
+    ],
+    "year_built": 1978,
+    "security_deposit": 1950.0,
+    "application_fee": 50.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 50.0,
+    "pet_weight_limit_lbs": 25,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 8,
+    "availability_date": "2026-09-10",
+    "min_credit_score": 590,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1700,
+        "monthly_rent": 2600,
+        "available_units": 1,
+        "availability_date": "2026-09-10"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-015",
+    "name": "Willow Bend Flats",
+    "property_type": "Apartment",
+    "monthly_rent": 3600,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1340,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "none",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": true,
+    "neighborhood": {
+      "name": "North Austin",
+      "city": "Austin",
+      "walk_score": 58,
+      "transit_score": 45
+    },
+    "amenities": [
+      "Bike Storage",
+      "Storage Units"
+    ],
+    "year_built": 1994,
+    "security_deposit": 2700.0,
+    "application_fee": 35.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 400.0,
+    "pet_rent_monthly": 50.0,
+    "pet_weight_limit_lbs": 40,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Internet"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 3,
+    "unit_count": 60,
+    "availability_date": "2026-07-01",
+    "min_credit_score": 640,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": true,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1340,
+        "monthly_rent": 3600,
+        "available_units": 6,
+        "availability_date": "2026-07-01"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 1880,
+        "monthly_rent": 4860,
+        "available_units": 4,
+        "availability_date": "2026-07-14"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-016",
+    "name": "The Pearl Residences",
+    "property_type": "Condo",
+    "monthly_rent": 1500,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 660,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Pearl District",
+      "city": "San Antonio",
+      "walk_score": 86,
+      "transit_score": 62
+    },
+    "amenities": [
+      "Storage Units",
+      "BBQ Area"
+    ],
+    "year_built": 1974,
+    "security_deposit": 1125.0,
+    "application_fee": 60.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 2,
+    "unit_count": 80,
+    "availability_date": "2026-07-19",
+    "min_credit_score": 560,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 660,
+        "monthly_rent": 1500,
+        "available_units": 4,
+        "availability_date": "2026-07-19"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 920,
+        "monthly_rent": 2025,
+        "available_units": 1,
+        "availability_date": "2026-08-11"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-017",
+    "name": "Deep Ellum Warehouse Lofts",
+    "property_type": "Loft",
+    "monthly_rent": 1350,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 730,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "none",
+    "pets_allowed": true,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Deep Ellum",
+      "city": "Dallas",
+      "walk_score": 90,
+      "transit_score": 72
+    },
+    "amenities": [
+      "Pool",
+      "Clubhouse",
+      "Concierge"
+    ],
+    "year_built": 1981,
+    "security_deposit": 1350.0,
+    "application_fee": 35.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 200.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 1,
+    "unit_count": 80,
+    "availability_date": "2026-08-22",
+    "min_credit_score": 560,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 730,
+        "monthly_rent": 1350,
+        "available_units": 8,
+        "availability_date": "2026-08-22"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 1020,
+        "monthly_rent": 1825,
+        "available_units": 2,
+        "availability_date": "2026-09-21"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-018",
+    "name": "Hyde Park Cottages",
+    "property_type": "House",
+    "monthly_rent": 2325,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1640,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Hyde Park",
+      "city": "Austin",
+      "walk_score": 78,
+      "transit_score": 52
+    },
+    "amenities": [
+      "Playground",
+      "Rooftop Deck",
+      "Storage Units"
+    ],
+    "year_built": 1987,
+    "security_deposit": 1150.0,
+    "application_fee": 60.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 125.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal"
+    ],
+    "flooring": "hardwood",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "hookups",
+    "floor_level": null,
+    "unit_count": 1,
+    "availability_date": "2026-08-16",
+    "min_credit_score": 620,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1640,
+        "monthly_rent": 2325,
+        "available_units": 6,
+        "availability_date": "2026-08-16"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-019",
+    "name": "Cedar Row Townhouses",
+    "property_type": "Townhouse",
+    "monthly_rent": 2800,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1750,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Crestview",
+      "city": "Austin",
+      "walk_score": 65,
+      "transit_score": 48
+    },
+    "amenities": [
+      "Rooftop Deck",
+      "BBQ Area",
+      "Dog Park"
+    ],
+    "year_built": 1982,
+    "security_deposit": 1400.0,
+    "application_fee": 50.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "window",
+    "laundry_type": "hookups",
+    "floor_level": null,
+    "unit_count": 8,
+    "availability_date": "2026-08-13",
+    "min_credit_score": 630,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1750,
+        "monthly_rent": 2800,
+        "available_units": 1,
+        "availability_date": "2026-08-13"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-020",
+    "name": "Lamar Union Studios",
+    "property_type": "Studio",
+    "monthly_rent": 1100,
+    "bedrooms": 0,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 500,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "covered",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Bouldin Creek",
+      "city": "Austin",
+      "walk_score": 84,
+      "transit_score": 57
+    },
+    "amenities": [
+      "BBQ Area",
+      "EV Charging"
+    ],
+    "year_built": 1970,
+    "security_deposit": 825.0,
+    "application_fee": 50.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 65.0,
+    "utilities_included": [
+      "Water"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal"
+    ],
+    "flooring": "tile",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 2,
+    "unit_count": 120,
+    "availability_date": "2026-08-17",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 1,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "Studio",
+        "bedrooms": 0,
+        "bathrooms": 1.0,
+        "square_feet": 500,
+        "monthly_rent": 1100,
+        "available_units": 8,
+        "availability_date": "2026-08-17"
+      },
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 700,
+        "monthly_rent": 1430,
+        "available_units": 0,
+        "availability_date": "2026-08-17"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502005097973-6a7082348e28?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502005097973-6a7082348e28?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-021",
+    "name": "Magnolia Duplexes",
+    "property_type": "Duplex",
+    "monthly_rent": 1775,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 900,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "East Austin",
+      "city": "Austin",
+      "walk_score": 80,
+      "transit_score": 55
+    },
+    "amenities": [
+      "BBQ Area",
+      "Package Lockers"
+    ],
+    "year_built": 1978,
+    "security_deposit": 1775.0,
+    "application_fee": 60.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 200.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 40,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "window",
+    "laundry_type": "hookups",
+    "floor_level": null,
+    "unit_count": 2,
+    "availability_date": "2026-07-06",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 900,
+        "monthly_rent": 1775,
+        "available_units": 7,
+        "availability_date": "2026-07-06"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-022",
+    "name": "Skyline Vista Tower",
+    "property_type": "Apartment",
+    "monthly_rent": 3600,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "bathroom_type": "full",
+    "square_feet": 1460,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Uptown",
+      "city": "Dallas",
+      "walk_score": 94,
+      "transit_score": 81
+    },
+    "amenities": [
+      "EV Charging",
+      "Rooftop Deck",
+      "Bike Storage",
+      "Coworking Space"
+    ],
+    "year_built": 1998,
+    "security_deposit": 1800.0,
+    "application_fee": 60.0,
+    "admin_fee": 250.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 150.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Gas",
+      "Internet"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "tile",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 4,
+    "unit_count": 240,
+    "availability_date": "2026-08-07",
+    "min_credit_score": 660,
+    "min_income_multiplier": 3.5,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1460,
+        "monthly_rent": 3600,
+        "available_units": 4,
+        "availability_date": "2026-08-07"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 2040,
+        "monthly_rent": 4860,
+        "available_units": 4,
+        "availability_date": "2026-09-18"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-023",
+    "name": "Bouldin Creek Bungalow",
+    "property_type": "House",
+    "monthly_rent": 4675,
+    "bedrooms": 4,
+    "bathrooms": 2.5,
+    "bathroom_type": "full",
+    "square_feet": 2600,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "lot",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": true,
+    "neighborhood": {
+      "name": "Bouldin Creek",
+      "city": "Austin",
+      "walk_score": 84,
+      "transit_score": 57
+    },
+    "amenities": [
+      "Coworking Space",
+      "Yoga Studio",
+      "Gym"
+    ],
+    "year_built": 2003,
+    "security_deposit": 3500.0,
+    "application_fee": 35.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 25.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Internet"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 1,
+    "availability_date": "2026-10-06",
+    "min_credit_score": 690,
+    "min_income_multiplier": 3.5,
+    "smoking_allowed": false,
+    "max_occupants": 8,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 2600,
+        "monthly_rent": 4675,
+        "available_units": 5,
+        "availability_date": "2026-10-06"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-024",
+    "name": "Crestview Corners",
+    "property_type": "Apartment",
+    "monthly_rent": 1950,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 930,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "none",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Crestview",
+      "city": "Austin",
+      "walk_score": 65,
+      "transit_score": 48
+    },
+    "amenities": [
+      "Coworking Space",
+      "Pool"
+    ],
+    "year_built": 1984,
+    "security_deposit": 975.0,
+    "application_fee": 35.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 1,
+    "unit_count": 180,
+    "availability_date": "2026-07-15",
+    "min_credit_score": 580,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 930,
+        "monthly_rent": 1950,
+        "available_units": 5,
+        "availability_date": "2026-07-15"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1300,
+        "monthly_rent": 2630,
+        "available_units": 5,
+        "availability_date": "2026-07-29"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 1670,
+        "monthly_rent": 3315,
+        "available_units": 6,
+        "availability_date": "2026-08-21"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-025",
+    "name": "The Katy Trail Flats",
+    "property_type": "Apartment",
+    "monthly_rent": 1075,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 550,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Uptown",
+      "city": "Dallas",
+      "walk_score": 94,
+      "transit_score": 81
+    },
+    "amenities": [],
+    "year_built": 1971,
+    "security_deposit": 1075.0,
+    "application_fee": 75.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "mixed",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 80,
+    "availability_date": "2026-09-15",
+    "min_credit_score": 560,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 550,
+        "monthly_rent": 1075,
+        "available_units": 8,
+        "availability_date": "2026-09-15"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 770,
+        "monthly_rent": 1450,
+        "available_units": 8,
+        "availability_date": "2026-10-06"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-026",
+    "name": "Alamo Heights Manor",
+    "property_type": "House",
+    "monthly_rent": 2650,
+    "bedrooms": 3,
+    "bathrooms": 1.5,
+    "bathroom_type": "full",
+    "square_feet": 1610,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Alamo Heights",
+      "city": "San Antonio",
+      "walk_score": 61,
+      "transit_score": 38
+    },
+    "amenities": [
+      "Yoga Studio",
+      "Pool",
+      "Smart Locks",
+      "Coworking Space",
+      "Bike Storage"
+    ],
+    "year_built": 1994,
+    "security_deposit": 1325.0,
+    "application_fee": 60.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 400.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 125.0,
+    "utilities_included": [
+      "Internet"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "mixed",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 1,
+    "availability_date": "2026-08-24",
+    "min_credit_score": 650,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 1.5,
+        "square_feet": 1610,
+        "monthly_rent": 2650,
+        "available_units": 4,
+        "availability_date": "2026-08-24"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-027",
+    "name": "Montrose Art House Lofts",
+    "property_type": "Loft",
+    "monthly_rent": 1475,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 760,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": true,
+    "neighborhood": {
+      "name": "Montrose",
+      "city": "Houston",
+      "walk_score": 89,
+      "transit_score": 65
+    },
+    "amenities": [
+      "Concierge",
+      "BBQ Area",
+      "Yoga Studio"
+    ],
+    "year_built": 1978,
+    "security_deposit": 750.0,
+    "application_fee": 35.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "hookups",
+    "floor_level": 2,
+    "unit_count": 180,
+    "availability_date": "2026-07-09",
+    "min_credit_score": 600,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 760,
+        "monthly_rent": 1475,
+        "available_units": 7,
+        "availability_date": "2026-07-09"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 1060,
+        "monthly_rent": 1990,
+        "available_units": 2,
+        "availability_date": "2026-07-14"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1370,
+        "monthly_rent": 2510,
+        "available_units": 7,
+        "availability_date": "2026-08-04"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-028",
+    "name": "Violet Crown Condos",
+    "property_type": "Condo",
+    "monthly_rent": 1400,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 710,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Hyde Park",
+      "city": "Austin",
+      "walk_score": 78,
+      "transit_score": 52
+    },
+    "amenities": [
+      "Storage Units"
+    ],
+    "year_built": 1974,
+    "security_deposit": 1050.0,
+    "application_fee": 35.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "mixed",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 2,
+    "unit_count": 80,
+    "availability_date": "2026-07-21",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 710,
+        "monthly_rent": 1400,
+        "available_units": 5,
+        "availability_date": "2026-07-21"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 990,
+        "monthly_rent": 1890,
+        "available_units": 0,
+        "availability_date": "2026-08-07"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-029",
+    "name": "Rainey Street Micro Studios",
+    "property_type": "Studio",
+    "monthly_rent": 1100,
+    "bedrooms": 0,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 520,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "street",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": true,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [
+      "Storage Units",
+      "Playground"
+    ],
+    "year_built": 1970,
+    "security_deposit": 825.0,
+    "application_fee": 45.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "tile",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 240,
+    "availability_date": "2026-08-13",
+    "min_credit_score": 550,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 1,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "Studio",
+        "bedrooms": 0,
+        "bathrooms": 1.0,
+        "square_feet": 520,
+        "monthly_rent": 1100,
+        "available_units": 3,
+        "availability_date": "2026-08-13"
+      },
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 728,
+        "monthly_rent": 1430,
+        "available_units": 3,
+        "availability_date": "2026-08-13"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-030",
+    "name": "Guadalupe Green Townhomes",
+    "property_type": "Townhouse",
+    "monthly_rent": 3725,
+    "bedrooms": 4,
+    "bathrooms": 2.5,
+    "bathroom_type": "full",
+    "square_feet": 2170,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Hyde Park",
+      "city": "Austin",
+      "walk_score": 78,
+      "transit_score": 52
+    },
+    "amenities": [],
+    "year_built": 1999,
+    "security_deposit": 3725.0,
+    "application_fee": 60.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 40,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": null,
+    "unit_count": 8,
+    "availability_date": "2026-08-19",
+    "min_credit_score": 640,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 8,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 2170,
+        "monthly_rent": 3725,
+        "available_units": 1,
+        "availability_date": "2026-08-19"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-031",
+    "name": "Ironwood Duplex Homes",
+    "property_type": "Duplex",
+    "monthly_rent": 1475,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 900,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 18,
+    "furnished": true,
+    "neighborhood": {
+      "name": "South Congress",
+      "city": "Austin",
+      "walk_score": 88,
+      "transit_score": 60
+    },
+    "amenities": [
+      "Concierge",
+      "Bike Storage"
+    ],
+    "year_built": 1975,
+    "security_deposit": 1100.0,
+    "application_fee": 45.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 150.0,
+    "utilities_included": [
+      "Water",
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "central",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 2,
+    "availability_date": "2026-10-09",
+    "min_credit_score": 590,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": true,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 900,
+        "monthly_rent": 1475,
+        "available_units": 7,
+        "availability_date": "2026-10-09"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-032",
+    "name": "The Brazos Apartments",
+    "property_type": "Apartment",
+    "monthly_rent": 3675,
+    "bedrooms": 3,
+    "bathrooms": 1.5,
+    "bathroom_type": "full",
+    "square_feet": 1590,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "street",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [
+      "Bike Storage",
+      "Concierge"
+    ],
+    "year_built": 1993,
+    "security_deposit": 2750.0,
+    "application_fee": 50.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 40,
+    "availability_date": "2026-08-13",
+    "min_credit_score": 630,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 1.5,
+        "square_feet": 1590,
+        "monthly_rent": 3675,
+        "available_units": 6,
+        "availability_date": "2026-08-13"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.0,
+        "square_feet": 2230,
+        "monthly_rent": 4960,
+        "available_units": 7,
+        "availability_date": "2026-09-07"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-033",
+    "name": "Pecan Grove Court",
+    "property_type": "Apartment",
+    "monthly_rent": 2350,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 950,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Alamo Heights",
+      "city": "San Antonio",
+      "walk_score": 61,
+      "transit_score": 38
+    },
+    "amenities": [
+      "Concierge",
+      "Storage Units",
+      "Yoga Studio"
+    ],
+    "year_built": 1987,
+    "security_deposit": 2350.0,
+    "application_fee": 35.0,
+    "admin_fee": 250.0,
+    "pet_deposit": 500.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 3,
+    "unit_count": 60,
+    "availability_date": "2026-08-06",
+    "min_credit_score": 630,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 950,
+        "monthly_rent": 2350,
+        "available_units": 7,
+        "availability_date": "2026-08-06"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1330,
+        "monthly_rent": 3170,
+        "available_units": 3,
+        "availability_date": "2026-08-09"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 1710,
+        "monthly_rent": 3995,
+        "available_units": 4,
+        "availability_date": "2026-08-12"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-034",
+    "name": "Sixth Street Lofts",
+    "property_type": "Loft",
+    "monthly_rent": 1425,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 710,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "none",
+    "pets_allowed": true,
+    "lease_term_months": 18,
+    "furnished": true,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [],
+    "year_built": 1968,
+    "security_deposit": 700.0,
+    "application_fee": 50.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 50.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "vinyl",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 60,
+    "availability_date": "2026-08-16",
+    "min_credit_score": 570,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 710,
+        "monthly_rent": 1425,
+        "available_units": 4,
+        "availability_date": "2026-08-16"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 990,
+        "monthly_rent": 1925,
+        "available_units": 7,
+        "availability_date": "2026-08-31"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1280,
+        "monthly_rent": 2420,
+        "available_units": 4,
+        "availability_date": "2026-09-06"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 1530,
+        "monthly_rent": 2850,
+        "available_units": 4,
+        "availability_date": "2026-09-17"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-035",
+    "name": "Travis Heights Terrace",
+    "property_type": "Condo",
+    "monthly_rent": 1350,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 640,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": false,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "South Congress",
+      "city": "Austin",
+      "walk_score": 88,
+      "transit_score": 60
+    },
+    "amenities": [
+      "Pool",
+      "Playground",
+      "Rooftop Deck",
+      "Yoga Studio"
+    ],
+    "year_built": 1982,
+    "security_deposit": 1350.0,
+    "application_fee": 75.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher"
+    ],
+    "flooring": "mixed",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 2,
+    "unit_count": 80,
+    "availability_date": "2026-09-14",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 640,
+        "monthly_rent": 1350,
+        "available_units": 3,
+        "availability_date": "2026-09-14"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 900,
+        "monthly_rent": 1825,
+        "available_units": 8,
+        "availability_date": "2026-10-21"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1150,
+        "monthly_rent": 2295,
+        "available_units": 1,
+        "availability_date": "2026-09-28"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-036",
+    "name": "Windsor Park Duplexes",
+    "property_type": "Duplex",
+    "monthly_rent": 3050,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1690,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "North Austin",
+      "city": "Austin",
+      "walk_score": 58,
+      "transit_score": 45
+    },
+    "amenities": [
+      "Concierge",
+      "Bike Storage",
+      "BBQ Area"
+    ],
+    "year_built": 1994,
+    "security_deposit": 1525.0,
+    "application_fee": 60.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "mixed",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 2,
+    "availability_date": "2026-07-05",
+    "min_credit_score": 640,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1690,
+        "monthly_rent": 3050,
+        "available_units": 7,
+        "availability_date": "2026-07-05"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-037",
+    "name": "The Foundry at Pearl",
+    "property_type": "Apartment",
+    "monthly_rent": 925,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 500,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "none",
+    "pets_allowed": false,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Pearl District",
+      "city": "San Antonio",
+      "walk_score": 86,
+      "transit_score": 62
+    },
+    "amenities": [
+      "Clubhouse",
+      "Pool",
+      "Rooftop Deck"
+    ],
+    "year_built": 1969,
+    "security_deposit": 700.0,
+    "application_fee": 60.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "gas",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": 1,
+    "unit_count": 120,
+    "availability_date": "2026-08-24",
+    "min_credit_score": 580,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 500,
+        "monthly_rent": 925,
+        "available_units": 4,
+        "availability_date": "2026-08-24"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 700,
+        "monthly_rent": 1250,
+        "available_units": 0,
+        "availability_date": "2026-09-22"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 900,
+        "monthly_rent": 1570,
+        "available_units": 7,
+        "availability_date": "2026-10-05"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-038",
+    "name": "Shoal Creek Townhouses",
+    "property_type": "Townhouse",
+    "monthly_rent": 3950,
+    "bedrooms": 4,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 2210,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Zilker",
+      "city": "Austin",
+      "walk_score": 75,
+      "transit_score": 50
+    },
+    "amenities": [
+      "Clubhouse"
+    ],
+    "year_built": 1996,
+    "security_deposit": 2950.0,
+    "application_fee": 45.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 250.0,
+    "pet_rent_monthly": 25.0,
+    "pet_weight_limit_lbs": 60,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Internet"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 10,
+    "availability_date": "2026-09-02",
+    "min_credit_score": 630,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 8,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.0,
+        "square_feet": 2210,
+        "monthly_rent": 3950,
+        "available_units": 4,
+        "availability_date": "2026-09-02"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-039",
+    "name": "Bluebonnet Ridge House",
+    "property_type": "House",
+    "monthly_rent": 2225,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1570,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 24,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Crestview",
+      "city": "Austin",
+      "walk_score": 65,
+      "transit_score": 48
+    },
+    "amenities": [
+      "Dog Park",
+      "Yoga Studio",
+      "Gym",
+      "Pool",
+      "BBQ Area"
+    ],
+    "year_built": 1989,
+    "security_deposit": 1675.0,
+    "application_fee": 60.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "hardwood",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 1,
+    "availability_date": "2026-10-21",
+    "min_credit_score": 620,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": true,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1570,
+        "monthly_rent": 2225,
+        "available_units": 2,
+        "availability_date": "2026-10-21"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-040",
+    "name": "McKinney Avenue Studios",
+    "property_type": "Studio",
+    "monthly_rent": 1200,
+    "bedrooms": 0,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 520,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "covered",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Uptown",
+      "city": "Dallas",
+      "walk_score": 94,
+      "transit_score": 81
+    },
+    "amenities": [
+      "Coworking Space",
+      "Gym",
+      "Pool",
+      "Smart Locks"
+    ],
+    "year_built": 1975,
+    "security_deposit": 900.0,
+    "application_fee": 35.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 400.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": 80,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 75.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "window",
+    "laundry_type": "none",
+    "floor_level": 4,
+    "unit_count": 80,
+    "availability_date": "2026-07-11",
+    "min_credit_score": 570,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 1,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "Studio",
+        "bedrooms": 0,
+        "bathrooms": 1.0,
+        "square_feet": 520,
+        "monthly_rent": 1200,
+        "available_units": 1,
+        "availability_date": "2026-07-11"
+      },
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 730,
+        "monthly_rent": 1620,
+        "available_units": 2,
+        "availability_date": "2026-07-31"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-041",
+    "name": "Elm Street Commons",
+    "property_type": "Apartment",
+    "monthly_rent": 900,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 540,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "covered",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Deep Ellum",
+      "city": "Dallas",
+      "walk_score": 90,
+      "transit_score": 72
+    },
+    "amenities": [],
+    "year_built": 1972,
+    "security_deposit": 900.0,
+    "application_fee": 60.0,
+    "admin_fee": 75.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Garbage Disposal",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "tile",
+    "heating": "central",
+    "cooling": "window",
+    "laundry_type": "in_unit",
+    "floor_level": 2,
+    "unit_count": 60,
+    "availability_date": "2026-10-03",
+    "min_credit_score": 570,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 540,
+        "monthly_rent": 900,
+        "available_units": 8,
+        "availability_date": "2026-10-03"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 760,
+        "monthly_rent": 1215,
+        "available_units": 1,
+        "availability_date": "2026-10-19"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-042",
+    "name": "Zilker Trailside Condos",
+    "property_type": "Condo",
+    "monthly_rent": 2700,
+    "bedrooms": 2,
+    "bathrooms": 1.5,
+    "bathroom_type": "full",
+    "square_feet": 1260,
+    "has_balcony": true,
+    "in_unit_laundry": true,
+    "parking_type": "covered",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Zilker",
+      "city": "Austin",
+      "walk_score": 75,
+      "transit_score": 50
+    },
+    "amenities": [
+      "Smart Locks",
+      "Clubhouse"
+    ],
+    "year_built": 1986,
+    "security_deposit": 2700.0,
+    "application_fee": 50.0,
+    "admin_fee": 150.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 50.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": 4,
+    "unit_count": 240,
+    "availability_date": "2026-10-28",
+    "min_credit_score": 610,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 1260,
+        "monthly_rent": 2700,
+        "available_units": 8,
+        "availability_date": "2026-10-28"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1760,
+        "monthly_rent": 3645,
+        "available_units": 3,
+        "availability_date": "2026-11-07"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 2270,
+        "monthly_rent": 4590,
+        "available_units": 3,
+        "availability_date": "2026-11-01"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-043",
+    "name": "Mueller Greenway Duplex",
+    "property_type": "Duplex",
+    "monthly_rent": 3150,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1910,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Mueller",
+      "city": "Austin",
+      "walk_score": 82,
+      "transit_score": 58
+    },
+    "amenities": [
+      "Bike Storage",
+      "Smart Locks",
+      "Storage Units"
+    ],
+    "year_built": 1986,
+    "security_deposit": 3150.0,
+    "application_fee": 45.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 500.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 1,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave"
+    ],
+    "flooring": "mixed",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": null,
+    "unit_count": 2,
+    "availability_date": "2026-09-08",
+    "min_credit_score": 620,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 1910,
+        "monthly_rent": 3150,
+        "available_units": 3,
+        "availability_date": "2026-09-08"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-044",
+    "name": "Westheimer Court Apartments",
+    "property_type": "Apartment",
+    "monthly_rent": 1050,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 520,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": false,
+    "lease_term_months": 18,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Montrose",
+      "city": "Houston",
+      "walk_score": 89,
+      "transit_score": 65
+    },
+    "amenities": [
+      "Yoga Studio",
+      "Pool",
+      "Smart Locks"
+    ],
+    "year_built": 1970,
+    "security_deposit": 1050.0,
+    "application_fee": 45.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Garbage Disposal"
+    ],
+    "flooring": "tile",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "none",
+    "floor_level": 4,
+    "unit_count": 240,
+    "availability_date": "2026-08-15",
+    "min_credit_score": 600,
+    "min_income_multiplier": 2.5,
+    "smoking_allowed": false,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 520,
+        "monthly_rent": 1050,
+        "available_units": 3,
+        "availability_date": "2026-08-15"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 730,
+        "monthly_rent": 1420,
+        "available_units": 5,
+        "availability_date": "2026-08-16"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 940,
+        "monthly_rent": 1785,
+        "available_units": 0,
+        "availability_date": "2026-09-01"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-045",
+    "name": "The Saltillo Flats",
+    "property_type": "Apartment",
+    "monthly_rent": 1125,
+    "bedrooms": 1,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 510,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "lot",
+    "pets_allowed": true,
+    "lease_term_months": 18,
+    "furnished": true,
+    "neighborhood": {
+      "name": "East Austin",
+      "city": "Austin",
+      "walk_score": 80,
+      "transit_score": 55
+    },
+    "amenities": [
+      "Gym",
+      "Pool",
+      "Playground"
+    ],
+    "year_built": 1971,
+    "security_deposit": 550.0,
+    "application_fee": 50.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": 50,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 35.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave"
+    ],
+    "flooring": "carpet",
+    "heating": "electric",
+    "cooling": "window",
+    "laundry_type": "none",
+    "floor_level": 2,
+    "unit_count": 180,
+    "availability_date": "2026-08-28",
+    "min_credit_score": 580,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": true,
+    "max_occupants": 3,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 510,
+        "monthly_rent": 1125,
+        "available_units": 5,
+        "availability_date": "2026-08-28"
+      },
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.5,
+        "square_feet": 710,
+        "monthly_rent": 1520,
+        "available_units": 8,
+        "availability_date": "2026-10-07"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.0,
+        "square_feet": 920,
+        "monthly_rent": 1910,
+        "available_units": 3,
+        "availability_date": "2026-10-05"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 2.5,
+        "square_feet": 1100,
+        "monthly_rent": 2250,
+        "available_units": 4,
+        "availability_date": "2026-09-10"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-046",
+    "name": "Redbud Lane House",
+    "property_type": "House",
+    "monthly_rent": 2525,
+    "bedrooms": 3,
+    "bathrooms": 1.5,
+    "bathroom_type": "full",
+    "square_feet": 1430,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "garage",
+    "pets_allowed": true,
+    "lease_term_months": 6,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Alamo Heights",
+      "city": "San Antonio",
+      "walk_score": 61,
+      "transit_score": 38
+    },
+    "amenities": [
+      "EV Charging",
+      "Concierge"
+    ],
+    "year_built": 1987,
+    "security_deposit": 1900.0,
+    "application_fee": 35.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 300.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 100.0,
+    "utilities_included": [
+      "Water",
+      "Trash",
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "electric",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": null,
+    "unit_count": 1,
+    "availability_date": "2026-07-10",
+    "min_credit_score": 630,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 6,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 1.5,
+        "square_feet": 1430,
+        "monthly_rent": 2525,
+        "available_units": 1,
+        "availability_date": "2026-07-10"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-047",
+    "name": "Clarksville Corner Condos",
+    "property_type": "Condo",
+    "monthly_rent": 2650,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 1150,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Downtown",
+      "city": "Austin",
+      "walk_score": 92,
+      "transit_score": 78
+    },
+    "amenities": [
+      "Storage Units",
+      "Dog Park",
+      "Coworking Space",
+      "Bike Storage"
+    ],
+    "year_built": 1987,
+    "security_deposit": 2000.0,
+    "application_fee": 35.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Water",
+      "Trash"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Microwave"
+    ],
+    "flooring": "vinyl",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 2,
+    "unit_count": 60,
+    "availability_date": "2026-09-03",
+    "min_credit_score": 610,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": true,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 1150,
+        "monthly_rent": 2650,
+        "available_units": 3,
+        "availability_date": "2026-09-03"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1610,
+        "monthly_rent": 3580,
+        "available_units": 4,
+        "availability_date": "2026-09-19"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 2070,
+        "monthly_rent": 4505,
+        "available_units": 8,
+        "availability_date": "2026-09-03"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-048",
+    "name": "Harwood District Highrise",
+    "property_type": "Apartment",
+    "monthly_rent": 2375,
+    "bedrooms": 2,
+    "bathrooms": 2.0,
+    "bathroom_type": "full",
+    "square_feet": 980,
+    "has_balcony": false,
+    "in_unit_laundry": false,
+    "parking_type": "street",
+    "pets_allowed": true,
+    "lease_term_months": 24,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Uptown",
+      "city": "Dallas",
+      "walk_score": 94,
+      "transit_score": 81
+    },
+    "amenities": [
+      "Rooftop Deck",
+      "Concierge",
+      "Smart Locks"
+    ],
+    "year_built": 1991,
+    "security_deposit": 1775.0,
+    "application_fee": 45.0,
+    "admin_fee": 200.0,
+    "pet_deposit": 200.0,
+    "pet_rent_monthly": 40.0,
+    "pet_weight_limit_lbs": 25,
+    "pets_max_count": 3,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Gas"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 1,
+    "unit_count": 80,
+    "availability_date": "2026-09-02",
+    "min_credit_score": 640,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": false,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "square_feet": 980,
+        "monthly_rent": 2375,
+        "available_units": 1,
+        "availability_date": "2026-09-02"
+      },
+      {
+        "name": "3 Bedroom",
+        "bedrooms": 3,
+        "bathrooms": 2.5,
+        "square_feet": 1370,
+        "monthly_rent": 3205,
+        "available_units": 7,
+        "availability_date": "2026-09-03"
+      },
+      {
+        "name": "4 Bedroom",
+        "bedrooms": 4,
+        "bathrooms": 3.0,
+        "square_feet": 1760,
+        "monthly_rent": 4040,
+        "available_units": 8,
+        "availability_date": "2026-09-26"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-049",
+    "name": "Barton Hills Studio Suites",
+    "property_type": "Studio",
+    "monthly_rent": 1300,
+    "bedrooms": 0,
+    "bathrooms": 1.0,
+    "bathroom_type": "shower_only",
+    "square_feet": 530,
+    "has_balcony": true,
+    "in_unit_laundry": false,
+    "parking_type": "none",
+    "pets_allowed": true,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "Zilker",
+      "city": "Austin",
+      "walk_score": 75,
+      "transit_score": 50
+    },
+    "amenities": [
+      "BBQ Area",
+      "Pool"
+    ],
+    "year_built": 1970,
+    "security_deposit": 975.0,
+    "application_fee": 35.0,
+    "admin_fee": 0.0,
+    "pet_deposit": 400.0,
+    "pet_rent_monthly": 30.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 2,
+    "parking_fee_monthly": 0.0,
+    "utilities_included": [
+      "Electric"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Dishwasher",
+      "Garbage Disposal"
+    ],
+    "flooring": "vinyl",
+    "heating": "central",
+    "cooling": "central",
+    "laundry_type": "shared",
+    "floor_level": 1,
+    "unit_count": 180,
+    "availability_date": "2026-07-09",
+    "min_credit_score": 560,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": true,
+    "max_occupants": 1,
+    "storage_unit_available": false,
+    "gated": false,
+    "floor_plans": [
+      {
+        "name": "Studio",
+        "bedrooms": 0,
+        "bathrooms": 1.0,
+        "square_feet": 530,
+        "monthly_rent": 1300,
+        "available_units": 4,
+        "availability_date": "2026-07-09"
+      },
+      {
+        "name": "1 Bedroom",
+        "bedrooms": 1,
+        "bathrooms": 1.0,
+        "square_feet": 742,
+        "monthly_rent": 1690,
+        "available_units": 4,
+        "availability_date": "2026-07-09"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1502005097973-6a7082348e28?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1502005097973-6a7082348e28?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop"
+    ]
+  },
+  {
+    "id": "PROP-050",
+    "name": "Live Oak Townhomes",
+    "property_type": "Townhouse",
+    "monthly_rent": 1825,
+    "bedrooms": 2,
+    "bathrooms": 1.0,
+    "bathroom_type": "full",
+    "square_feet": 1270,
+    "has_balcony": false,
+    "in_unit_laundry": true,
+    "parking_type": "garage",
+    "pets_allowed": false,
+    "lease_term_months": 12,
+    "furnished": false,
+    "neighborhood": {
+      "name": "East Austin",
+      "city": "Austin",
+      "walk_score": 80,
+      "transit_score": 55
+    },
+    "amenities": [
+      "Package Lockers",
+      "Playground"
+    ],
+    "year_built": 1973,
+    "security_deposit": 1375.0,
+    "application_fee": 60.0,
+    "admin_fee": 100.0,
+    "pet_deposit": 0.0,
+    "pet_rent_monthly": 0.0,
+    "pet_weight_limit_lbs": null,
+    "pets_max_count": 0,
+    "parking_fee_monthly": 125.0,
+    "utilities_included": [
+      "Water"
+    ],
+    "appliances": [
+      "Refrigerator",
+      "Oven",
+      "Microwave",
+      "Washer",
+      "Dryer"
+    ],
+    "flooring": "carpet",
+    "heating": "gas",
+    "cooling": "central",
+    "laundry_type": "in_unit",
+    "floor_level": null,
+    "unit_count": 6,
+    "availability_date": "2026-10-16",
+    "min_credit_score": 580,
+    "min_income_multiplier": 3.0,
+    "smoking_allowed": true,
+    "max_occupants": 5,
+    "storage_unit_available": false,
+    "gated": true,
+    "floor_plans": [
+      {
+        "name": "2 Bedroom",
+        "bedrooms": 2,
+        "bathrooms": 1.0,
+        "square_feet": 1270,
+        "monthly_rent": 1825,
+        "available_units": 7,
+        "availability_date": "2026-10-16"
+      }
+    ],
+    "photo_url": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+    "photo_urls": [
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=1200&q=80&auto=format&fit=crop"
+    ]
+  }
+]

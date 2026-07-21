@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RentReady — Evaluation Execution Report</title>
+<style>
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --bg: #f8f9fa; --card-bg: #fff; --border: #e9ecef; --text: #495057;
+  --title: #212529; --subtle: #6c757d; --pass-color: #28a745; --fail-color: #dc3545;
+  --pass-bg: #e2f5e7; --fail-bg: #f9e2e4; --primary: #007bff; --primary-bg: #e0f0ff;
+  --shadow: 0 4px 6px rgba(0,0,0,0.05); --radius: 12px;
+}
+* { box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); margin: 0; padding: 1rem; }
+.container { max-width: 1400px; margin: 0 auto; padding: 0.5rem; }
+.report-header { background: var(--card-bg); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 0.75rem; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.header-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.report-header h1 { color: var(--title); font-size: 1.4rem; font-weight: 700; margin: 0; }
+.report-header h3 { color: var(--subtle); font-size: 0.85rem; font-weight: 500; margin: 0.35rem 0 0; }
+.report-header p { margin: 0.25rem 0 0; color: var(--subtle); font-size: 0.85rem; }
+.badge { padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.badge.brand { background: var(--primary-bg); color: var(--primary); }
+.badge.ok { background: var(--pass-bg); color: var(--pass-color); }
+.badge.warn { background: #fff3cd; color: #856404; }
+.tabs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.tab-buttons { display: flex; gap: 0.5rem; }
+.tab-button { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; color: var(--subtle); cursor: pointer; }
+.tab-button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.download-button { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; color: var(--text); cursor: pointer; }
+.report-tab { display: none; }
+.report-tab.active { display: block; }
+.summary-dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.summary-card { background: var(--card-bg); border-radius: var(--radius); padding: 0.75rem; display: flex; align-items: center; gap: 0.6rem; border: 1px solid var(--border); box-shadow: var(--shadow); position: relative; }
+.summary-card .icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.icon.evaluations { background: #28a745; }
+.icon.traces { background: #007bff; }
+.icon.duration { background: linear-gradient(135deg,#42a5f5,#1e88e5); }
+.icon.threads { background: #ffc107; }
+.icon.latency { background: linear-gradient(135deg,#66bb6a,#43a047); }
+.summary-card .value { font-size: 1.3rem; font-weight: 700; color: var(--title); line-height: 1; }
+.summary-card .label { font-size: 0.75rem; color: var(--subtle); margin-top: 0.15rem; }
+.summary-card .mini-label { font-size: 0.68rem; color: var(--subtle); margin-top: 0.1rem; }
+.info-tooltip { position: relative; display: inline-flex; align-items: center; margin-left: 0.2rem; cursor: help; opacity: 0.55; }
+.info-tooltip:hover { opacity: 1; }
+.info-tooltip .tooltip-text { visibility: hidden; width: 240px; background: #333; color: #fff; text-align: left; border-radius: 6px; padding: 0.6rem; position: absolute; z-index: 99; bottom: 145%; left: 50%; margin-left: -120px; opacity: 0; transition: opacity 0.2s; font-size: 0.72rem; line-height: 1.4; box-shadow: 0 2px 8px rgba(0,0,0,0.2); font-weight: 400; }
+.info-tooltip:hover .tooltip-text { visibility: visible; opacity: 1; }
+.section { background: var(--card-bg); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 0.75rem; border: 1px solid var(--border); box-shadow: var(--shadow); }
+.section h3 { color: var(--title); font-size: 1rem; margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
+.eval-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem; }
+.eval-type-card { border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; background: var(--bg); border-left: 4px solid var(--subtle); }
+.eval-type-card.pass { border-left-color: var(--pass-color); }
+.eval-type-card.fail { border-left-color: var(--fail-color); }
+.eval-type-card h4 { margin: 0 0 0.4rem; font-size: 0.85rem; color: var(--title); display: flex; align-items: center; }
+.eval-type-percentage { font-size: 1.6rem; font-weight: 700; color: var(--title); }
+.eval-type-breakdown { font-size: 0.75rem; margin: 0.2rem 0; }
+.eval-type-total { font-size: 0.7rem; color: var(--subtle); }
+.tick-pass { color: var(--pass-color); font-weight: 700; }
+.tick-fail { color: var(--fail-color); font-weight: 700; }
+.bar-row { display: grid; grid-template-columns: 200px 1fr 60px; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+.bar-label { font-size: 0.78rem; color: var(--text); }
+.bar-track { position: relative; background: #eef1f4; border-radius: 999px; height: 14px; }
+.bar-fill { height: 100%; border-radius: 999px; }
+.bar-threshold { position: absolute; top: -3px; width: 2px; height: 20px; background: #495057; }
+.bar-value { font-size: 0.78rem; font-weight: 600; text-align: right; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+.confusion { border-collapse: collapse; font-size: 0.8rem; }
+.confusion th, .confusion td { padding: 0.5rem 0.7rem; text-align: center; border: 1px solid var(--border); }
+.confusion th { background: var(--bg); color: var(--subtle); font-weight: 600; }
+.cm-rowhead { background: var(--bg); }
+.cm-diag { background: var(--pass-bg); color: var(--pass-color); font-weight: 700; }
+.cm-off { background: var(--fail-bg); color: var(--fail-color); font-weight: 700; }
+.cm-zero { color: #ced4da; }
+.filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: center; }
+.filters select, .filters input { padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.82rem; background: #fff; }
+.filters input { flex: 1; min-width: 160px; }
+table.cases { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+table.cases th { text-align: left; padding: 0.55rem 0.6rem; color: var(--subtle); border-bottom: 2px solid var(--border); position: sticky; top: 0; background: var(--card-bg); }
+table.cases td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.cases tr:hover td { background: #fbfcfd; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.76rem; }
+.detail { color: var(--subtle); max-width: 420px; }
+.suite-tag { background: var(--primary-bg); color: var(--primary); padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+.pill { padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.pill.pass { background: var(--pass-bg); color: var(--pass-color); }
+.pill.fail { background: var(--fail-bg); color: var(--fail-color); }
+.pill.neutral { background: #e9ecef; color: var(--subtle); }
+.muted { color: var(--subtle); font-size: 0.85rem; }
+@media print { .tab-button, .download-button, .filters { display: none !important; } .report-tab { display: block !important; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="report-header">
+    <div class="header-title-row">
+      <h1>RentReady — Evaluation Execution Report</h1>
+      <span class="badge brand">RentReady</span>
+      <span class="badge ok">PASS</span>
+    </div>
+    <h3>Two-tier evaluation: deterministic CI gates + LLM-as-judge & RAGAS</h3>
+    <p>Generated at: 06/26/2026 03:58PM UTC · 29 cases scored</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab-buttons">
+      <button id="tb-metrics" class="tab-button active" onclick="showTab('metrics')">Metrics &amp; Data</button>
+      <button id="tb-cases" class="tab-button" onclick="showTab('cases')">Cases &amp; Filters</button>
+    </div>
+    <button class="download-button" onclick="window.print()">Convert to PDF</button>
+  </div>
+
+  <div id="tab-metrics" class="report-tab active">
+    <div class="summary-dashboard">
+    <div class="summary-card">
+      <div class="icon evaluations"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg></div>
+      <div class="content">
+        <div class="value">3/3</div>
+        <div class="label">Deterministic Gates
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">How many CI-gating deterministic metrics meet their threshold. A failure here fails the build.</span>
+          </span>
+        </div>
+        <div class="mini-label">PASS</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon traces"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2"></path><line x1="8" y1="2" x2="16" y2="2"></line></svg></div>
+      <div class="content">
+        <div class="value">29</div>
+        <div class="label">Cases Evaluated
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Total individual test cases scored across every suite in this run.</span>
+          </span>
+        </div>
+        <div class="mini-label">across 5 suites</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon duration"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+      <div class="content">
+        <div class="value">100.0%</div>
+        <div class="label">Eligibility Accuracy
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Share of applicants whose rule-based verdict matched ground truth.</span>
+          </span>
+        </div>
+        <div class="mini-label">8 cases</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon threads"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg></div>
+      <div class="content">
+        <div class="value">100.0%</div>
+        <div class="label">Extraction Field Accuracy
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Share of extracted profile fields that matched the labeled value.</span>
+          </span>
+        </div>
+        <div class="mini-label">exact-match 100.0%</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon latency"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+      <div class="content">
+        <div class="value">84.9%</div>
+        <div class="label">Recommendation NDCG@5
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Ranking quality of the deterministic scorer vs graded relevance.</span>
+          </span>
+        </div>
+        <div class="mini-label">MRR 83.3%</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon evaluations"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg></div>
+      <div class="content">
+        <div class="value">93.3%</div>
+        <div class="label">LLM Judge Groundedness
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Mean groundedness (1–5, shown as %) the LLM judge gave to recommendation explanations. Higher = better grounded in facts.</span>
+          </span>
+        </div>
+        <div class="mini-label">0 flagged claims</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="icon latency"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+      <div class="content">
+        <div class="value">100.0%</div>
+        <div class="label">RAGAS Faithfulness
+          <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="tooltip-text">Did the PDF Q&amp;A answers stay faithful to the retrieved context?</span>
+          </span>
+        </div>
+        <div class="mini-label">relevancy 82.3%</div>
+      </div>
+    </div></div>
+
+    <div class="section">
+      <h3>Evaluation Breakdown by Type</h3>
+      <div class="eval-types">
+    <div class="eval-type-card pass">
+      <h4>Eligibility Accuracy
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">Rule-based verdict exact-match vs ground truth.</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">100.0%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · threshold 100.0%</div>
+      <div class="eval-type-total">8 cases evaluated</div>
+    </div>
+    <div class="eval-type-card pass">
+      <h4>Extraction Field Accuracy
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">Per-field accuracy of the offline profile extractor.</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">100.0%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · threshold 90.0%</div>
+      <div class="eval-type-total">5 applicants · exact-match 100.0%</div>
+    </div>
+    <div class="eval-type-card pass">
+      <h4>Recommendation NDCG@5
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">Ranking quality of the deterministic scorer.</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">84.9%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · threshold 70.0%</div>
+      <div class="eval-type-total">3 cases · precision@5 46.7% · MRR 83.3%</div>
+    </div>
+    <div class="eval-type-card pass">
+      <h4>LLM Judge Groundedness
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">LLM-as-judge groundedness of recommendation prose (guardrailed).</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">93.3%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · soft target 80%</div>
+      <div class="eval-type-total">6 explanations · 0 judge-flagged · 0 tripwire</div>
+    </div>
+    <div class="eval-type-card pass">
+      <h4>Eligibility Explanation Consistency
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">Does the explanation agree with the deterministic verdict?</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">100.0%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · soft target 80%</div>
+      <div class="eval-type-total">3 explanations checked</div>
+    </div>
+    <div class="eval-type-card pass">
+      <h4>RAGAS Faithfulness
+        <span class="info-tooltip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span class="tooltip-text">RAG answer quality on the gold PDF Q&amp;A set.</span>
+        </span>
+      </h4>
+      <div class="eval-type-percentage">100.0%</div>
+      <div class="eval-type-breakdown"><span class='tick-pass'>✓</span> PASS · soft target 80%</div>
+      <div class="eval-type-total">relevancy 82.3% · correctness 89.0%</div>
+    </div></div>
+    </div>
+
+    <div class="section">
+      <h3>Metric vs Threshold</h3>
+      
+    <div class="bar-row">
+      <div class="bar-label">Eligibility accuracy</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        <div class='bar-threshold' style='left:100.0%' title='threshold 100.0%'></div>
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Extraction field accuracy</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        <div class='bar-threshold' style='left:90.0%' title='threshold 90.0%'></div>
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Recommendation NDCG@5</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:84.9%;background:var(--pass-color)"></div>
+        <div class='bar-threshold' style='left:70.0%' title='threshold 70.0%'></div>
+      </div>
+      <div class="bar-value">84.9%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Judge groundedness</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:93.3%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">93.3%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">RAGAS faithfulness</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">RAGAS answer relevancy</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:82.3%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">82.3%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">RAGAS answer correctness</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:89.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">89.0%</div>
+    </div>
+    </div>
+
+    <div class="two-col">
+      <div class="section">
+        <h3>Eligibility Confusion Matrix</h3>
+        
+    <table class="confusion">
+      <thead><tr><th>actual ↓ / predicted →</th><th>qualified</th><th>needs_review</th><th>not_qualified</th></tr></thead>
+      <tbody><tr><th class='cm-rowhead'>qualified</th><td class='cm-diag'>3</td><td class='cm-zero'>0</td><td class='cm-zero'>0</td></tr><tr><th class='cm-rowhead'>needs_review</th><td class='cm-zero'>0</td><td class='cm-diag'>3</td><td class='cm-zero'>0</td></tr><tr><th class='cm-rowhead'>not_qualified</th><td class='cm-zero'>0</td><td class='cm-zero'>0</td><td class='cm-diag'>2</td></tr></tbody>
+    </table>
+      </div>
+      <div class="section">
+        <h3>Extraction — Per-field Accuracy</h3>
+        
+    <div class="bar-row">
+      <div class="bar-label">monthly income</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">desired rent</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">credit score</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">bedrooms wanted</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">bathrooms wanted</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">has pets</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">needs balcony</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">needs parking</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">needs in unit laundry</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:100.0%;background:var(--pass-color)"></div>
+        
+      </div>
+      <div class="bar-value">100.0%</div>
+    </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-cases" class="report-tab">
+    <div class="section">
+      <h3>Per-case Results</h3>
+      <div class="filters">
+        <select id="f-suite" onchange="filterRows()">
+          <option value="">All suites</option>
+          <option value="eligibility">eligibility</option>
+          <option value="extraction">extraction</option>
+          <option value="recommendations">recommendations</option>
+          <option value="judge">judge</option>
+          <option value="ragas">ragas</option>
+        </select>
+        <select id="f-result" onchange="filterRows()">
+          <option value="">All results</option>
+          <option value="pass">pass</option>
+          <option value="fail">fail</option>
+          <option value="info">info</option>
+        </select>
+        <input id="f-text" type="text" placeholder="Search case or detail…" oninput="filterRows()">
+      </div>
+      <table class="cases">
+        <thead><tr><th>Suite</th><th>Case</th><th>Metric</th><th>Score</th><th>Result</th><th>Detail</th></tr></thead>
+        <tbody id="case-body">
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-strong</td>
+      <td>verdict match</td>
+      <td class="mono">qualified → qualified</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-income-too-low</td>
+      <td>verdict match</td>
+      <td class="mono">not_qualified → not_qualified</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-no-credit</td>
+      <td>verdict match</td>
+      <td class="mono">needs_review → needs_review</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-low-credit</td>
+      <td>verdict match</td>
+      <td class="mono">needs_review → needs_review</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-threshold-exact</td>
+      <td>verdict match</td>
+      <td class="mono">qualified → qualified</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-missing-fields</td>
+      <td>verdict match</td>
+      <td class="mono">needs_review → needs_review</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-high-earner</td>
+      <td>verdict match</td>
+      <td class="mono">qualified → qualified</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="eligibility" data-result="pass">
+      <td><span class="suite-tag">eligibility</span></td>
+      <td class="mono">elig-borderline-fail</td>
+      <td>verdict match</td>
+      <td class="mono">not_qualified → not_qualified</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Correct verdict</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">monthly_income</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">desired_rent</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">credit_score</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">bedrooms_wanted</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">bathrooms_wanted</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">has_pets</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">needs_balcony</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">needs_parking</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="extraction" data-result="pass">
+      <td><span class="suite-tag">extraction</span></td>
+      <td class="mono">needs_in_unit_laundry</td>
+      <td>field accuracy</td>
+      <td class="mono">100.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Field extracted correctly</td>
+    </tr>
+    <tr data-suite="recommendations" data-result="fail">
+      <td><span class="suite-tag">recommendations</span></td>
+      <td class="mono">recs-soco-petowner</td>
+      <td>NDCG / precision@5</td>
+      <td class="mono">NDCG 58.5% · P@5 60.0%</td>
+      <td><span class='pill fail'>fail</span></td>
+      <td class="detail">Ranking below target</td>
+    </tr>
+    <tr data-suite="recommendations" data-result="pass">
+      <td><span class="suite-tag">recommendations</span></td>
+      <td class="mono">recs-downtown-pro</td>
+      <td>NDCG / precision@5</td>
+      <td class="mono">NDCG 96.9% · P@5 40.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Ranking meets target</td>
+    </tr>
+    <tr data-suite="recommendations" data-result="pass">
+      <td><span class="suite-tag">recommendations</span></td>
+      <td class="mono">recs-budget-studio</td>
+      <td>NDCG / precision@5</td>
+      <td class="mono">NDCG 99.3% · P@5 40.0%</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Ranking meets target</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">jordan-rivera · Oakwood Gardens</td>
+      <td>groundedness</td>
+      <td class="mono">5/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Every claim in the explanation is supported by the facts: rent fits budget, 2 full beds/baths, 980 sq ft (plenty of space), in-unit laundry, pets allowed with Pet Park, surface parking, and the balcony absence is correctly noted.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">jordan-rivera · The Heights</td>
+      <td>groundedness</td>
+      <td class="mono">5/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Every claim in the explanation is supported by the facts: South Congress location, balcony, affordability, one bedroom, shower-only bath, and no in-unit laundry are all accurate.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">alex-chen · Riverside Lofts</td>
+      <td>groundedness</td>
+      <td class="mono">5/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Every claim in the explanation is directly supported by the property facts.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">alex-chen · Maple Court Apartments</td>
+      <td>groundedness</td>
+      <td class="mono">4/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">All stated claims (Downtown location, balcony, in-unit laundry, garage parking, one-bedroom) are supported by the facts, though the budget claim is loosely stated but not contradicted since $1450 is within Alex&#x27;s $2200 desired rent.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">sam-patel · Cesar Chavez Studios</td>
+      <td>groundedness</td>
+      <td class="mono">4/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">All stated claims (East Austin location, within budget, balcony, pets allowed, bike storage) are supported by the facts, though the explanation omits that the unit is a studio and below Sam&#x27;s minimum square footage requirement.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">sam-patel · The Heights</td>
+      <td>groundedness</td>
+      <td class="mono">5/5</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">Every claim in the explanation (pet-friendly, balcony, bike storage, 1 bedroom, shower-only bath, within budget, South Congress location) is directly supported by the property facts.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">jordan-rivera · qualified</td>
+      <td>explanation consistency</td>
+      <td class="mono">consistent</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">The explanation accurately reflects the qualified verdict and correctly describes both qualifying factors: income exceeding 3x rent and credit score of 712 above the 620 minimum.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">alex-chen · qualified</td>
+      <td>explanation consistency</td>
+      <td class="mono">consistent</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">The explanation accurately reflects the qualified verdict and correctly states both the income ratio (over four times rent, above the three-times threshold) and the credit score (781, above the 620 minimum) without inventing or contradicting any facts.</td>
+    </tr>
+    <tr data-suite="judge" data-result="pass">
+      <td><span class="suite-tag">judge</span></td>
+      <td class="mono">sam-patel · not_qualified</td>
+      <td>explanation consistency</td>
+      <td class="mono">consistent</td>
+      <td><span class='pill pass'>pass</span></td>
+      <td class="detail">The explanation accurately states the income ratio of 2.14x falls short of the 3.0x requirement and correctly notes the credit score meets standards, consistent with the not_qualified verdict.</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-jordan-income</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">What is the applicant&#x27;s monthly income?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-jordan-pets</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">Does the applicant have any pets?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-jordan-rent</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">How much rent does the applicant want to pay?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-alex-area</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">Which area does the applicant prefer to live in?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-alex-pets</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">Does the applicant have pets?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-sam-income</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">What is the applicant&#x27;s monthly income?</td>
+    </tr>
+    <tr data-suite="ragas" data-result="info">
+      <td><span class="suite-tag">ragas</span></td>
+      <td class="mono">qa-sam-pets</td>
+      <td>RAG Q&amp;A</td>
+      <td class="mono">—</td>
+      <td><span class='pill neutral'>info</span></td>
+      <td class="detail">Does the applicant have any pets?</td>
+    </tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.report-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-button').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('tb-' + name).classList.add('active');
+}
+function filterRows() {
+  var s = document.getElementById('f-suite').value;
+  var r = document.getElementById('f-result').value;
+  var q = document.getElementById('f-text').value.toLowerCase();
+  document.querySelectorAll('#case-body tr').forEach(function(row) {
+    var okS = !s || row.dataset.suite === s;
+    var okR = !r || row.dataset.result === r;
+    var okQ = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+    row.style.display = (okS && okR && okQ) ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>

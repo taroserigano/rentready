@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eval, Observability & Monitoring — a hands-on course (LangSmith · Phoenix · RAGAS)</title>
+<script>
+  // Apply theme before paint to avoid a flash. Default = saved choice, else system.
+  (function(){
+    try{
+      var saved = localStorage.getItem('course_theme');
+      var dark = saved ? saved === 'dark'
+        : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if(dark) document.documentElement.classList.add('dark');
+      if(localStorage.getItem('course_nav') === 'closed') document.documentElement.classList.add('nav-closed');
+    }catch(e){}
+  })();
+</script>
+<style>
+  :root{
+    --bg:#f6f8fb; --bg2:#fbfcfe; --panel:#fff; --ink:#1f2933; --muted:#64748b; --line:#e5e9f0;
+    --brand:#5b6cff; --brand-d:#3b49d6; --brand-link:#3b49d6;
+    --green:#16a34a; --green-bg:#e8f8ee;
+    --red:#dc2626; --red-bg:#fdeaea; --amber:#b45309; --amber-bg:#fdf4e3;
+    --code:#0f172a; --code-bg:#eef1f7; --code-ink:#334155;
+    --th-bg:#f3f6fb; --th-ink:#475569; --hover:#eef1fb; --row-hover:#fafbfe;
+    --tip-bg:#eef2ff; --tip-bd:#d7defb;
+    --radius:14px; --shadow:0 6px 22px rgba(20,30,60,.07);
+  }
+  html.dark{
+    --bg:#0f1420; --bg2:#161c2b; --panel:#161c2b; --ink:#e6eaf2; --muted:#9aa6bd; --line:#2a3346;
+    --brand:#7c8cff; --brand-d:#aeb8ff; --brand-link:#aeb8ff;
+    --green:#4ade80; --green-bg:#10271b;
+    --red:#f87171; --red-bg:#2c1719; --amber:#fbbf24; --amber-bg:#2a2210;
+    --code:#0b1020; --code-bg:#0e1626; --code-ink:#cbd5e1;
+    --th-bg:#1c2436; --th-ink:#aab6cf; --hover:#202a40; --row-hover:#1a2233;
+    --tip-bg:#181f33; --tip-bd:#2f3b57;
+    --shadow:0 6px 22px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  a{color:var(--brand-link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:.05em .4em;font-family:ui-monospace,Menlo,monospace;font-size:.86em;color:var(--code-ink)}
+
+  /* theme toggle */
+  .theme-toggle{position:fixed;top:14px;right:16px;z-index:50;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:.4rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center;gap:.4rem}
+  .theme-toggle:hover{border-color:var(--brand)}
+
+  /* sidebar toggle */
+  .nav-toggle{position:fixed;top:14px;left:16px;z-index:60;width:40px;height:36px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:1.05rem;line-height:1}
+  .nav-toggle:hover{border-color:var(--brand)}
+
+  /* layout */
+  .wrap{display:grid;grid-template-columns:264px 1fr;gap:0;max-width:1320px;margin:0 auto;transition:grid-template-columns .25s ease}
+  .toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;overflow-x:hidden;padding:3.4rem 1rem 1.2rem;border-right:1px solid var(--line);background:var(--bg2);transition:transform .25s ease,opacity .2s ease}
+  /* collapsed state */
+  html.nav-closed .wrap{grid-template-columns:0 1fr}
+  html.nav-closed .toc{transform:translateX(-100%);opacity:0;pointer-events:none}
+  html.nav-closed main{padding-left:3.6rem}
+  @media(max-width:900px){html.nav-closed .toc{display:none}html.nav-closed main{padding-left:3.6rem}}
+  .toc h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1.2rem 0 .4rem}
+  .toc a{display:block;color:var(--ink);font-size:.86rem;padding:.28rem .5rem;border-radius:8px}
+  .toc a:hover{background:var(--hover);text-decoration:none}
+  .toc .top{font-weight:800;font-size:1rem;color:var(--brand-d)}
+  main{padding:2rem 2.4rem 6rem;min-width:0}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}}
+
+  /* hero */
+  .hero{background:linear-gradient(135deg,#5b6cff,#7c5bff);color:#fff;border-radius:18px;padding:2rem 2.2rem;margin-bottom:1.4rem;box-shadow:var(--shadow)}
+  .hero h1{margin:.1rem 0 .4rem;font-size:1.9rem;line-height:1.2}
+  .hero p{margin:.2rem 0;opacity:.95;font-size:1rem;max-width:62ch}
+  .pills{margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap}
+  .pill{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);padding:.25rem .7rem;border-radius:999px;font-size:.8rem;font-weight:600}
+
+  section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem 1.7rem;margin-bottom:1.2rem;box-shadow:var(--shadow);scroll-margin-top:14px}
+  section>h2{margin:.1rem 0 .2rem;font-size:1.35rem;display:flex;align-items:center;gap:.55rem}
+  .mod-num{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:var(--brand);color:#fff;font-size:.9rem;font-weight:800;flex:none}
+  .lead{color:var(--muted);margin:.1rem 0 1rem;font-size:.97rem}
+  h3{font-size:1.04rem;margin:1.3rem 0 .5rem}
+  h4{font-size:.92rem;margin:1rem 0 .35rem;color:var(--ink)}
+  ul,ol{margin:.3rem 0 .8rem;padding-left:1.3rem}
+  li{margin:.22rem 0}
+  .tight li{margin:.1rem 0}
+
+  /* callouts */
+  .note{border-radius:10px;padding:.7rem .9rem;margin:.8rem 0;font-size:.9rem;border:1px solid}
+  .tip{background:var(--tip-bg);border-color:var(--tip-bd)}
+  .tip b{color:var(--brand-d)}
+  .warn{background:var(--amber-bg);border-color:var(--amber)}
+  .warn b{color:var(--amber)}
+  .key{background:var(--green-bg);border-color:var(--green)}
+  .key b{color:var(--green)}
+
+  /* figures + annotations */
+  figure{margin:1rem 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg2)}
+  .fig{position:relative;line-height:0}
+  .fig img{width:100%;display:block}
+  figcaption{font-size:.82rem;color:var(--muted);padding:.55rem .8rem;border-top:1px solid var(--line);line-height:1.45}
+  .mk{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:.82rem;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);z-index:2}
+  .legend{list-style:none;padding:0;margin:.6rem 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.4rem .9rem}
+  .legend li{display:flex;gap:.5rem;align-items:flex-start;font-size:.86rem;margin:0}
+  .legend .n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:.74rem;display:flex;align-items:center;justify-content:center;margin-top:1px}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:.7rem 0;font-size:.88rem}
+  th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--th-bg);color:var(--th-ink);font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+  tr:hover td{background:var(--row-hover)}
+  .tag{display:inline-block;padding:.05rem .5rem;border-radius:999px;font-size:.72rem;font-weight:700}
+  .t-det{background:var(--tip-bg);color:var(--brand-d)}
+  .t-llm{background:rgba(147,51,234,.16);color:#c084fc}
+  .t-ls{background:rgba(3,105,161,.16);color:#38bdf8}
+  .t-px{background:var(--green-bg);color:var(--green)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;background:var(--bg2)}
+  .card h4{margin:.1rem 0 .4rem}
+  .btn{display:inline-block;background:var(--brand);color:#fff;padding:.45rem .9rem;border-radius:9px;font-weight:600;font-size:.86rem;margin:.2rem .3rem .2rem 0}
+  .btn:hover{background:var(--brand-d);text-decoration:none}
+  .btn.ghost{background:var(--panel);color:var(--brand-d);border:1px solid var(--tip-bd)}
+  .flow{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-size:.86rem;margin:.6rem 0}
+  .flow .step{background:var(--tip-bg);border:1px solid var(--tip-bd);border-radius:8px;padding:.35rem .65rem;font-weight:600}
+  .flow .arr{color:var(--muted);font-weight:700}
+  .kbd{font-family:ui-monospace,Menlo,monospace;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;display:block;white-space:pre-wrap;font-size:.82rem;margin:.5rem 0}
+  hr{border:none;border-top:1px solid var(--line);margin:1.4rem 0}
+  .small{font-size:.82rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<button class="nav-toggle" id="navToggle" onclick="toggleNav()" aria-label="Toggle sidebar" title="Toggle sidebar">☰</button>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode"><span id="themeIcon">🌙</span><span id="themeLabel">Dark</span></button>
+<div class="wrap">
+
+<!-- ============ SIDEBAR ============ -->
+<nav class="toc">
+  <a class="top" href="#top">AI Eval &amp; Observability</a>
+  <div class="small" style="padding:.2rem .5rem">A hands-on course</div>
+
+  <h2>Foundations</h2>
+  <a href="#start">Start here</a>
+  <a href="#bigpic">1 · Eval vs Observability vs Monitoring</a>
+  <a href="#lab">2 · The lab app &amp; what it traces</a>
+  <a href="#tracing">3 · Tracing &amp; spans 101</a>
+
+  <h2>LangSmith (deep dive)</h2>
+  <a href="#ls-intro">4 · LangSmith overview</a>
+  <a href="#ls-sidebar">4.1 Sidebar map</a>
+  <a href="#ls-tracing">4.2 Tracing: Threads/Traces/Runs</a>
+  <a href="#ls-list">4.3 Reading the run list</a>
+  <a href="#ls-open">4.4 Opening a run/trace</a>
+  <a href="#ls-filter">4.5 Filter, search, Save View</a>
+  <a href="#ls-monitor">4.6 Monitoring tab</a>
+  <a href="#ls-exp">4.7 Datasets &amp; Experiments</a>
+  <a href="#ls-cheat">4.8 Cheat sheet</a>
+
+  <h2>Phoenix &amp; OpenTelemetry</h2>
+  <a href="#px-intro">5 · Phoenix overview</a>
+  <a href="#otel">5.1 OpenTelemetry (OTel)</a>
+  <a href="#px-list">5.2 Projects &amp; traces list</a>
+  <a href="#px-trace">5.3 Trace detail &amp; span tree</a>
+  <a href="#px-attr">5.4 A span's Attributes</a>
+  <a href="#px-vs">5.5 Phoenix vs LangSmith</a>
+  <a href="#px-values">5.6 Reading real values</a>
+
+  <h2>Evaluation</h2>
+  <a href="#ragas">6 · RAGAS (RAG quality)</a>
+  <a href="#judge">7 · LLM-as-judge</a>
+  <a href="#det">8 · Deterministic eval + CI</a>
+  <a href="#ab">9 · A/B experiments</a>
+  <a href="#monitor">10 · Monitoring &amp; the report</a>
+
+  <h2>Reference</h2>
+  <a href="#loop">11 · The loop</a>
+  <a href="#glossary">Glossary</a>
+</nav>
+
+<!-- ============ MAIN ============ -->
+<main id="top">
+
+  <div class="hero">
+    <div class="pills"><span class="pill">LangSmith</span><span class="pill">Arize Phoenix</span><span class="pill">RAGAS</span><span class="pill">LLM-as-judge</span><span class="pill">CI gates</span></div>
+    <h1>Evaluation, Observability &amp; Monitoring for AI apps</h1>
+    <p>Learn to <b>see</b> what your AI did (tracing), <b>score</b> whether it was good (evaluation), and <b>watch</b> it over time (monitoring) — using the live <b>RentReady</b> app as your lab. Every screenshot here is from your own running tools.</p>
+  </div>
+
+  <!-- ===== START HERE ===== -->
+  <section id="start">
+    <h2><span class="mod-num">0</span> Start here</h2>
+    <p class="lead">Read top-to-bottom, or jump around with the menu. Each module is short: an idea, a real screenshot, and a "try it" link.</p>
+
+    <h3>The one-sentence map</h3>
+    <div class="flow">
+      <span class="step">Observability = what happened?</span><span class="arr">→</span>
+      <span class="step">Evaluation = was it good?</span><span class="arr">→</span>
+      <span class="step">Monitoring = is it still good over time?</span>
+    </div>
+
+    <h3>What's running in your lab</h3>
+    <table>
+      <tr><th>Tool</th><th>Opens at</th><th>What it shows you</th></tr>
+      <tr><td><b>RentReady app</b></td><td><a href="http://localhost:5173" target="_blank">localhost:5173</a></td><td>The app itself: Workspace, Evaluations, Monitoring, A/B Lab, Learn</td></tr>
+      <tr><td><b>Phoenix</b> <span class="tag t-px">local</span></td><td><a href="http://localhost:6006" target="_blank">localhost:6006</a></td><td>Traces of the PDF Q&amp;A (RAG / LlamaIndex) side</td></tr>
+      <tr><td><b>LangSmith</b> <span class="tag t-ls">cloud</span></td><td><a href="https://smith.langchain.com" target="_blank">smith.langchain.com</a></td><td>Traces + experiments of the LangChain side (project <code>rentready</code>)</td></tr>
+      <tr><td><b>Eval report</b></td><td><a href="http://localhost:8000/evals/report" target="_blank">localhost:8000/evals/report</a></td><td>Printable scorecard of the latest eval run</td></tr>
+    </table>
+    <div class="note tip"><b>Tip.</b> Keep all four tabs open. The fastest way to learn is: do something in the app → go look at the trace it produced.</div>
+  </section>
+
+  <!-- ===== 1 BIG PICTURE ===== -->
+  <section id="bigpic">
+    <h2><span class="mod-num">1</span> Eval vs Observability vs Monitoring</h2>
+    <p class="lead">Three words people mix up. They answer three different questions.</p>
+    <table>
+      <tr><th>Term</th><th>Question it answers</th><th>Looks like</th><th>Tool here</th></tr>
+      <tr><td><b>Observability</b><br>(tracing)</td><td>"What exactly did the app do on this one request?"</td><td>A timeline of steps (spans) with inputs/outputs/timing</td><td><span class="tag t-ls">LangSmith</span> <span class="tag t-px">Phoenix</span></td></tr>
+      <tr><td><b>Evaluation</b></td><td>"Was the output correct / grounded / good?"</td><td>Scores on a fixed test set (accuracy, NDCG, faithfulness…)</td><td><span class="tag t-det">deterministic</span> <span class="tag t-llm">RAGAS / judge</span></td></tr>
+      <tr><td><b>Monitoring</b></td><td>"Is quality holding up over time / in production?"</td><td>Trend lines, alerts, drift, a regression gate in CI</td><td>Monitoring tab + CI</td></tr>
+    </table>
+    <div class="note key"><b>The loop that ties them together:</b> &nbsp;measure → find a problem (often by reading a trace) → fix → measure again. You'll see this loop in module 7 and 9 with a real bug.</div>
+  </section>
+
+  <!-- ===== 2 LAB ===== -->
+  <section id="lab">
+    <h2><span class="mod-num">2</span> The lab app &amp; what it traces</h2>
+    <p class="lead">RentReady reads a renter's PDF, decides eligibility, and recommends properties. Two frameworks run under the hood — and each is traced by a different tool.</p>
+    <div class="grid2">
+      <div class="card">
+        <h4><span class="tag t-ls">LangSmith</span> watches the LangChain side</h4>
+        <ul class="tight">
+          <li>Eligibility explanation</li>
+          <li>Recommendation explanations</li>
+          <li>"Ask the property graph" (text → Cypher)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4><span class="tag t-px">Phoenix</span> watches the LlamaIndex side</h4>
+        <ul class="tight">
+          <li>PDF → chunks → embeddings</li>
+          <li>Retrieve relevant chunks</li>
+          <li>Generate the grounded answer (the chat box)</li>
+        </ul>
+      </div>
+    </div>
+    <p>You already generated traces by loading <b>Alex Chen</b> and asking questions. Here's that Workspace:</p>
+    <figure>
+      <div class="fig"><img src="images/01_workspace_overview.png" alt="RentReady workspace"></div>
+      <figcaption>The Workspace: extracted profile → <b>Qualified</b> eligibility → ranked properties (each with a signal radar). Loading this fired the eligibility + recommendation calls that show up in LangSmith.</figcaption>
+    </figure>
+    <figure>
+      <div class="fig"><img src="images/02_chat_and_graphask.png" alt="Chat and graph ask"></div>
+      <figcaption>Bottom of the Workspace. The <b>chat</b> ("What area… pets?") becomes a <b>Phoenix</b> RAG trace. The <b>graph question</b> ("Which properties allow pets?") writes Cypher and becomes a <b>LangSmith</b> trace.</figcaption>
+    </figure>
+    <div class="note tip"><b>Try it.</b> Open <a href="http://localhost:5173" target="_blank">the app</a> → click a sample applicant → ask a question. You just produced ~10 spans across both tools.</div>
+  </section>
+
+  <!-- ===== 3 TRACING 101 ===== -->
+  <section id="tracing">
+    <h2><span class="mod-num">3</span> Tracing &amp; spans 101</h2>
+    <p class="lead">The vocabulary you need before opening either UI. Three words.</p>
+    <table>
+      <tr><th>Word</th><th>Plain English</th><th>RentReady example</th></tr>
+      <tr><td><b>Trace</b></td><td>The whole story of <i>one</i> request, start to finish</td><td>"Answer Alex's chat question"</td></tr>
+      <tr><td><b>Span</b></td><td>One step inside that story. Spans nest into a tree.</td><td>"retrieve chunks", "call Claude"</td></tr>
+      <tr><td><b>Attributes</b></td><td>The data on a span: input, output, latency, tokens, errors</td><td>the exact prompt + token count</td></tr>
+    </table>
+    <div class="note key"><b>Why it matters.</b> Without traces, a bad answer is a black box. With them, you can say "span #3 retrieved the wrong context" instead of "the AI is acting weird." A slow request? The span tree shows <i>which</i> step ate the time.</div>
+    <p>Both LangSmith and Phoenix show the same shape: a <b>tree of spans</b> on the left, and the <b>selected span's attributes</b> on the right. Learn it once, use it everywhere.</p>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- ===== 4 LANGSMITH ===== -->
+  <!-- ============================================================= -->
+  <section id="ls-intro">
+    <h2><span class="mod-num">4</span> LangSmith — the deep dive</h2>
+    <p class="lead">LangSmith is the cloud dashboard for the LangChain side: live traces <i>plus</i> tracked experiments. It turns on by itself when these env vars are set (no code changes):</p>
+    <div class="kbd">LANGCHAIN_TRACING_V2=true     # flip tracing on
+LANGCHAIN_API_KEY=ls__...     # your key (from .env)
+LANGCHAIN_PROJECT=rentready   # where traces land</div>
+    <div class="note tip"><b>Where to look.</b> Everything lives under your project: <b>Personal → Tracing → rentready</b>. Open <a href="https://smith.langchain.com" target="_blank">smith.langchain.com</a> and pick the <code>rentready</code> project.</div>
+  </section>
+
+  <section id="ls-sidebar">
+    <h2 style="font-size:1.1rem">4.1 · The sidebar map</h2>
+    <p class="lead">The far-left rail is your whole navigation. You'll live in <b>Tracing</b>; the rest you'll touch occasionally.</p>
+    <table>
+      <tr><th>Item</th><th>What it's for</th><th>How often</th></tr>
+      <tr><td><b>Tracing</b></td><td>Every live trace/run your app produced — your main debugging view</td><td>daily</td></tr>
+      <tr><td><b>Monitoring</b></td><td>Auto charts: volume, latency, error rate, cost over time</td><td>weekly</td></tr>
+      <tr><td><b>Datasets &amp; Experiments</b></td><td>Saved test sets + scored experiment runs (e.g. our eligibility set)</td><td>per release</td></tr>
+      <tr><td><b>Evaluators</b></td><td>Reusable scorers you attach to experiments</td><td>setup</td></tr>
+      <tr><td><b>Annotation Queues</b></td><td>Send traces to humans for manual labels/review</td><td>as needed</td></tr>
+      <tr><td><b>Prompts / Playground</b></td><td>Version prompts; re-run a captured call with edits</td><td>tuning</td></tr>
+    </table>
+  </section>
+
+  <section id="ls-tracing">
+    <h2 style="font-size:1.1rem">4.2 · The Tracing screen — Threads, Traces, Runs</h2>
+    <p class="lead">This is the screen you'll use most. Here's your actual <code>rentready</code> project, annotated:</p>
+    <figure>
+      <div class="fig">
+        <img src="images/ls_01_tracing_runs.png" alt="LangSmith tracing screen">
+        <span class="mk" style="left:7%;top:33%">1</span>
+        <span class="mk" style="left:36.5%;top:16.5%">2</span>
+        <span class="mk" style="left:45%;top:24%">3</span>
+        <span class="mk" style="left:88%;top:24%">4</span>
+        <span class="mk" style="left:52%;top:41%">5</span>
+        <span class="mk" style="left:33%;top:48%">6</span>
+      </div>
+      <figcaption>LangSmith → Tracing for project <code>rentready</code>.</figcaption>
+    </figure>
+    <ol class="legend">
+      <li><span class="n">1</span><span><b>Sidebar</b> — navigate the whole workspace (you're in Tracing).</span></li>
+      <li><span class="n">2</span><span><b>Project tabs</b> — Tracing · Evaluators · Automations · Insights.</span></li>
+      <li><span class="n">3</span><span><b>Threads / Traces / Runs</b> toggle — the most important switch (below).</span></li>
+      <li><span class="n">4</span><span><b>Save View</b> — pin your current filters as a reusable view.</span></li>
+      <li><span class="n">5</span><span><b>Column headers</b> — Name, Input, Output, Error, Start Time.</span></li>
+      <li><span class="n">6</span><span><b>A row</b> — one run/trace; click it to open the span tree.</span></li>
+    </ol>
+    <h4>The Threads / Traces / Runs toggle — read this carefully</h4>
+    <table>
+      <tr><th>View</th><th>Granularity</th><th>Use it to…</th></tr>
+      <tr><td><b>Threads</b></td><td>Coarsest — a whole multi-turn conversation/session</td><td>follow one user's back-and-forth</td></tr>
+      <tr><td><b>Traces</b></td><td>Medium — one request end-to-end</td><td>debug "what happened on this answer?"</td></tr>
+      <tr><td><b>Runs</b></td><td>Finest — every individual step, incl. each LLM/prompt call</td><td>inspect a single <code>ChatAnthropic</code> call's prompt &amp; tokens</td></tr>
+    </table>
+    <div class="note tip"><b>Rule of thumb.</b> Start in <b>Traces</b> to find the request, then drill into its <b>Runs</b> to see each LLM call. In the screenshot you're on <b>Runs</b> — that's why you see <code>ChatAnthropic</code>, <code>n_l_i_statement_prompt</code>, <code>correctness_classifier</code> as separate rows (these are RAGAS's judge calls).</div>
+  </section>
+
+  <section id="ls-list">
+    <h2 style="font-size:1.1rem">4.3 · Reading the run list</h2>
+    <p class="lead">Six columns tell you almost everything at a glance:</p>
+    <table>
+      <tr><th>Column</th><th>What to read from it</th></tr>
+      <tr><td><b>Name</b></td><td>Which step. <code>ChatAnthropic</code> = an LLM call; <code>*_prompt</code>/<code>*_classifier</code> = named chains.</td></tr>
+      <tr><td><b>Input</b></td><td>What went in (the prompt / args). Hover to preview.</td></tr>
+      <tr><td><b>Output</b></td><td>What came back. JSON-looking output = structured call.</td></tr>
+      <tr><td><b>Error</b></td><td>Empty = good. A red value here is your first suspect.</td></tr>
+      <tr><td><b>Start Time</b></td><td>When it ran — sort to find the request you just made.</td></tr>
+    </table>
+    <div class="note warn"><b>Watch out.</b> A green check ≠ "good answer." It only means "no exception." Correctness is what <i>evaluation</i> (modules 6–8) is for.</div>
+  </section>
+
+  <section id="ls-open">
+    <h2 style="font-size:1.1rem">4.4 · Opening a run / trace</h2>
+    <p class="lead">Click any row. You get the same two-panel layout as Phoenix: span tree on the left, details on the right. Check these, in order:</p>
+    <ol>
+      <li><b>Span tree</b> — the nested steps. The longest bar is your latency bottleneck.</li>
+      <li><b>Inputs / Outputs</b> — the exact prompt sent and the response received.</li>
+      <li><b>Metadata</b> — latency, <b>token counts</b>, <b>estimated cost</b>, model name.</li>
+      <li><b>Feedback</b> — any scores attached (from evaluators, the judge, or thumbs).</li>
+    </ol>
+    <div class="note tip"><b>Power move.</b> Found a bad LLM call? Hit <b>Playground</b> (top of the run) to replay it with an edited prompt and see if your fix works — before touching code.</div>
+  </section>
+
+  <section id="ls-filter">
+    <h2 style="font-size:1.1rem">4.5 · Filter, search &amp; Save View</h2>
+    <ul>
+      <li><b>Time range</b> (e.g. "Last 1 day") — narrow to your recent work.</li>
+      <li><b>Add filter</b> — by name, error, latency, metadata (e.g. only errors, or only slow runs).</li>
+      <li><b>Search Input</b> — full-text across inputs/outputs to find a specific request.</li>
+      <li><b>Save View</b> — bookmark a filter combo (e.g. "errors, last 24h") so you don't rebuild it.</li>
+    </ul>
+    <div class="note tip"><b>Try it.</b> Filter to errors only, then widen the time range — a fast way to spot intermittent failures.</div>
+  </section>
+
+  <section id="ls-monitor">
+    <h2 style="font-size:1.1rem">4.6 · The Monitoring tab (in LangSmith)</h2>
+    <p class="lead">Sidebar → <b>Monitoring</b> gives auto dashboards across all your traces — no setup:</p>
+    <ul class="tight">
+      <li><b>Volume</b> — requests over time (traffic, spikes).</li>
+      <li><b>Latency</b> — p50 / p99 trend (is it getting slower?).</li>
+      <li><b>Errors</b> — error-rate trend (did a deploy break something?).</li>
+      <li><b>Cost / tokens</b> — spend over time.</li>
+    </ul>
+    <div class="note key"><b>Tracing vs Monitoring in LangSmith:</b> Tracing = one request in detail. Monitoring = all requests, trends. Same data, zoomed out.</div>
+  </section>
+
+  <section id="ls-exp">
+    <h2 style="font-size:1.1rem">4.7 · Datasets &amp; Experiments</h2>
+    <p class="lead">This is LangSmith's evaluation half. RentReady pushes its golden <b>eligibility</b> set here as a tracked experiment.</p>
+    <div class="flow">
+      <span class="step">Dataset (golden cases)</span><span class="arr">→</span>
+      <span class="step">Run system under test</span><span class="arr">→</span>
+      <span class="step">Score each row (evaluator)</span><span class="arr">→</span>
+      <span class="step">Shareable experiment</span>
+    </div>
+    <ul class="tight">
+      <li><b>Dataset</b> = inputs + expected outputs (here: applicant → correct verdict).</li>
+      <li><b>Experiment</b> = one scored run of your system over that dataset.</li>
+      <li>Re-run after a change and <b>compare experiments side by side</b> to catch regressions.</li>
+    </ul>
+    <div class="note tip"><b>Try it.</b> In the app: Evaluations → <b>Push LangSmith experiment</b>. Then open Datasets &amp; Experiments → <code>rentready-eligibility</code> to see the scored run.</div>
+  </section>
+
+  <section id="ls-cheat">
+    <h2 style="font-size:1.1rem">4.8 · LangSmith cheat sheet</h2>
+    <table>
+      <tr><th>I want to…</th><th>Go to</th></tr>
+      <tr><td>Debug one bad answer</td><td>Tracing → Traces → click it → read inputs/outputs</td></tr>
+      <tr><td>See a single LLM call's prompt &amp; tokens</td><td>Tracing → Runs → the <code>ChatAnthropic</code> row</td></tr>
+      <tr><td>Find slow requests</td><td>Tracing → Add filter: latency &gt; N → sort</td></tr>
+      <tr><td>Watch latency/error trends</td><td>Monitoring</td></tr>
+      <tr><td>Check a release didn't regress quality</td><td>Datasets &amp; Experiments → compare runs</td></tr>
+      <tr><td>Test a prompt fix without code</td><td>Open the run → Playground</td></tr>
+    </table>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- ===== 5 PHOENIX ===== -->
+  <!-- ============================================================= -->
+  <section id="px-intro">
+    <h2><span class="mod-num">5</span> Phoenix — the deep dive</h2>
+    <p class="lead">Arize Phoenix is an <b>open-source, local</b> trace viewer (no login, no cloud) at <a href="http://localhost:6006" target="_blank">localhost:6006</a>. Here it watches the <b>RAG / LlamaIndex</b> side: PDF → chunks → retrieve → answer. It works via <b>OpenTelemetry</b> — explained next in 5.1.</p>
+  </section>
+
+  <section id="otel">
+    <h2 style="font-size:1.1rem">5.1 · OpenTelemetry (OTel) — the engine under Phoenix</h2>
+    <p class="lead">Phoenix has no secret capture mechanism — it runs on <b>OpenTelemetry</b>, the open, vendor-neutral standard for emitting telemetry (traces, metrics, logs). Think of it as <b>USB-C for observability</b>: instrument your code once, and any OTel-compatible tool can read the result.</p>
+
+    <h4>Why it matters</h4>
+    <ul class="tight">
+      <li><b>No lock-in</b> — your spans aren't tied to one vendor; add or swap backends freely.</li>
+      <li><b>One standard, many tools</b> — the same spans can feed Phoenix, Jaeger, Grafana Tempo, and more.</li>
+      <li><b>LLM-aware</b> — an add-on called <b>OpenInference</b> defines AI span types (LLM, retriever, embedding), so a viewer can show prompts, tokens and retrieved chunks — not just generic timings.</li>
+    </ul>
+
+    <h4>The pieces, in order</h4>
+    <div class="flow">
+      <span class="step">Your code</span><span class="arr">→</span>
+      <span class="step">Instrumentor (OpenInference)</span><span class="arr">→</span>
+      <span class="step">OTel spans</span><span class="arr">→</span>
+      <span class="step">Exporter (OTLP)</span><span class="arr">→</span>
+      <span class="step">Backend (Phoenix)</span>
+    </div>
+    <table>
+      <tr><th>Piece</th><th>What it does</th></tr>
+      <tr><td><b>Instrumentor</b></td><td>Auto-wraps a library (here LlamaIndex) so every step emits a span — no manual logging</td></tr>
+      <tr><td><b>OpenInference</b></td><td>The AI-specific conventions on top of OTel; adds <code>span_kind</code> = LLM / RETRIEVER / EMBEDDING / CHAIN</td></tr>
+      <tr><td><b>Exporter / OTLP</b></td><td>OTLP is the wire protocol that ships spans to a backend</td></tr>
+      <tr><td><b>Collector</b> <span class="small">(optional)</span></td><td>A middleman that can batch, route, or transform spans before they reach backends</td></tr>
+      <tr><td><b>Backend</b></td><td>Stores and displays the traces — Phoenix, here</td></tr>
+    </table>
+
+    <h4>How this app turns it on</h4>
+    <p>Two lines wire the LlamaIndex RAG pipeline into Phoenix over OTLP — no changes inside the business logic:</p>
+    <div class="kbd">from phoenix.otel import register
+from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+
+tracer_provider = register(
+    project_name="rentready",
+    endpoint="http://localhost:6006/v1/traces",   # OTLP endpoint
+)
+LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)</div>
+    <div class="note key"><b>The takeaway.</b> Phoenix is just an <i>OTel backend</i>; OTel is the portable layer beneath it. Those <code>span_kind</code> labels OpenInference adds are exactly why you can filter <code>span_kind == 'LLM'</code> in the traces list.</div>
+    <div class="note tip"><b>Spot it live.</b> When the backend boots, the terminal prints an <i>"OpenTelemetry Tracing Details"</i> line — that's OTel starting up and pointing at Phoenix.</div>
+  </section>
+
+  <section id="px-list">
+    <h2 style="font-size:1.1rem">5.2 · Projects &amp; the traces list</h2>
+    <p class="lead">Phoenix groups traces into <b>projects</b>. Open <code>rentready</code> (it already has dozens of traces):</p>
+    <figure>
+      <div class="fig">
+        <img src="images/px_02_traces_list.png" alt="Phoenix traces list">
+        <span class="mk" style="left:14%;top:9%">1</span>
+        <span class="mk" style="left:9%;top:16.5%">2</span>
+        <span class="mk" style="left:50%;top:22.5%">3</span>
+        <span class="mk" style="left:11.5%;top:36%">4</span>
+        <span class="mk" style="left:33%;top:29%">5</span>
+      </div>
+      <figcaption>Phoenix → project <code>rentready</code> → Traces.</figcaption>
+    </figure>
+    <ol class="legend">
+      <li><span class="n">1</span><span><b>Project metrics</b> — Total Traces, Tokens, Latency P50/P99.</span></li>
+      <li><span class="n">2</span><span><b>Traces / Spans / Sessions</b> tabs — Spans = a flat searchable list of every step.</span></li>
+      <li><span class="n">3</span><span><b>Filter bar + Columns</b> — e.g. <code>span_kind == 'LLM'</code> to see only model calls.</span></li>
+      <li><span class="n">4</span><span><b>kind</b> badge — <code>chain</code> / <code>llm</code> / <code>embedding</code> / <code>retriever</code>.</span></li>
+      <li><span class="n">5</span><span><b>name · input · output</b> — the top row is our chat question.</span></li>
+    </ol>
+  </section>
+
+  <section id="px-trace">
+    <h2 style="font-size:1.1rem">5.3 · Trace detail &amp; the span tree</h2>
+    <p class="lead">Click a trace. The left is the nested span tree; the right is the selected span. This is the single most useful screen in Phoenix:</p>
+    <figure>
+      <div class="fig">
+        <img src="images/px_03_trace_detail.png" alt="Phoenix trace detail span tree">
+        <span class="mk" style="left:17%;top:13%">1</span>
+        <span class="mk" style="left:22%;top:36%">2</span>
+        <span class="mk" style="left:30%;top:90%">3</span>
+        <span class="mk" style="left:52%;top:27%">4</span>
+        <span class="mk" style="left:60%;top:40%">5</span>
+        <span class="mk" style="left:88%;top:45%">6</span>
+      </div>
+      <figcaption>One RAG request, fully expanded. Total latency <b>2.10s</b>.</figcaption>
+    </figure>
+    <ol class="legend">
+      <li><span class="n">1</span><span><b>Trace status + latency</b> — OK, 2.10s total.</span></li>
+      <li><span class="n">2</span><span><b>Retrieve span</b> — finding chunks took just <b>0.02s</b>.</span></li>
+      <li><span class="n">3</span><span><b>LLM span</b> — generating the answer took <b>2.03s</b>: the bottleneck.</span></li>
+      <li><span class="n">4</span><span><b>Tabs</b> — Info · Feedback · Attributes · Events.</span></li>
+      <li><span class="n">5</span><span><b>Input / Output</b> of the selected span.</span></li>
+      <li><span class="n">6</span><span><b>Span metadata</b> — status, start/end, latency.</span></li>
+    </ol>
+    <div class="note key"><b>Read the tree like a flame graph.</b> The deepest, longest bar (the LLM call) is where the time goes. Retrieval was instant; the model was 99% of the wait.</div>
+  </section>
+
+  <section id="px-attr">
+    <h2 style="font-size:1.1rem">5.4 · A span's Attributes — the actual prompt</h2>
+    <p class="lead">Select the LLM span → <b>Attributes</b> tab. This reveals the <i>exact</i> prompt sent to the model, including the retrieved context stitched in:</p>
+    <figure>
+      <div class="fig"><img src="images/px_04_llm_span_attributes.png" alt="Phoenix LLM span attributes"></div>
+      <figcaption>The LLM input: a <b>system</b> prompt ("You are an expert Q&amp;A system…") plus a <b>user</b> message containing the retrieved rental application as context. This is what "grounded in context" literally means.</figcaption>
+    </figure>
+    <div class="note key"><b>Debugging RAG = read two spans.</b> If an answer is wrong, check the <b>retrieve</b> span first (did it pull the right chunks?), then the <b>LLM</b> span (did the model misuse good context?). 9 times out of 10 it's retrieval.</div>
+  </section>
+
+  <section id="px-vs">
+    <h2 style="font-size:1.1rem">5.5 · Phoenix vs LangSmith — when to use which</h2>
+    <table>
+      <tr><th></th><th><span class="tag t-px">Phoenix</span></th><th><span class="tag t-ls">LangSmith</span></th></tr>
+      <tr><td>Runs</td><td>Local, no account</td><td>Cloud, login</td></tr>
+      <tr><td>Best for</td><td>RAG / LlamaIndex pipelines</td><td>LangChain apps + experiments</td></tr>
+      <tr><td>Standard</td><td>OpenTelemetry (portable)</td><td>LangChain-native</td></tr>
+      <tr><td>Experiments / datasets</td><td>Basic</td><td>First-class, shareable</td></tr>
+      <tr><td>Team sharing</td><td>You host it</td><td>Built-in</td></tr>
+    </table>
+    <p class="small">This app uses <b>both on purpose</b> — each instruments the framework it's best at. The span-tree skill transfers 1:1 between them.</p>
+  </section>
+
+  <section id="px-values">
+    <h2 style="font-size:1.1rem">5.6 · Reading the real values — what's good and why</h2>
+    <p class="lead">Screens are easy; <b>reading the numbers</b> is the skill. Below are live values from your <code>rentready</code> project, each with the one-line verdict and what to do about it.</p>
+
+    <h4>① Project health — Latency P50 vs P99</h4>
+    <figure>
+      <div class="fig"><img src="images/px_05_metrics.png" alt="Phoenix project metrics: 79 traces, P50 0.01s, P99 3.48s"></div>
+      <figcaption>Project header: <b>79</b> traces · Latency <b>P50 0.01s</b> · <b>P99 3.48s</b>.</figcaption>
+    </figure>
+    <div class="note key"><b>Verdict: healthy, watch P99.</b> <b>P50 = 0.01s</b> means half of all spans finish almost instantly (most are cheap retrieval/embedding steps — that's why the median is tiny). <b>P99 = 3.48s</b> is the slowest 1% — your real worst-case, driven by the LLM calls. A low P50 with a much higher P99 is <i>normal</i> for AI apps. <b>What to do:</b> track <b>P99</b>, not P50 — that's the number users feel. If P99 drifts up, latency is regressing.</div>
+    <div class="note tip"><b>Note on Tokens = 0.</b> LlamaIndex didn't report token usage to Phoenix in this app, so cost/token tracking lives in the <b>eval report</b> instead — don't read "0 tokens" as "free."</div>
+
+    <h4>② The slow step — span latencies in the tree</h4>
+    <figure>
+      <div class="fig"><img src="images/px_06_slow_step.png" alt="Phoenix span tree: total 2.10s, retrieve 0.02s, LLM 2.04s"></div>
+      <figcaption>One request: total <b>2.10s</b> · retrieve <b>0.02s</b> · embedding <b>4.58ms</b> · LLM <b>2.04s</b>.</figcaption>
+    </figure>
+    <div class="note key"><b>Verdict: the LLM is the bottleneck — and that's fine.</b> The model call is <b>2.04s of 2.10s ≈ 97%</b> of the time; retrieval was <b>0.02s</b> (essentially free). <b>Why this is the "good" read:</b> it tells you exactly where the only useful optimization is — a shorter prompt or a faster model. Caching retrieval would save nothing here. Don't optimize the 0.02s step.</div>
+
+    <h4>③ Why an answer was right (or wrong) — the retrieve span</h4>
+    <figure>
+      <div class="fig"><img src="images/px_08_retrieve.png" alt="Phoenix retrieve span attributes: score 0.199, content contains Downtown and Pets: No"></div>
+      <figcaption>The retrieve span's Attributes: top document <b>score 0.199</b>, content includes <code>Preferred Area: Downtown</code> and <code>Pets: No</code>.</figcaption>
+    </figure>
+    <div class="note key"><b>Verdict: good retrieval — judge by content, not the score.</b> The raw similarity <b>0.199</b> looks low, but it's the <i>relative</i> top match, and the chunk literally contains the answer (<code>Downtown</code>, <code>Pets: No</code>). So the right facts reached the model. <b>How to debug with this:</b> if an answer is wrong and these facts are <i>missing</i> here → fix retrieval (chunking/embeddings). If the facts <i>are</i> here but the answer is still wrong → the model misused good context (a prompt/model fix).</div>
+
+    <h4>④ Compare model calls only — filter span_kind == 'LLM'</h4>
+    <figure>
+      <div class="fig"><img src="images/px_09_filter_llm.png" alt="Phoenix spans filtered by span_kind == LLM"></div>
+      <figcaption>Spans tab → filter <code>span_kind == 'LLM'</code> → only the orange <b>llm</b> rows remain, with their latencies.</figcaption>
+    </figure>
+    <div class="note key"><b>Verdict: the fastest way to find the expensive call.</b> The filter strips out chain / embedding / retriever noise so you see only model calls side by side. <b>What to do:</b> sort by latency and the slowest LLM row is your optimization target across <i>all</i> requests at once.</div>
+
+    <h4>Quick cheat sheet</h4>
+    <table>
+      <tr><th>I want to…</th><th>Do this</th><th>Good looks like</th></tr>
+      <tr><td>See all my RAG requests</td><td>Open project <code>rentready</code> → Traces</td><td>P99 stable, no error spikes</td></tr>
+      <tr><td>Find the slow step</td><td>Longest bar in the span tree</td><td>LLM dominates; retrieval &lt;50ms</td></tr>
+      <tr><td>Find why an answer was wrong</td><td>Open the trace → <b>retrieve</b> span → Attributes</td><td>Chunk contains the needed facts</td></tr>
+      <tr><td>See the exact prompt + context</td><td>Click the <b>LLM</b> span → <b>Attributes</b> (see 5.4)</td><td>Context is stitched into the prompt</td></tr>
+      <tr><td>See only LLM calls</td><td>Spans tab → filter <code>span_kind == 'LLM'</code></td><td>One slow row stands out, not all</td></tr>
+    </table>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- ===== 6 RAGAS ===== -->
+  <!-- ============================================================= -->
+  <section id="ragas">
+    <h2><span class="mod-num">6</span> RAGAS — scoring RAG answer quality</h2>
+    <p class="lead">Tracing shows <i>what happened</i>; <b>RAGAS</b> scores <i>how good it was</i>. It uses an LLM as grader over a gold Q&amp;A set and returns three 0–100% numbers.</p>
+    <div class="note warn"><b>RAGAS has no standalone UI.</b> It's a library. You read its scores in two places here: the app's <b>Evaluations → LLM tier</b> panel, and the <b>eval report</b>. (Its individual judge calls also appear as runs in LangSmith — that's the <code>correctness_classifier</code> you saw.)</div>
+    <table>
+      <tr><th>Metric</th><th>Question</th><th>Low score means</th></tr>
+      <tr><td><b>Faithfulness</b></td><td>Did the answer stick to the retrieved context?</td><td>hallucination / made-up facts</td></tr>
+      <tr><td><b>Answer relevancy</b></td><td>Is the answer on-topic for the question?</td><td>rambling / off-topic</td></tr>
+      <tr><td><b>Answer correctness</b></td><td>Does it match the known gold answer?</td><td>wrong (needs a reference)</td></tr>
+    </table>
+    <figure>
+      <div class="fig"><img src="images/app_01_evaluations_full.png" alt="Evaluations tab with RAGAS"></div>
+      <figcaption>App → Evaluations. The <b>LLM tier</b> (middle) shows RAGAS: Faithfulness <b>100%</b>, Answer relevancy <b>82%</b>, Answer correctness <b>89%</b> — alongside the LLM judge and deterministic gates.</figcaption>
+    </figure>
+    <div class="note key"><b>Faithful ≠ correct.</b> An answer can be faithful to <i>bad</i> retrieved context and still be wrong. That's exactly why you pair RAGAS scores with a Phoenix retrieve-span check.</div>
+    <div class="note tip"><b>Try it.</b> Evaluations → <b>Run RAGAS</b> (needs the Anthropic key, which is on). It indexes the sample PDFs, answers the gold questions, and scores them.</div>
+  </section>
+
+  <!-- ===== 7 JUDGE ===== -->
+  <section id="judge">
+    <h2><span class="mod-num">7</span> LLM-as-judge — grading prose, safely</h2>
+    <p class="lead">Some things a rule can't check — like "is this written explanation backed by the property's facts?" So a second LLM scores <b>groundedness</b> (1–5). An LLM grading an LLM only works <i>with guardrails</i>:</p>
+    <div class="grid2">
+      <div class="card"><h4>The guardrails</h4>
+        <ul class="tight">
+          <li><b>Temperature 0</b> — repeatable grades</li>
+          <li><b>JSON-only</b> output — parsed &amp; clamped, never crashes</li>
+          <li><b>Reference-anchored</b> — judge sees only the given facts</li>
+          <li><b>Scoped to prose</b> — never changes a verdict or ranking</li>
+          <li><b>+ a regex tripwire</b> — flags amenities the text invents</li>
+        </ul>
+      </div>
+      <div class="card"><h4>The real bug it caught</h4>
+        <p class="small">Recommendation blurbs invented amenities (a gym, "downtown views"). Groundedness was <b>0.30</b>. Fix: feed the explainer and the judge the <i>same</i> facts → <b>0.93</b>, zero invented claims. You'll see this exact climb in Monitoring.</p>
+      </div>
+    </div>
+    <div class="note tip"><b>Try it.</b> Evaluations → <b>Run LLM judge</b>, then read the per-case "Judge notes" — it cites which facts support each claim.</div>
+  </section>
+
+  <!-- ===== 8 DETERMINISTIC ===== -->
+  <section id="det">
+    <h2><span class="mod-num">8</span> Deterministic eval + the CI gate</h2>
+    <p class="lead">The opposite of fuzzy LLM scoring: exact math that gives the <i>same answer every time</i>, needs no key, and <b>fails the build</b> if quality drops. This is the printable report:</p>
+    <figure>
+      <div class="fig"><img src="images/app_05_report_metrics.png" alt="Eval report metrics"></div>
+      <figcaption>The report (<a href="http://localhost:8000/evals/report" target="_blank">localhost:8000/evals/report</a>): summary cards, breakdown by evaluator with PASS/FAIL vs threshold, metric-vs-threshold bars, confusion matrix, and per-field accuracy.</figcaption>
+    </figure>
+    <table>
+      <tr><th>Metric</th><th>Means</th><th>Gate</th></tr>
+      <tr><td><b>Eligibility accuracy</b></td><td>% of applicants given the correct verdict</td><td>≥ 100%</td></tr>
+      <tr><td><b>Extraction field accuracy</b></td><td>% of profile fields read correctly from the PDF</td><td>≥ 90%</td></tr>
+      <tr><td><b>NDCG@5</b></td><td>ranking quality — best matches near the top</td><td>≥ 70%</td></tr>
+    </table>
+    <p>Every case is inspectable on the report's <b>Cases &amp; Filters</b> tab:</p>
+    <figure>
+      <div class="fig"><img src="images/app_06_report_cases.png" alt="Eval report cases"></div>
+      <figcaption>Per-case results: suite, metric, score, pass/fail, and detail (incl. the judge's reasoning). Filter by suite/result or search.</figcaption>
+    </figure>
+    <div class="note key"><b>Regression gate.</b> These run in CI on every push. Drop a metric below its threshold and the build fails — a smoke alarm for quality.</div>
+  </section>
+
+  <!-- ===== 9 AB ===== -->
+  <section id="ab">
+    <h2><span class="mod-num">9</span> A/B experiments — "is v2 better?"</h2>
+    <p class="lead">Hold the dataset and judge fixed, change <i>one</i> thing (prompt or model), let the metrics pick a winner across groundedness, latency, and cost.</p>
+    <figure>
+      <div class="fig"><img src="images/app_03b_ablab_result.png" alt="A/B Lab result"></div>
+      <figcaption>A live run: <b>concise prompt wins 100% vs 85%</b> groundedness — and it's faster and cheaper. The vivid prompt got flagged for inventing "city views" and a "private" balcony (see the amber notes).</figcaption>
+    </figure>
+    <div class="note key"><b>Lesson.</b> More words ≠ better. Quality, latency, and cost are <i>all</i> part of the verdict — and the fancy prompt lost on all three.</div>
+    <div class="note tip"><b>Try it.</b> A/B Lab → pick two variants → Run A/B (takes ~1 min; it calls Claude per case).</div>
+  </section>
+
+  <!-- ===== 10 MONITORING ===== -->
+  <section id="monitor">
+    <h2><span class="mod-num">10</span> Monitoring — quality over time</h2>
+    <p class="lead">One eval run is a snapshot. Monitoring is the <b>trend</b> — plus live production telemetry.</p>
+    <figure>
+      <div class="fig"><img src="images/app_02_monitoring.png" alt="Monitoring tab"></div>
+      <figcaption>App → Monitoring. Top: <b>live production</b> (requests, p50/p95 latency, hallucinations, thumbs, satisfaction, drift). Bottom: <b>offline quality over time</b> across 9 snapshots — note the extraction dip at #2 (a bug) that recovers after the fix.</figcaption>
+    </figure>
+    <ul class="tight">
+      <li><b>Snapshot</b> = one measurement.</li>
+      <li><b>Trend</b> = many snapshots; spot drift up (a fix) or down (a regression).</li>
+      <li><b>Drift</b> = recent window vs previous window (latency, violations).</li>
+    </ul>
+  </section>
+
+  <!-- ===== 11 LOOP ===== -->
+  <section id="loop">
+    <h2><span class="mod-num">11</span> Putting it together — the loop</h2>
+    <div class="flow">
+      <span class="step">1 · Observe (trace)</span><span class="arr">→</span>
+      <span class="step">2 · Measure (eval)</span><span class="arr">→</span>
+      <span class="step">3 · Find the cause (read the span)</span><span class="arr">→</span>
+      <span class="step">4 · Fix</span><span class="arr">→</span>
+      <span class="step">5 · Re-measure</span><span class="arr">→</span>
+      <span class="step">6 · Monitor</span>
+    </div>
+    <p>The "city views" bug is the whole loop in miniature: the <b>judge</b> measured a low score → you'd open the <b>trace</b> to see the invented claim → <b>fix</b> the prompt/facts → score climbs → the <b>monitoring</b> trend records it. Now you can run that loop yourself.</p>
+    <div class="note key"><b>Your 10-minute practice run:</b> ① load an applicant ② open its trace in LangSmith and in Phoenix ③ run the LLM judge + RAGAS ④ open the report ⑤ run an A/B ⑥ check the Monitoring trend.</div>
+  </section>
+
+  <!-- ===== GLOSSARY ===== -->
+  <section id="glossary">
+    <h2>Glossary</h2>
+    <table>
+      <tr><th>Term</th><th>Plain English</th></tr>
+      <tr><td><b>Trace</b></td><td>The full record of one request</td></tr>
+      <tr><td><b>Span</b></td><td>One step within a trace; they nest into a tree</td></tr>
+      <tr><td><b>Attributes</b></td><td>A span's data: input, output, latency, tokens, errors</td></tr>
+      <tr><td><b>Run (LangSmith)</b></td><td>The finest unit — a single step/LLM call</td></tr>
+      <tr><td><b>Thread (LangSmith)</b></td><td>A whole multi-turn conversation</td></tr>
+      <tr><td><b>OpenTelemetry (OTel)</b></td><td>Open, vendor-neutral standard for emitting traces/metrics/logs — instrument once, send to any backend</td></tr>
+      <tr><td><b>OpenInference</b></td><td>AI span conventions on top of OTel; adds <code>span_kind</code> (LLM, retriever, embedding…)</td></tr>
+      <tr><td><b>OTLP</b></td><td>The wire protocol OTel uses to ship spans to a backend</td></tr>
+      <tr><td><b>Collector</b></td><td>Optional OTel middleman that batches/routes/transforms spans</td></tr>
+      <tr><td><b>span_kind</b></td><td>The type of a span: LLM, RETRIEVER, EMBEDDING, CHAIN…</td></tr>
+      <tr><td><b>Backend</b></td><td>The tool that stores + shows traces (e.g. Phoenix)</td></tr>
+      <tr><td><b>Groundedness</b></td><td>Is the text supported by the given facts? (1–5)</td></tr>
+      <tr><td><b>Faithfulness (RAGAS)</b></td><td>Did the answer stick to retrieved context?</td></tr>
+      <tr><td><b>NDCG@5</b></td><td>Ranking quality — best items ranked highest</td></tr>
+      <tr><td><b>Regression gate</b></td><td>CI check that fails the build if a metric drops</td></tr>
+      <tr><td><b>Drift</b></td><td>Quality/latency shifting between time windows</td></tr>
+      <tr><td><b>Experiment (LangSmith)</b></td><td>A scored run of your system over a dataset</td></tr>
+    </table>
+    <p class="small">Course generated for the RentReady lab · screenshots captured live from your running app, Phoenix, and LangSmith.</p>
+  </section>
+
+</main>
+</div>
+<script>
+  function updateToggleUI(){
+    var dark = document.documentElement.classList.contains('dark');
+    document.getElementById('themeIcon').textContent = dark ? '☀️' : '🌙';
+    document.getElementById('themeLabel').textContent = dark ? 'Light' : 'Dark';
+  }
+  function toggleTheme(){
+    var dark = document.documentElement.classList.toggle('dark');
+    try{ localStorage.setItem('course_theme', dark ? 'dark' : 'light'); }catch(e){}
+    updateToggleUI();
+  }
+  updateToggleUI();
+
+  function toggleNav(){
+    var closed = document.documentElement.classList.toggle('nav-closed');
+    try{ localStorage.setItem('course_nav', closed ? 'closed' : 'open'); }catch(e){}
+  }
+  // Press "\" to toggle the sidebar
+  document.addEventListener('keydown', function(e){
+    if(e.key === '\\' && !/^(INPUT|TEXTAREA)$/.test((e.target||{}).tagName)){ e.preventDefault(); toggleNav(); }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "eligibility_accuracy": 1.0,
+  "extraction_field_accuracy": 0.9,
+  "ndcg_at_5": 0.7
+}
