@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Info, Search } from "lucide-react";
 import { getProperties, getResidentModelCard, getResidentsPortfolio, listResidents } from "../../api";
 import type {
   PortfolioProperty,
@@ -55,7 +55,8 @@ export function Residents({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [selectedProperty, setSelectedProperty] = useState<string>(initialPropertyId ?? "all");
+  const [selectedProperty, setSelectedProperty] = useState<string>(initialPropertyId ?? "");
+  const [showInfo, setShowInfo] = useState(false);
   const [selectedResident, setSelectedResident] = useState<string | null>(initialResidentId ?? null);
 
   const [query, setQuery] = useState("");
@@ -75,7 +76,6 @@ export function Residents({
       .then(([pf, rows]) => {
         setPortfolio(pf);
         setList(rows);
-        setSelectedResident((cur) => cur ?? rows.residents[0]?.resident_id ?? null);
       })
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
@@ -101,10 +101,8 @@ export function Residents({
 
   // KPI tiles: the selected property's rollup, or the portfolio overall.
   const kpi = useMemo(() => {
-    if (!portfolio) return null;
-    if (selectedProperty === "all") return portfolio.overall;
-    const p = portfolio.properties.find((x) => x.property_id === selectedProperty);
-    return p ?? portfolio.overall;
+    if (!portfolio || !selectedProperty) return null;
+    return portfolio.properties.find((x) => x.property_id === selectedProperty) ?? null;
   }, [portfolio, selectedProperty]);
 
   // Rows scoped to the property, then searched + band-filtered, then sorted.
@@ -113,7 +111,7 @@ export function Residents({
     const q = query.trim().toLowerCase();
     const matched = rows.filter(
       (r) =>
-        (selectedProperty === "all" || r.property_id === selectedProperty) &&
+        r.property_id === selectedProperty &&
         (bandFilter === "all" || r.late_band === bandFilter) &&
         (q === "" ||
           r.unit_id.toLowerCase().includes(q) ||
@@ -172,14 +170,28 @@ export function Residents({
   return (
     <div className="app">
       <header>
-        <h1>Residents</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h1 style={{ margin: 0 }}>Residents</h1>
+          <button
+            type="button"
+            className="linklike icon-line"
+            aria-label="About these estimates"
+            aria-expanded={showInfo}
+            title="About these estimates"
+            onClick={() => setShowInfo((v) => !v)}
+          >
+            <Info size={16} aria-hidden />
+          </button>
+        </div>
         <p>
           A decision-support view of forward-looking risk across current residents — to focus
           proactive outreach and retention, not to decide.
         </p>
       </header>
 
-      <RiskDisclaimer variant="banner" text={RESIDENT_DISCLAIMER} onViewModelCard={card ? scrollToModelCard : undefined} />
+      {showInfo && (
+        <RiskDisclaimer variant="banner" text={RESIDENT_DISCLAIMER} onViewModelCard={card ? scrollToModelCard : undefined} />
+      )}
 
       {loading && (
         <div className="card">
@@ -200,17 +212,6 @@ export function Residents({
         <>
           {/* Property selector */}
           <div className="res-prop-strip" style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className={`res-prop-card${selectedProperty === "all" ? " active" : ""}`}
-              aria-pressed={selectedProperty === "all"}
-              onClick={() => { setSelectedProperty("all"); setShowAll(false); }}
-            >
-              <span className="res-prop-name">All properties</span>
-              <span className="res-prop-meta">
-                {portfolio.overall.resident_count} residents · {pct(portfolio.overall.predicted_late_rate)} late
-              </span>
-            </button>
             {portfolio.properties.map((p) => {
               const on = selectedProperty === p.property_id;
               return (
@@ -256,9 +257,19 @@ export function Residents({
             </div>
           )}
 
+          {!selectedProperty && (
+            <div className="card">
+              <p className="muted" style={{ margin: 0 }}>
+                Select a property above to view its residents and their forward-looking risk.
+              </p>
+            </div>
+          )}
+
+          {selectedProperty && (
+            <>
           {/* Resident table */}
           <div className="card">
-            <h2>Residents{selectedProperty !== "all" ? " — selected property" : ""}</h2>
+            <h2>Residents — {names[selectedProperty] ?? selectedProperty}</h2>
 
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
               <label className="field" style={{ flex: "1 1 200px", minWidth: 160 }}>
@@ -367,6 +378,8 @@ export function Residents({
                 onViewModelCard={card ? scrollToModelCard : undefined}
               />
             </div>
+          )}
+            </>
           )}
         </>
       )}
