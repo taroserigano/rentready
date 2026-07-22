@@ -432,10 +432,10 @@ export default function App() {
           to properties.
         </p>
         <div className="badges">
-          <Badge on={!!health?.anthropic_key_set} label="Claude" />
-          <Badge on={!!health?.langsmith} label="LangSmith" />
-          <Badge on={!!health?.phoenix} label="Phoenix" />
-          <Badge on={!!health?.neo4j_available} label="Neo4j" />
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
+          <Badge on={!!health?.langsmith} label="LangSmith" tone="teal" />
+          <Badge on={!!health?.phoenix} label="Phoenix" tone="magenta" />
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
         </div>
       </header>
 
@@ -476,7 +476,7 @@ export default function App() {
           <div className="eyebrow">How it works</div>
           <ol className="how-steps">
             <li className="how-step">
-              <span className="how-icon"><FileText size={16} aria-hidden /></span>
+              <span className="how-icon" data-tone="violet"><FileText size={16} aria-hidden /></span>
               <div className="how-body">
                 <div className="how-title">Extract the profile</div>
                 <div className="how-desc">
@@ -485,7 +485,7 @@ export default function App() {
               </div>
             </li>
             <li className="how-step">
-              <span className="how-icon"><ShieldCheck size={16} aria-hidden /></span>
+              <span className="how-icon" data-tone="teal"><ShieldCheck size={16} aria-hidden /></span>
               <div className="how-body">
                 <div className="how-title">Check eligibility</div>
                 <div className="how-desc">
@@ -494,7 +494,7 @@ export default function App() {
               </div>
             </li>
             <li className="how-step">
-              <span className="how-icon"><Building2 size={16} aria-hidden /></span>
+              <span className="how-icon" data-tone="magenta"><Building2 size={16} aria-hidden /></span>
               <div className="how-body">
                 <div className="how-title">Match properties</div>
                 <div className="how-desc">
@@ -503,7 +503,7 @@ export default function App() {
               </div>
             </li>
             <li className="how-step">
-              <span className="how-icon"><MessagesSquare size={16} aria-hidden /></span>
+              <span className="how-icon" data-tone="warm"><MessagesSquare size={16} aria-hidden /></span>
               <div className="how-body">
                 <div className="how-title">Ask anything</div>
                 <div className="how-desc">
@@ -513,11 +513,14 @@ export default function App() {
             </li>
           </ol>
           <div className="ws-aside-foot">
-            <span>
-              {reviewedCount !== null
-                ? `${reviewedCount} applicants reviewed`
-                : "New here? Start with a sample."}
-            </span>
+            {reviewedCount !== null ? (
+              <span className="badge tone-warm">
+                <span className="dot" aria-hidden />
+                {reviewedCount} applicants reviewed
+              </span>
+            ) : (
+              <span>New here? Start with a sample.</span>
+            )}
             <button
               className="btn-small btn-ghost"
               onClick={() => setView("learn")}
@@ -655,10 +658,19 @@ function ThemeToggle() {
 }
 
 /** Quiet service-health chip: neutral outline, colored status dot. */
-function Badge({ on, label }: { on: boolean; label: string }) {
+function Badge({
+  on,
+  label,
+  tone,
+}: {
+  on: boolean;
+  label: string;
+  tone?: "violet" | "teal" | "magenta" | "blue";
+}) {
   return (
     <span
       className="badge tone-info"
+      data-tone={tone}
       title={`${label} is ${on ? "connected" : "not connected"}`}
     >
       <span className={`dot ${on ? "good" : "bad"}`} aria-hidden />

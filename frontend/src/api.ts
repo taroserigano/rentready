@@ -37,6 +37,11 @@ import type {
   ResidentPropertiesResponse,
   PortfolioSummary,
   ResidentModelCard,
+  PortfolioHealth,
+  PropertyHealth,
+  ResidentChatRequest,
+  ResidentChatAnswer,
+  ResidentChatMeta,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -721,6 +726,114 @@ export async function getResidentsPortfolio(): Promise<PortfolioSummary> {
 
 export async function getResidentModelCard(): Promise<ResidentModelCard> {
   return json(await fetch(`${BASE}/residents/model-card`));
+}
+
+/**
+ * Portfolio property-health ranking, best→worst (healthiest first) — the
+ * regional-director view. The endpoint returns a bare array; a few backends
+ * wrap it, so we normalize {properties|ranking|rows: [...]} down to the list.
+ */
+export async function getResidentsHealth(): Promise<PortfolioHealth> {
+  const data = await json<unknown>(await fetch(`${BASE}/residents/health`));
+  if (Array.isArray(data)) return data as PropertyHealth[];
+  const obj = data as Record<string, unknown> | null;
+  const arr =
+    (obj?.properties as PropertyHealth[] | undefined) ??
+    (obj?.ranking as PropertyHealth[] | undefined) ??
+    (obj?.rows as PropertyHealth[] | undefined);
+  return Array.isArray(arr) ? arr : [];
+}
+
+// --- Residents chat agent --------------------------------------------------
+
+/**
+ * Ask the residents chat agent (non-streaming). Always resolves 200 — the
+ * backend degrades to deterministic rules (source="rules") with no LLM.
+ */
+export async function askResidentChat(
+  input: ResidentChatRequest,
+): Promise<ResidentChatAnswer> {
+  return json(
+    await fetch(`${BASE}/residents/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Callbacks driven by the SSE stream from POST /residents/chat/stream. */
+export interface ResidentChatStreamHandlers {
+  onMeta: (meta: ResidentChatMeta) => void;
+  onToken: (text: string) => void;
+  onDone: (source: string) => void;
+}
+
+/**
+ * Stream a residents-chat answer over SSE. The deterministic router pass
+ * arrives first as a `meta` frame (so grounded gauges / health lists paint
+ * before prose); the LLM prose then streams as `token` frames; a final `done`
+ * frame carries the answer's source. Frames are `data: <json>\n\n`. Throws on a
+ * transport error so the caller can fall back to non-streaming `askResidentChat`.
+ * (Cloned from askRiskChatStream.)
+ */
+export async function askResidentChatStream(
+  input: ResidentChatRequest,
+  handlers: ResidentChatStreamHandlers,
+): Promise<void> {
+  const res = await fetch(`${BASE}/residents/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`stream failed: ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const dispatch = (raw: string) => {
+    // A frame may carry several lines; only the `data:` payload is JSON.
+    const line = raw.split("\n").find((l) => l.startsWith("data:"));
+    if (!line) return;
+    const payload = line.slice(5).trim();
+    if (!payload) return;
+    let frame: any;
+    try {
+      frame = JSON.parse(payload);
+    } catch {
+      return; // ignore malformed frames rather than crashing the stream
+    }
+    if (frame.type === "meta") {
+      handlers.onMeta({
+        scope: frame.scope ?? "portfolio",
+        intent: frame.intent ?? "general",
+        resident_id: frame.resident_id ?? undefined,
+        property_id: frame.property_id ?? undefined,
+        follow_ups: frame.follow_ups ?? [],
+        artifact: frame.artifact ?? null,
+      });
+    } else if (frame.type === "token") {
+      handlers.onToken(frame.text ?? "");
+    } else if (frame.type === "done") {
+      handlers.onDone(frame.source ?? "anthropic");
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      if (frame.trim()) dispatch(frame);
+    }
+  }
+  // Flush any trailing frame that arrived without a terminating blank line.
+  if (buffer.trim()) dispatch(buffer);
 }
 
 /** Re-score one resident on demand; returns the four predictions. */

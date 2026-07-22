@@ -1,27 +1,31 @@
-"""Resident risk — multi-target scoring, reason codes, graceful fallback.
+"""Resident risk — multi-HEAD scoring, reason codes, graceful fallback (v2).
 
-DECISION-SUPPORT ONLY. For CURRENT residents (not applicants), this estimates
-four forward-looking outcomes over the next quarter, from models trained on
+DECISION-SUPPORT ONLY. For CURRENT residents (not applicants), this estimates a
+COMPREHENSIVE catalog of forward-looking outcomes, from models trained on
 SYNTHETIC data, to help a *person* plan proactive outreach and retention. It
 never evicts, denies, prices, conditions a lease, or takes any automated
 action. Serious-delinquency always routes to a human (``routes_to_review``).
 
 The public entrypoint is ``predict_resident(resident, snapshot) -> dict``. It
-NEVER raises: an XGBoost bundle is used per-target when present, otherwise a
+NEVER raises: a per-head XGBoost bundle is used when present, otherwise a
 pure-Python transparent heuristic — the output shape is identical either way,
-and each of the four sub-results degrades to its heuristic independently
-(mirrors ``risk.predict`` / ``graphrag.graph_ask``).
+and EACH head degrades to its heuristic independently.
 
-The four targets:
-  late    — P(any late payment next quarter)          calibrated classifier
-  arrears — expected $ balance at end of next quarter  regressor + PI
-  churn   — P(does not renew) for leases ending soon   classifier ("n/a" else)
-  serious — P(serious delinquency next quarter)        classifier -> review
+v2 head catalog (see ``HEADS``), grouped by family:
+  late       — P(any late) at horizons 1 / 3 / 6 / 12 months   (calibrated clf)
+  frequency  — expected # late / missed months next 12mo        (count)
+  severity   — max days late, P(30/60/90-day), delinquency bucket, serious
+  arrears    — expected $ balance at 3 / 12 months, peak balance (regression)
+  cure       — P(cure) + months-to-cure                         (clf + survival)
+  retention  — churn (non-renewal) at <=6mo and <=12mo horizons  (clf)
+plus the four LEGACY aliases (late/arrears/churn/serious == late_3m/arrears_3m/
+churn/serious) so the existing API and frontend keep working unchanged.
 
 Feature policy (governing): only legitimate payment / tenancy factors enter the
 models. Protected-class proxies (location, familial, age, ...) are STRUCTURALLY
-excluded — they never appear in any FEATURE_ORDER or input vector. property_id /
-neighborhood are kept on the record ONLY to audit fairness, never as features.
+excluded — they never appear in any feature_order or input vector. property_id /
+neighborhood / display name are kept on the record ONLY to audit fairness or for
+display, never as features.
 """
 
 from datetime import date, datetime, timezone
@@ -29,21 +33,25 @@ from functools import lru_cache
 from pathlib import Path
 
 ARTIFACT_PATH = Path(__file__).resolve().parent / "artifacts" / "residents_model.joblib"
+BUNDLE_SCHEMA = "residents-heads-v2"
 
 # --------------------------------------------------------------------------
 # Shared constants (single source of truth for gen / train / eval / serve)
 # --------------------------------------------------------------------------
-HISTORY_MONTHS = 60          # 5 years of ledger serialized per resident
-LABEL_HORIZON_MONTHS = 3     # "next quarter" label window
-CHURN_HORIZON_MONTHS = 6     # churn labelled only for leases ending within this
+HISTORY_MONTHS = 60           # 5 years of ledger serialized per resident
+LABEL_HORIZON_MONTHS = 3      # legacy "next quarter" window (late_3m / arrears_3m / serious)
+FUTURE_HORIZON_MONTHS = 15    # v2 simulated future window (clean 12mo labels + slack)
+CHURN_HORIZON_MONTHS = 6      # churn (legacy) labelled only for leases ending within this
+CHURN_12M_HORIZON_MONTHS = 12  # churn_12m horizon
+CURE_HORIZON_MONTHS = 12      # months-to-cure survival horizon
+CURE_EPS = 1.0                # balance <= $1 counts as "cured"
 RESIDENT_SNAPSHOT = date(2026, 7, 1)  # pinned; NO datetime.now() in gen/scoring
-DGP_VERSION = "resident-dgp-v1"
+DGP_VERSION = "resident-dgp-v2"
 SEED = 42
 
 # 10 properties chosen deterministically from data/properties.json, stratified
-# across rent tiers ($900–$2350) and DISTINCT neighborhoods/cities so fairness
-# slices have real diversity. Frozen — regenerating with SEED reproduces the
-# committed data/residents.json exactly.
+# across rent tiers ($900-$2350) and DISTINCT neighborhoods/cities so fairness
+# slices have real diversity. Frozen.
 RESIDENT_PROPERTY_IDS = [
     "PROP-041",  # $900  Deep Ellum, Dallas
     "PROP-037",  # $925  Pearl District, San Antonio
@@ -57,6 +65,7 @@ RESIDENT_PROPERTY_IDS = [
     "PROP-033",  # $2350 Alamo Heights, San Antonio
 ]
 
+# Legacy target names still referenced across the app (aliases into the heads).
 TARGETS = ("late", "arrears", "churn", "serious")
 
 # --------------------------------------------------------------------------
@@ -88,40 +97,182 @@ FEATURE_ORDER_BASE = [
     "complaints_12mo",
     "portal_logins_90d",
     "months_since_last_late",
+    # --- v2 additions (all ledger/lease/income-derived; fair-housing safe) ---
+    "trouble_month_rate",
+    "longest_late_streak_12mo",
+    "count_30plus_12mo",
+    "count_60plus_12mo",
+    "balance_trend_3mo",
+    "max_balance_12mo",
+    "months_in_arrears_12mo",
+    "months_since_balance_zero",
 ]
 
-# Per-target input contracts = shared base + target-specific additions.
-FEATURE_ORDER = {
-    "late": list(FEATURE_ORDER_BASE),
-    "arrears": FEATURE_ORDER_BASE + ["current_balance", "avg_monthly_shortfall_6mo"],
-    "churn": FEATURE_ORDER_BASE
-    + ["months_to_lease_end", "lease_term_months", "renewal_offer_sent"],
-    "serious": list(FEATURE_ORDER_BASE),
-}
+# Per-family input contracts = shared base + family-specific additions.
+_ARREARS_EXTRA = ["current_balance", "avg_monthly_shortfall_6mo"]
+_CHURN_EXTRA = ["months_to_lease_end", "lease_term_months", "renewal_offer_sent"]
+
+FEATURE_ORDER_ARREARS = FEATURE_ORDER_BASE + _ARREARS_EXTRA
+FEATURE_ORDER_CURE = FEATURE_ORDER_BASE + _ARREARS_EXTRA
+FEATURE_ORDER_CHURN = FEATURE_ORDER_BASE + _CHURN_EXTRA
 
 # Documented for the model card: fields deliberately kept OUT of every model.
 EXCLUDED_FEATURES = [
     {"field": "property_id", "reason": "Location proxy for protected classes (redlining). Kept only to audit fairness across properties, never a model input."},
     {"field": "neighborhood / city", "reason": "Location proxy for protected classes. Used only for fairness slicing."},
-    {"field": "unit_id / name", "reason": "Identity; not predictive."},
+    {"field": "unit_id / name", "reason": "Identity / display only; not predictive and never a model input."},
     {"field": "household_size / dependents", "reason": "Familial status — protected under fair-housing law."},
     {"field": "age / DOB / is_student", "reason": "Age — protected."},
     {"field": "race / national_origin / sex / disability", "reason": "Protected classes; never collected or used."},
 ]
 
 # --------------------------------------------------------------------------
-# Bands per target. Elevated routes to human outreach/review, never automated
-# action. serious is tighter on the high side (favor recall -> review).
+# Delinquency-bucket ordinal labels (multiclass head).
 # --------------------------------------------------------------------------
-_BAND_EDGES = {
-    "late": (0.15, 0.40),
-    "serious": (0.10, 0.25),
-    "churn": (0.20, 0.50),
-}
+DELINQ_BUCKETS = ["none", "1-29", "30-59", "60-89", "90+"]
 
 
-def _bands(target: str) -> list:
-    lo, hi = _BAND_EDGES[target]
+def _delinq_bucket(max_days: float) -> int:
+    d = float(max_days)
+    if d <= 0:
+        return 0
+    if d < 30:
+        return 1
+    if d < 60:
+        return 2
+    if d < 90:
+        return 3
+    return 4
+
+
+# --------------------------------------------------------------------------
+# Eligibility predicates (feature-derived; churn/cure heads are gated).
+# --------------------------------------------------------------------------
+def _elig_cure(features: dict) -> bool:
+    return float(features.get("current_balance", 0.0)) > 0.0
+
+
+def _elig_churn6(features: dict) -> bool:
+    mtle = float(features.get("months_to_lease_end", 99))
+    return 0 < mtle <= CHURN_HORIZON_MONTHS
+
+
+def _elig_churn12(features: dict) -> bool:
+    mtle = float(features.get("months_to_lease_end", 99))
+    return 0 < mtle <= CHURN_12M_HORIZON_MONTHS
+
+
+# --------------------------------------------------------------------------
+# HEAD REGISTRY — single source of truth driving gen / train / serve / eval.
+# --------------------------------------------------------------------------
+def _H(name, family, kind, objective, feature_order, label_window, learnable,
+       band_edges=None, eligibility=None, calibration="isotonic",
+       legacy_alias=None, low_confidence=False, routes_to_review=False,
+       num_class=None, horizon=None):
+    return {
+        "name": name, "family": family, "kind": kind, "objective": objective,
+        "feature_order": list(feature_order), "label_window": label_window,
+        "learnable": learnable, "band_edges": band_edges, "eligibility": eligibility,
+        "calibration": calibration, "legacy_alias": legacy_alias,
+        "low_confidence": low_confidence, "routes_to_review": routes_to_review,
+        "num_class": num_class, "horizon": horizon,
+    }
+
+
+HEADS = [
+    # LATE family — cumulative event probabilities → monotone-clamped at serve.
+    _H("late_1m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(any late payment in the next 1 month)", "reliable (short horizon; fewer positives)",
+       band_edges=(0.10, 0.30)),
+    _H("late_3m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(any late payment in the next 3 months / quarter)", "reliable",
+       band_edges=(0.15, 0.40), legacy_alias="late"),
+    _H("late_6m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(any late payment in the next 6 months)", "reliable",
+       band_edges=(0.25, 0.55)),
+    _H("late_12m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(any late payment in the next 12 months / year)",
+       "reliable; low-confidence for short-tenure residents", band_edges=(0.35, 0.65)),
+    # FREQUENCY family — overdispersed counts → tweedie.
+    _H("late_count_12m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected number of late months over the next 12 months (0-12)",
+       "reliable point estimate; interval widened for streak overdispersion",
+       calibration="empirical_pi"),
+    _H("missed_count_12m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected number of fully-missed months over the next 12 months",
+       "reliable; sparser than late_count so wider interval", calibration="empirical_pi"),
+    # SEVERITY family.
+    _H("max_days_late_12m", "severity", "regression", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected worst days-late reached over the next 12 months",
+       "moderate; zero-inflated (tweedie handles the mass at 0)", calibration="empirical_pi"),
+    _H("p_30d_12m", "severity", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(reaching 30+ days late at any point in the next 12 months)", "reliable",
+       band_edges=(0.15, 0.40)),
+    _H("p_60d_12m", "severity", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(reaching 60+ days late in the next 12 months)",
+       "LOW-POWER: rare event, wide CI", band_edges=(0.08, 0.20), low_confidence=True),
+    _H("p_90d_12m", "severity", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(reaching 90+ days late in the next 12 months)",
+       "LOW-POWER: very rare, treat as directional only", band_edges=(0.05, 0.15),
+       low_confidence=True),
+    _H("delinquency_bucket_12m", "severity", "multiclass", "multi:softprob", FEATURE_ORDER_BASE,
+       "Worst delinquency bucket in the next 12 months {none,1-29,30-59,60-89,90+}",
+       "ordinal; shares statistical strength across buckets", calibration="softprob",
+       num_class=5),
+    # SERIOUS (legacy; routes to review). Folded into the severity family.
+    _H("serious", "severity", "binary", "binary:logistic", FEATURE_ORDER_BASE,
+       "P(serious delinquency next quarter: 30+ days late OR a full month in arrears)",
+       "reliable; always routed to a human reviewer", band_edges=(0.10, 0.25),
+       legacy_alias="serious", routes_to_review=True),
+    # ARREARS family — zero-inflated $ → tweedie + empirical PI.
+    _H("arrears_3m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
+       "Expected $ balance at the end of the next 3 months (quarter)", "reliable",
+       calibration="empirical_pi", legacy_alias="arrears"),
+    _H("arrears_12m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
+       "Expected $ balance at the end of the next 12 months", "moderate (longer horizon)",
+       calibration="empirical_pi"),
+    _H("peak_balance_12m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
+       "Expected peak $ balance reached over the next 12 months", "moderate",
+       calibration="empirical_pi"),
+    # CURE family — eligibility: only residents currently carrying a balance.
+    _H("p_cure_6m", "cure", "binary", "binary:logistic", FEATURE_ORDER_CURE,
+       "P(existing balance is cleared within 6 months) | currently in arrears",
+       "reliable on the eligible (in-arrears) subset only", band_edges=(0.34, 0.67),
+       eligibility=_elig_cure),
+    _H("months_to_cure", "cure", "survival", "binary:logistic", FEATURE_ORDER_CURE,
+       "Months until an existing balance clears (discrete-time hazard, censored at 12) | in arrears",
+       "directional; heavy censoring on the small in-arrears subset",
+       calibration="hazard", eligibility=_elig_cure, horizon=CURE_HORIZON_MONTHS),
+    # RETENTION family — churn (non-renewal), eligibility-gated by lease timing.
+    _H("churn", "retention", "binary", "binary:logistic", FEATURE_ORDER_CHURN,
+       "P(non-renewal) for leases ending within 6 months", "reliable on eligible leases",
+       band_edges=(0.20, 0.50), eligibility=_elig_churn6, legacy_alias="churn"),
+    _H("churn_12m", "retention", "binary", "binary:logistic", FEATURE_ORDER_CHURN,
+       "P(non-renewal) for leases ending within 12 months", "reliable on eligible leases",
+       band_edges=(0.20, 0.50), eligibility=_elig_churn12),
+]
+
+HEADS_BY_NAME = {h["name"]: h for h in HEADS}
+HEAD_NAMES = [h["name"] for h in HEADS]
+BINARY_HEAD_NAMES = [h["name"] for h in HEADS if h["kind"] == "binary"]
+
+# family -> ordered head names (drives the families{} block + frontend grouping).
+FAMILIES: dict = {}
+for _h in HEADS:
+    FAMILIES.setdefault(_h["family"], []).append(_h["name"])
+
+# Legacy alias -> head name (late/arrears/churn/serious).
+LEGACY_ALIAS = {h["legacy_alias"]: h["name"] for h in HEADS if h["legacy_alias"]}
+
+# --------------------------------------------------------------------------
+# Bands per binary head. Elevated routes to human outreach/review, never
+# automated action. serious is tighter on the high side (favor recall -> review).
+# --------------------------------------------------------------------------
+_BAND_EDGES = {h["name"]: h["band_edges"] for h in HEADS if h["band_edges"]}
+
+
+def _bands_for(edges) -> list:
+    lo, hi = edges
     return [
         {"band": "low", "min": 0.0, "max": lo},
         {"band": "medium", "min": lo, "max": hi},
@@ -129,11 +280,11 @@ def _bands(target: str) -> list:
     ]
 
 
-BANDS = {t: _bands(t) for t in _BAND_EDGES}
+BANDS = {name: _bands_for(edges) for name, edges in _BAND_EDGES.items()}
 
 
-def _band(target: str, p: float) -> str:
-    lo, hi = _BAND_EDGES[target]
+def _band(head: str, p: float) -> str:
+    lo, hi = _BAND_EDGES.get(head, (0.15, 0.40))
     if p < lo:
         return "low"
     if p < hi:
@@ -174,9 +325,18 @@ _NEUTRAL = {
     "months_to_lease_end": 6.0,
     "lease_term_months": 12.0,
     "renewal_offer_sent": 0.0,
+    # v2 additions — neutral == clean history.
+    "trouble_month_rate": 0.0,
+    "longest_late_streak_12mo": 0.0,
+    "count_30plus_12mo": 0.0,
+    "count_60plus_12mo": 0.0,
+    "balance_trend_3mo": 0.0,
+    "max_balance_12mo": 0.0,
+    "months_in_arrears_12mo": 0.0,
+    "months_since_balance_zero": 0.0,
 }
 
-MONTHS_CAP = 60  # cap for months_since_last_late / on_time_streak
+MONTHS_CAP = 60  # cap for months_since_last_late / on_time_streak / months_since_balance_zero
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -208,8 +368,6 @@ def _months_between(a: date, b: date) -> int:
 
 # --------------------------------------------------------------------------
 # Feature extraction — trailing-window stats from the committed ledger.
-# Short-tenure residents simply have fewer entries (genuine small counts);
-# truly-missing inputs (no income on file, etc.) are neutral-imputed.
 # --------------------------------------------------------------------------
 def _as_dict(resident) -> dict:
     if hasattr(resident, "model_dump"):
@@ -222,9 +380,10 @@ def _is_trouble(e: dict) -> bool:
 
 
 def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
-    """Derive the full feature superset (all targets) for one resident as of
-    ``snapshot``. Returns a dict; per-target vectors are sliced by FEATURE_ORDER.
-    Only ledger + immutable facts are read — never a protected attribute."""
+    """Derive the full feature superset (all heads) for one resident as of
+    ``snapshot``. Returns a dict; per-head vectors are sliced by feature_order.
+    Only ledger + immutable facts are read — never a protected attribute, never
+    the display name."""
     r = _as_dict(resident)
     snapshot = _to_date(snapshot)
     led = list(r.get("ledger") or [])
@@ -245,7 +404,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     last12 = window(12)
     f["missed_count_12mo"] = float(sum(1 for e in last12 if e.get("status") == "missed"))
     f["partial_count_12mo"] = float(sum(1 for e in last12 if e.get("status") == "partial"))
-    # NSF-like: no money received at all in the month (bounced / no funds).
     f["nsf_count_12mo"] = float(sum(1 for e in last12 if float(e.get("amount_paid", 0)) <= 0.0))
 
     days = [int(e.get("days_late", 0)) for e in last12]
@@ -253,7 +411,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     f["max_days_late_12mo"] = float(max(days)) if days else 0.0
     f["avg_days_late_12mo"] = float(sum(late_days) / len(late_days)) if late_days else 0.0
 
-    # Trailing consecutive on-time months (from newest backwards).
     streak = 0
     for e in reversed(led):
         if _is_trouble(e):
@@ -261,7 +418,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
         streak += 1
     f["on_time_streak_months"] = float(min(streak, MONTHS_CAP))
 
-    # Recency-weighted lateness over last 24 months (exp decay, newest heaviest).
     last24 = window(24)
     rw = 0.0
     for age, e in enumerate(reversed(last24)):
@@ -282,7 +438,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     shortfalls = [max(0.0, float(e.get("rent_charged", 0)) - float(e.get("amount_paid", 0))) for e in last6]
     f["avg_monthly_shortfall_6mo"] = round(sum(shortfalls) / len(shortfalls), 2) if shortfalls else 0.0
 
-    # Income / rent burden.
     income = float(r.get("monthly_income") or 0.0) + float(r.get("other_income_monthly") or 0.0)
     if income > 0 and base_rent > 0:
         f["rent_to_income"] = round(_clamp(base_rent / income, 0.0, 3.0), 4)
@@ -291,7 +446,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     f["income_verified"] = 1.0 if r.get("income_verified") else 0.0
     f["autopay_enrolled"] = 1.0 if r.get("autopay_enrolled") else 0.0
 
-    # Tenure (capped at history length; short-tenure -> lower confidence).
     move_in = r.get("move_in_date") or r.get("lease_start")
     if move_in:
         tenure = _months_between(_to_date(move_in), snapshot)
@@ -301,7 +455,6 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
 
     f["prior_renewals"] = float(r.get("prior_renewals") or 0)
 
-    # Notice engagement (last 24 months of the ledger).
     sent = sum(int(e.get("notices_sent", 0)) for e in last24)
     resp = sum(int(e.get("notice_responded", 0)) for e in last24)
     f["notice_response_rate"] = round(resp / sent, 4) if sent > 0 else _NEUTRAL["notice_response_rate"]
@@ -311,13 +464,42 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     f["complaints_12mo"] = float(r.get("complaints_12mo") or 0)
     f["portal_logins_90d"] = float(r.get("portal_logins_90d") or 0)
 
-    # Months since most recent trouble month (capped). Cap when never late.
     msl = MONTHS_CAP
     for age, e in enumerate(reversed(led)):
         if _is_trouble(e):
             msl = min(age, MONTHS_CAP)
             break
     f["months_since_last_late"] = float(msl)
+
+    # ---- v2 additions (ledger-derived only) --------------------------------
+    troubles_all = sum(1 for e in led if _is_trouble(e))
+    f["trouble_month_rate"] = round(troubles_all / n, 4) if n else 0.0
+
+    run = best = 0
+    for e in last12:
+        if _is_trouble(e):
+            run += 1
+            best = max(best, run)
+        else:
+            run = 0
+    f["longest_late_streak_12mo"] = float(best)
+
+    f["count_30plus_12mo"] = float(sum(1 for e in last12 if int(e.get("days_late", 0)) >= 30))
+    f["count_60plus_12mo"] = float(sum(1 for e in last12 if int(e.get("days_late", 0)) >= 60))
+
+    bal_3ago = float(led[-4]["balance_after"]) if n >= 4 else (float(led[0]["balance_after"]) if n else 0.0)
+    f["balance_trend_3mo"] = round((bal_last - bal_3ago) / denom, 4)
+
+    f["max_balance_12mo"] = round(max((float(e.get("balance_after", 0)) for e in last12), default=0.0), 2)
+    f["months_in_arrears_12mo"] = float(sum(1 for e in last12 if float(e.get("balance_after", 0)) > 0.0))
+
+    msz = 0
+    for e in reversed(led):
+        if float(e.get("balance_after", 0)) > 0.0:
+            msz += 1
+        else:
+            break
+    f["months_since_balance_zero"] = float(min(msz, MONTHS_CAP))
 
     # Churn-specific lease timing.
     lease_end = r.get("lease_end")
@@ -329,8 +511,9 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
     return f
 
 
-def feature_vector(features: dict, target: str) -> list:
-    return [float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in FEATURE_ORDER[target]]
+def feature_vector(features: dict, head: str) -> list:
+    fo = HEADS_BY_NAME[head]["feature_order"]
+    return [float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in fo]
 
 
 def _confidence(resident, features: dict) -> str:
@@ -349,13 +532,12 @@ def _confidence(resident, features: dict) -> str:
 
 
 def churn_eligible(features: dict) -> bool:
-    """Churn is labelled/served only for leases ending within the horizon."""
-    mtle = features.get("months_to_lease_end", 99)
-    return 0 < mtle <= CHURN_HORIZON_MONTHS
+    """Legacy helper: churn is labelled/served only for leases ending within 6mo."""
+    return _elig_churn6(features)
 
 
 # --------------------------------------------------------------------------
-# Reason-code templates + up/down mix (mirrors risk._reason_codes).
+# Reason-code templates + up/down mix.
 # --------------------------------------------------------------------------
 def _n(v: float) -> str:
     return f"{v:.1f}".rstrip("0").rstrip(".")
@@ -392,6 +574,15 @@ REASON_TEMPLATES = {
     "months_to_lease_end": lambda v: f"Lease ends in about {round(v)} month(s)",
     "lease_term_months": lambda v: f"{round(v)}-month lease term",
     "renewal_offer_sent": lambda v: ("Renewal offer already sent" if v >= 0.5 else "No renewal offer sent yet"),
+    # v2 additions
+    "trouble_month_rate": lambda v: (f"Late in {round(v * 100)}% of months on record" if v > 0.01 else "On time in essentially every month"),
+    "longest_late_streak_12mo": lambda v: (f"Longest recent late streak: {round(v)} month(s)" if v else "No back-to-back late months recently"),
+    "count_30plus_12mo": lambda v: (f"{round(v)} month(s) 30+ days late in the last year" if v else "Never 30+ days late in the last year"),
+    "count_60plus_12mo": lambda v: (f"{round(v)} month(s) 60+ days late in the last year" if v else "Never 60+ days late in the last year"),
+    "balance_trend_3mo": lambda v: ("Balance rising over 3 months" if v > 0.05 else ("Balance falling over 3 months" if v < -0.05 else "Balance stable over 3 months")),
+    "max_balance_12mo": lambda v: (f"Peaked at ${round(v):,} owed in the last year" if v > 1 else "Never carried a balance in the last year"),
+    "months_in_arrears_12mo": lambda v: (f"{round(v)} month(s) carrying a balance in the last year" if v else "No months in arrears in the last year"),
+    "months_since_balance_zero": lambda v: (f"Carried a balance for {round(v)} straight month(s)" if v else "Currently at a zero balance"),
 }
 
 
@@ -406,8 +597,6 @@ def _label(feature: str, value: float) -> str:
 
 
 def _reason_codes(contribs: dict, features: dict, feature_order: list, cap: int = 4) -> list:
-    """Signed contributions (TreeSHAP or heuristic) -> plain-English ReasonCode
-    dicts, top ``cap`` by |contribution| but nudged to a mix of up/down drivers."""
     ranked = sorted(
         (
             {
@@ -434,12 +623,10 @@ def _reason_codes(contribs: dict, features: dict, feature_order: list, cap: int 
 
 
 # --------------------------------------------------------------------------
-# Transparent per-target heuristics (never return exactly 0 or 1).
-# Signed weights mirror the DGP direction. ("dev", w, neutral) => w*(v-neutral);
-# ("raw", w) => w*v; ("flag_low", w) => w*(1-v).
+# Transparent per-head heuristics (never return exactly 0 or 1).
 # --------------------------------------------------------------------------
 _HEURISTICS = {
-    "late": (
+    "late_3m": (
         -1.2,
         {
             "late_count_6mo": ("raw", 0.55),
@@ -448,6 +635,7 @@ _HEURISTICS = {
             "partial_count_12mo": ("raw", 0.25),
             "recency_weighted_lateness": ("raw", 0.6),
             "current_balance_ratio": ("raw", 0.5),
+            "trouble_month_rate": ("raw", 0.8),
             "on_time_streak_months": ("dev", -0.03, _NEUTRAL["on_time_streak_months"]),
             "months_since_last_late": ("dev", -0.02, _NEUTRAL["months_since_last_late"]),
             "rent_to_income": ("dev", 2.2, _NEUTRAL["rent_to_income"]),
@@ -462,6 +650,7 @@ _HEURISTICS = {
             "missed_count_12mo": ("raw", 0.7),
             "nsf_count_12mo": ("raw", 0.4),
             "max_days_late_12mo": ("dev", 0.03, 0.0),
+            "count_30plus_12mo": ("raw", 0.4),
             "current_balance_ratio": ("raw", 1.0),
             "partial_count_12mo": ("raw", 0.3),
             "recency_weighted_lateness": ("raw", 0.5),
@@ -485,10 +674,16 @@ _HEURISTICS = {
         },
     ),
 }
+_HEURISTICS["churn_12m"] = _HEURISTICS["churn"]
+
+# Late-horizon exponent map (monotone: exp>1 lowers, exp<1 raises prob).
+_LATE_HORIZON_EXP = {"late_1m": 1.7, "late_3m": 1.0, "late_6m": 0.72, "late_12m": 0.5}
+# Severity-threshold exponent map off the serious heuristic.
+_SEV_EXP = {"p_30d_12m": 0.7, "p_60d_12m": 1.3, "p_90d_12m": 2.0}
 
 
-def _heuristic_binary(target: str, features: dict) -> tuple:
-    bias, weights = _HEURISTICS[target]
+def _heuristic_logodds(spec_key: str, features: dict) -> tuple:
+    bias, weights = _HEURISTICS[spec_key]
     contribs: dict = {}
     z = bias
     for feat, spec in weights.items():
@@ -496,9 +691,7 @@ def _heuristic_binary(target: str, features: dict) -> tuple:
         kind = spec[0]
         if kind == "dev":
             c = spec[1] * (v - spec[2])
-        elif kind == "raw":
-            c = spec[1] * v
-        elif kind == "flag":
+        elif kind in ("raw", "flag"):
             c = spec[1] * v
         elif kind == "flag_low":
             c = spec[1] * (1.0 - v)
@@ -506,53 +699,133 @@ def _heuristic_binary(target: str, features: dict) -> tuple:
             c = 0.0
         contribs[feat] = c
         z += c
-    p = _clamp(_sigmoid(z), 0.02, 0.98)
-    return p, contribs
+    return z, contribs
 
 
-# Arrears heuristic: current balance carried forward + expected shortfall over
-# the horizon, damped by recent on-time behavior.
-def _heuristic_arrears(features: dict) -> tuple:
+def _heuristic_arrears(features: dict, horizon_months: int = LABEL_HORIZON_MONTHS, scale: float = 1.0) -> tuple:
     bal = float(features.get("current_balance", 0.0))
     shortfall = float(features.get("avg_monthly_shortfall_6mo", 0.0))
     late6 = float(features.get("late_count_6mo", 0.0))
     autopay = float(features.get("autopay_enrolled", 0.0))
-    # Fraction of the horizon we expect trouble to persist, from recent lateness.
     persist = _clamp(late6 / 6.0, 0.0, 1.0) * (0.6 if autopay < 0.5 else 0.35)
-    expected = bal * (0.6 + 0.4 * persist) + shortfall * LABEL_HORIZON_MONTHS * persist
-    expected = max(0.0, expected)
+    expected = bal * (0.6 + 0.4 * persist) + shortfall * horizon_months * persist
+    expected = max(0.0, expected) * scale
     contribs = {
         "current_balance": bal * (0.6 + 0.4 * persist),
-        "avg_monthly_shortfall_6mo": shortfall * LABEL_HORIZON_MONTHS * persist,
+        "avg_monthly_shortfall_6mo": shortfall * horizon_months * persist,
         "late_count_6mo": late6 * 5.0,
         "autopay_enrolled": -20.0 * autopay,
     }
     return expected, contribs
 
 
+def _heuristic_head(head: str, features: dict):
+    """Return (value, contribs) for any head using transparent weights. value is
+    a probability (binary), expected count/amount (count/regression), a class
+    probability list (multiclass), or a per-month survival curve (survival)."""
+    spec = HEADS_BY_NAME[head]
+    fam = spec["family"]
+
+    if head in _LATE_HORIZON_EXP:
+        z, contribs = _heuristic_logodds("late_3m", features)
+        p3 = _clamp(_sigmoid(z), 0.02, 0.98)
+        return _clamp(p3 ** _LATE_HORIZON_EXP[head], 0.02, 0.98), contribs
+    if head in _SEV_EXP:
+        z, contribs = _heuristic_logodds("serious", features)
+        ps = _clamp(_sigmoid(z), 0.02, 0.98)
+        return _clamp(ps ** _SEV_EXP[head], 0.01, 0.98), contribs
+    if head in ("serious", "churn", "churn_12m"):
+        z, contribs = _heuristic_logodds(head, features)
+        return _clamp(_sigmoid(z), 0.02, 0.98), contribs
+
+    if head == "late_count_12m":
+        rate = float(features.get("trouble_month_rate", 0.0))
+        recent = float(features.get("late_count_12mo", 0.0))
+        expected = max(0.0, 0.6 * rate * 12.0 + 0.4 * recent)
+        return expected, {"trouble_month_rate": rate * 7.2, "late_count_12mo": recent * 0.4}
+    if head == "missed_count_12m":
+        missed = float(features.get("missed_count_12mo", 0.0))
+        nsf = float(features.get("nsf_count_12mo", 0.0))
+        expected = max(0.0, 0.7 * missed + 0.3 * nsf)
+        return expected, {"missed_count_12mo": missed * 0.7, "nsf_count_12mo": nsf * 0.3}
+    if head == "max_days_late_12m":
+        mdl = float(features.get("max_days_late_12mo", 0.0))
+        rate = float(features.get("trouble_month_rate", 0.0))
+        expected = max(0.0, 0.7 * mdl + 20.0 * rate)
+        return expected, {"max_days_late_12mo": mdl * 0.7, "trouble_month_rate": rate * 20.0}
+    if fam == "arrears":
+        horizon = 12 if head != "arrears_3m" else LABEL_HORIZON_MONTHS
+        scale = 1.0 if head == "arrears_3m" else (1.35 if head == "arrears_12m" else 1.5)
+        expected, contribs = _heuristic_arrears(features, horizon, scale)
+        if head == "peak_balance_12m":
+            expected = max(expected, float(features.get("max_balance_12mo", 0.0)),
+                           float(features.get("current_balance", 0.0)))
+        return expected, contribs
+    if head == "p_cure_6m":
+        bal_ratio = float(features.get("current_balance_ratio", 0.0))
+        autopay = float(features.get("autopay_enrolled", 0.0))
+        rwl = float(features.get("recency_weighted_lateness", 0.0))
+        z = 0.9 - 1.1 * bal_ratio + 0.6 * autopay - 0.5 * rwl
+        contribs = {
+            "current_balance_ratio": -1.1 * bal_ratio,
+            "autopay_enrolled": 0.6 * autopay,
+            "recency_weighted_lateness": -0.5 * rwl,
+        }
+        return _clamp(_sigmoid(z), 0.02, 0.98), contribs
+    if head == "delinquency_bucket_12m":
+        z, contribs = _heuristic_logodds("serious", features)
+        ps = _clamp(_sigmoid(z), 0.02, 0.98)
+        mdl = float(features.get("max_days_late_12mo", 0.0))
+        w = [1.0 - ps, ps * 0.5, ps * 0.3 + (0.2 if mdl >= 30 else 0.0),
+             ps * 0.15 + (0.15 if mdl >= 60 else 0.0), ps * 0.05 + (0.1 if mdl >= 90 else 0.0)]
+        tot = sum(w) or 1.0
+        return [x / tot for x in w], contribs
+    if head == "months_to_cure":
+        bal_ratio = float(features.get("current_balance_ratio", 0.0))
+        autopay = float(features.get("autopay_enrolled", 0.0))
+        h = _clamp(0.35 + 0.25 * autopay - 0.25 * bal_ratio, 0.05, 0.9)
+        curve = []
+        s = 1.0
+        for _ in range(CURE_HORIZON_MONTHS):
+            s *= (1.0 - h)
+            curve.append(round(s, 4))
+        return curve, {"current_balance_ratio": -0.25 * bal_ratio, "autopay_enrolled": 0.25 * autopay}
+
+    return 0.3, {}
+
+
 # --------------------------------------------------------------------------
-# Model loading (lru_cache; None on ANY failure or feature-contract mismatch)
+# Model loading (lru_cache; None on ANY failure or contract mismatch)
 # --------------------------------------------------------------------------
 @lru_cache(maxsize=1)
 def _model():
-    """Load the persisted multi-target bundle, or None on any failure. Refuses a
-    bundle whose per-target feature_order doesn't match this code's contract."""
+    """Load the persisted multi-head bundle, or None on any failure. Refuses a
+    bundle whose schema, per-head feature_order, or kind key drifts from code."""
     try:
         import joblib
 
         if not ARTIFACT_PATH.exists():
             return None
         bundle = joblib.load(ARTIFACT_PATH)
-        if not isinstance(bundle, dict):
+        if not isinstance(bundle, dict) or bundle.get("schema") != BUNDLE_SCHEMA:
             return None
-        for t in TARGETS:
-            sub = bundle.get(t)
+        heads = bundle.get("heads")
+        if not isinstance(heads, dict):
+            return None
+        required = {
+            "binary": "calibrated_model", "multiclass": "calibrated_model",
+            "count": "regressor", "regression": "regressor", "survival": "hazard_model",
+        }
+        for spec in HEADS:
+            sub = heads.get(spec["name"])
             if not isinstance(sub, dict):
                 return None
-            if sub.get("feature_order") != FEATURE_ORDER[t]:
+            if sub.get("feature_order") != spec["feature_order"]:
                 return None  # trained against a different contract — refuse it
-            key = "regressor" if t == "arrears" else "calibrated_model"
+            key = required[spec["kind"]]
             if key not in sub:
+                if spec["kind"] == "survival":
+                    continue  # survival may be absent (too few eligible) -> heuristic
                 return None
         return bundle
     except Exception as exc:  # noqa: BLE001 — degrade to heuristics
@@ -560,154 +833,348 @@ def _model():
         return None
 
 
-def _tree_contribs(sub: dict, features: dict, feature_order: list):
-    """TreeSHAP signed contributions from the raw booster, or None if absent."""
-    booster = sub.get("booster")
+def _tree_contribs(booster, features: dict, feature_order: list):
+    """TreeSHAP signed contributions from a single-output raw booster, or None."""
     if booster is None:
         return None
+    try:
+        import pandas as pd
+        import xgboost as xgb
+
+        row = pd.DataFrame([[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in feature_order]], columns=feature_order)
+        contribs = booster.predict(xgb.DMatrix(row), pred_contribs=True)[0]
+        if getattr(contribs, "ndim", 1) != 1:  # multiclass -> not single-output
+            return None
+        return {feature_order[i]: float(contribs[i]) for i in range(len(feature_order))}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --------------------------------------------------------------------------
+# Per-head prediction — each degrades to its heuristic independently.
+# --------------------------------------------------------------------------
+def _row(features: dict, feature_order: list):
     import pandas as pd
-    import xgboost as xgb
 
-    row = pd.DataFrame([[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in feature_order]], columns=feature_order)
-    contribs = booster.predict(xgb.DMatrix(row), pred_contribs=True)[0]
-    return {feature_order[i]: float(contribs[i]) for i in range(len(feature_order))}
+    return pd.DataFrame(
+        [[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in feature_order]],
+        columns=feature_order,
+    )
 
 
-# --------------------------------------------------------------------------
-# Per-target prediction (each degrades to its heuristic independently)
-# --------------------------------------------------------------------------
-def _predict_bin(target: str, features: dict, bundle, low_conf: bool) -> dict:
-    fo = FEATURE_ORDER[target]
+def _predict_head(spec: dict, features: dict, bundle, low_conf: bool, with_reasons: bool = True) -> dict:
+    """Predict one head. Returns the head payload dict. Never raises. When
+    ``with_reasons`` is False, ALL TreeSHAP / heuristic reason-code computation is
+    skipped (reason_codes=[]) — the fast bulk path."""
+    kind = spec["kind"]
+    elig = spec["eligibility"]
+    low = low_conf or spec["low_confidence"]
+
+    if elig is not None and not elig(features):
+        payload = {
+            "kind": kind, "family": spec["family"], "band": "not_applicable",
+            "reason_codes": [], "confidence": "low" if low else "high",
+            "source": "not_applicable", "model_type": "not_applicable",
+        }
+        if kind == "binary":
+            payload["probability"] = None
+            payload["range"] = []
+        elif kind in ("count", "regression"):
+            payload["expected"] = None
+            payload["interval"] = []
+            if spec["family"] == "arrears":
+                payload["expected_balance"] = None
+        elif kind == "survival":
+            payload["median_months"] = None
+            payload["expected_months"] = None
+            payload["survival_curve"] = []
+        if spec["family"] == "retention":
+            payload["months_to_lease_end"] = round(float(features.get("months_to_lease_end", 0.0)), 1)
+        return payload
+
+    sub = (bundle or {}).get("heads", {}).get(spec["name"]) if bundle else None
+
+    if kind in ("binary", "multiclass"):
+        return _predict_classifier(spec, features, sub, low, with_reasons)
+    if kind in ("count", "regression"):
+        return _predict_regression(spec, features, sub, low, with_reasons)
+    if kind == "survival":
+        return _predict_survival(spec, features, sub, low, with_reasons)
+    return {"kind": kind, "source": "heuristic", "confidence": "low", "reason_codes": []}
+
+
+def _head_reasons(name, features, fo, booster, with_reasons) -> list:
+    """Reason codes for one head, or [] when reasons are disabled (bulk path).
+    TreeSHAP if a booster is present, else transparent heuristic contribs."""
+    if not with_reasons:
+        return []
+    contribs = _tree_contribs(booster, features, fo) if booster is not None else None
+    if contribs is None:
+        _, contribs = _heuristic_head(name, features)
+    return _reason_codes(contribs, features, fo)
+
+
+def _predict_classifier(spec, features, sub, low, with_reasons=True) -> dict:
+    name, fo, kind = spec["name"], spec["feature_order"], spec["kind"]
     edge_half = 0.08
-    if bundle is not None:
-        sub = bundle.get(target, {})
+    source, model_type = "heuristic", "heuristic"
+    if sub is not None:
         try:
-            import pandas as pd
-
             edge_half = float(sub.get("range_half_width", edge_half))
-            row = pd.DataFrame([[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in fo]], columns=fo)
-            p = float(sub["calibrated_model"].predict_proba(row)[0][1])
-            contribs = _tree_contribs(sub, features, fo)
-            if contribs is None:
-                _, contribs = _heuristic_binary(target, features)
-            reasons = _reason_codes(contribs, features, fo)
-            return _bin_result(target, p, reasons, low_conf, edge_half, "model", sub.get("model_type", "xgboost"))
+            proba = sub["calibrated_model"].predict_proba(_row(features, fo))[0]
+            reasons = _head_reasons(name, features, fo, sub.get("booster"), with_reasons)
+            source, model_type = "model", sub.get("model_type", "xgboost")
+            if kind == "multiclass":
+                return _multiclass_payload(spec, proba, reasons, low, source, model_type)
+            return _binary_payload(spec, float(proba[1]), reasons, low, edge_half, source, model_type)
         except Exception as exc:  # noqa: BLE001 — degrade to heuristic
-            print(f"residents_risk: {target} model predict failed ({type(exc).__name__}: {exc}); heuristic.")
-    p, contribs = _heuristic_binary(target, features)
-    reasons = _reason_codes(contribs, features, fo)
-    return _bin_result(target, p, reasons, low_conf, edge_half, "heuristic", "heuristic")
+            print(f"residents_risk: {name} model predict failed ({type(exc).__name__}: {exc}); heuristic.")
+    val, contribs = _heuristic_head(name, features)
+    reasons = _reason_codes(contribs, features, fo) if with_reasons else []
+    if kind == "multiclass":
+        return _multiclass_payload(spec, val, reasons, low, source, model_type)
+    return _binary_payload(spec, val, reasons, low, edge_half, source, model_type)
 
 
-def _bin_result(target, p, reasons, low_conf, edge_half, source, model_type) -> dict:
-    half = edge_half + (0.07 if low_conf else 0.0)
-    res = {
-        "probability": round(_clamp(p), 4),
-        "band": _band(target, p),
+def _binary_payload(spec, p, reasons, low, edge_half, source, model_type) -> dict:
+    p = _clamp(p)
+    half = edge_half + (0.07 if low else 0.0)
+    payload = {
+        "kind": "binary", "family": spec["family"],
+        "probability": round(p, 4),
+        "band": _band(spec["name"], p),
         "range": [round(_clamp(p - half), 4), round(_clamp(p + half), 4)],
         "reason_codes": reasons,
-        "confidence": "low" if low_conf else "high",
-        "source": source,
-        "model_type": model_type,
+        "confidence": "low" if low else "high",
+        "source": source, "model_type": model_type,
     }
-    if target == "serious":
-        res["routes_to_review"] = True
-    return res
+    if spec["routes_to_review"]:
+        payload["routes_to_review"] = True
+    if spec["family"] == "retention":
+        payload["months_to_lease_end"] = round(float(spec.get("_mtle", 0.0)), 1)
+    return payload
 
 
-def _predict_arrears(features: dict, bundle, low_conf: bool) -> dict:
-    fo = FEATURE_ORDER["arrears"]
-    if bundle is not None:
-        sub = bundle.get("arrears", {})
-        try:
-            import pandas as pd
-
-            row = pd.DataFrame([[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in fo]], columns=fo)
-            pred = float(sub["regressor"].predict(row)[0])
-            pred = max(0.0, pred)
-            std = float(sub.get("residual_std", max(50.0, 0.25 * pred + 25.0)))
-            half = 1.28 * std * (1.4 if low_conf else 1.0)
-            contribs = _tree_contribs(sub, features, fo)
-            if contribs is None:
-                _, contribs = _heuristic_arrears(features)
-            reasons = _reason_codes(contribs, features, fo)
-            return {
-                "expected_balance": round(pred, 2),
-                "interval": [round(max(0.0, pred - half), 2), round(pred + half, 2)],
-                "reason_codes": reasons,
-                "confidence": "low" if low_conf else "high",
-                "source": "model",
-                "model_type": sub.get("model_type", "xgboost"),
-            }
-        except Exception as exc:  # noqa: BLE001
-            print(f"residents_risk: arrears model predict failed ({type(exc).__name__}: {exc}); heuristic.")
-    pred, contribs = _heuristic_arrears(features)
-    std = max(50.0, 0.4 * pred + 40.0)
-    half = 1.28 * std * (1.4 if low_conf else 1.0)
-    reasons = _reason_codes(contribs, features, fo)
+def _multiclass_payload(spec, proba, reasons, low, source, model_type) -> dict:
+    probs = [float(x) for x in proba]
+    if len(probs) < len(DELINQ_BUCKETS):
+        probs = probs + [0.0] * (len(DELINQ_BUCKETS) - len(probs))
+    idx = max(range(len(probs)), key=lambda i: probs[i])
     return {
-        "expected_balance": round(pred, 2),
-        "interval": [round(max(0.0, pred - half), 2), round(pred + half, 2)],
+        "kind": "multiclass", "family": spec["family"],
+        "class_probs": {DELINQ_BUCKETS[i]: round(probs[i], 4) for i in range(len(DELINQ_BUCKETS))},
+        "predicted_bucket": DELINQ_BUCKETS[idx],
         "reason_codes": reasons,
-        "confidence": "low" if low_conf else "high",
-        "source": "heuristic",
-        "model_type": "heuristic",
+        "confidence": "low" if low else "high",
+        "source": source, "model_type": model_type,
     }
 
 
-def _predict_churn(features: dict, bundle, low_conf: bool) -> dict:
-    mtle = float(features.get("months_to_lease_end", 99))
-    if not churn_eligible(features):
-        return {
-            "probability": None,
-            "band": "not_applicable",
-            "months_to_lease_end": round(mtle, 1),
-            "reason_codes": [],
-            "confidence": "low" if low_conf else "high",
-            "source": "not_applicable",
-        }
-    fo = FEATURE_ORDER["churn"]
-    if bundle is not None:
-        sub = bundle.get("churn", {})
+def _predict_regression(spec, features, sub, low, with_reasons=True) -> dict:
+    name, fo = spec["name"], spec["feature_order"]
+    source, model_type = "heuristic", "heuristic"
+    if sub is not None:
+        try:
+            pred = max(0.0, float(sub["regressor"].predict(_row(features, fo))[0]))
+            q = sub.get("residual_quantiles") or [-0.5 * pred, 0.5 * pred]
+            lo = max(0.0, pred + float(q[0]))
+            hi = max(lo, pred + float(q[1]))
+            if low:
+                span = (hi - lo) * 0.2
+                lo = max(0.0, lo - span)
+                hi = hi + span
+            reasons = _head_reasons(name, features, fo, sub.get("booster"), with_reasons)
+            source, model_type = "model", sub.get("model_type", "xgboost")
+            return _regression_payload(spec, pred, [lo, hi], reasons, low, source, model_type)
+        except Exception as exc:  # noqa: BLE001
+            print(f"residents_risk: {name} model predict failed ({type(exc).__name__}: {exc}); heuristic.")
+    pred, contribs = _heuristic_head(name, features)
+    pred = max(0.0, float(pred))
+    if spec["kind"] == "count":
+        half = max(1.0, 0.6 * pred + 1.0) * (1.3 if low else 1.0)
+    else:
+        std = max(50.0, 0.4 * pred + 40.0)
+        half = 1.28 * std * (1.4 if low else 1.0)
+    reasons = _reason_codes(contribs, features, fo) if with_reasons else []
+    return _regression_payload(spec, pred, [max(0.0, pred - half), pred + half], reasons, low, source, model_type)
+
+
+def _regression_payload(spec, pred, interval, reasons, low, source, model_type) -> dict:
+    is_count = spec["kind"] == "count"
+    val = round(pred, 3) if is_count else round(pred, 2)
+    payload = {
+        "kind": spec["kind"], "family": spec["family"],
+        "expected": val,
+        "interval": [round(interval[0], 2), round(interval[1], 2)],
+        "reason_codes": reasons,
+        "confidence": "low" if low else "high",
+        "source": source, "model_type": model_type,
+    }
+    if spec["family"] == "arrears":
+        payload["expected_balance"] = round(pred, 2)  # legacy-alias-friendly key
+    return payload
+
+
+def _predict_survival(spec, features, sub, low, with_reasons=True) -> dict:
+    name, fo = spec["name"], spec["feature_order"]
+    horizon = spec["horizon"] or CURE_HORIZON_MONTHS
+    source, model_type = "heuristic", "heuristic"
+    curve = None
+    reasons: list = []
+    if sub is not None and "hazard_model" in sub:
         try:
             import pandas as pd
 
-            row = pd.DataFrame([[float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in fo]], columns=fo)
-            p = float(sub["calibrated_model"].predict_proba(row)[0][1])
-            contribs = _tree_contribs(sub, features, fo)
-            if contribs is None:
-                _, contribs = _heuristic_binary("churn", features)
-            reasons = _reason_codes(contribs, features, fo)
-            return {
-                "probability": round(_clamp(p), 4),
-                "band": _band("churn", p),
-                "months_to_lease_end": round(mtle, 1),
-                "reason_codes": reasons,
-                "confidence": "low" if low_conf else "high",
-                "source": "model",
-            }
+            haz = sub["hazard_model"]
+            haz_fo = sub.get("hazard_feature_order", fo + ["horizon_month"])
+            base = {k: float(features.get(k, _NEUTRAL.get(k, 0.0))) for k in fo}
+            rows = []
+            for m in range(1, horizon + 1):
+                r = dict(base)
+                r["horizon_month"] = float(m)
+                rows.append([r[k] for k in haz_fo])
+            hazards = haz.predict_proba(pd.DataFrame(rows, columns=haz_fo))[:, 1]
+            curve = []
+            s = 1.0
+            for h in hazards:
+                s *= (1.0 - float(h))
+                curve.append(round(s, 4))
+            reasons = _head_reasons(name, features, fo, sub.get("booster"), with_reasons)
+            source, model_type = "model", sub.get("model_type", "xgboost")
         except Exception as exc:  # noqa: BLE001
-            print(f"residents_risk: churn model predict failed ({type(exc).__name__}: {exc}); heuristic.")
-    p, contribs = _heuristic_binary("churn", features)
-    reasons = _reason_codes(contribs, features, fo)
+            print(f"residents_risk: {name} survival predict failed ({type(exc).__name__}: {exc}); heuristic.")
+            curve = None
+    if curve is None:
+        curve, contribs = _heuristic_head(name, features)
+        reasons = _reason_codes(contribs, features, fo) if with_reasons else []
+    # survival_curve[k] = P(still in arrears after k+1 months). Median = first month it drops <= 0.5.
+    median = None
+    for i, s in enumerate(curve):
+        if s <= 0.5:
+            median = i + 1
+            break
     return {
-        "probability": round(_clamp(p), 4),
-        "band": _band("churn", p),
-        "months_to_lease_end": round(mtle, 1),
+        "kind": "survival", "family": spec["family"],
+        "median_months": median,
+        "expected_months": round(sum(curve), 2),  # expected months still in arrears (area under S)
+        "survival_curve": curve,
         "reason_codes": reasons,
-        "confidence": "low" if low_conf else "high",
-        "source": "heuristic",
+        "confidence": "low" if low else "high",
+        "source": source, "model_type": model_type,
+    }
+
+
+# --------------------------------------------------------------------------
+# Serve-time monotone clamps across related heads.
+# --------------------------------------------------------------------------
+def _reband(h: dict, name: str, p: float) -> None:
+    h["probability"] = p
+    h["band"] = _band(name, p)
+    half = (h["range"][1] - h["range"][0]) / 2 if len(h.get("range", [])) == 2 else 0.08
+    h["range"] = [round(_clamp(p - half), 4), round(_clamp(p + half), 4)]
+
+
+def _apply_monotone_clamps(heads: dict) -> None:
+    # Cumulative late probabilities must be non-decreasing in horizon.
+    prev = None
+    for name in ("late_1m", "late_3m", "late_6m", "late_12m"):
+        h = heads.get(name)
+        if not h or h.get("probability") is None:
+            continue
+        if prev is not None and h["probability"] < prev:
+            _reband(h, name, prev)
+        prev = h["probability"]
+    # Threshold-severity probabilities must be non-increasing: p30 >= p60 >= p90.
+    prev = None
+    for name in ("p_30d_12m", "p_60d_12m", "p_90d_12m"):
+        h = heads.get(name)
+        if not h or h.get("probability") is None:
+            continue
+        if prev is not None and h["probability"] > prev:
+            _reband(h, name, prev)
+        prev = h["probability"]
+
+
+# --------------------------------------------------------------------------
+# Legacy-alias projection (exact v1 shapes for late / arrears / churn / serious).
+# --------------------------------------------------------------------------
+def _legacy_late(h: dict) -> dict:
+    return {
+        "probability": h["probability"], "band": h["band"], "range": h["range"],
+        "reason_codes": h["reason_codes"], "confidence": h["confidence"],
+        "source": h["source"], "model_type": h["model_type"],
+    }
+
+
+def _legacy_serious(h: dict) -> dict:
+    d = _legacy_late(h)
+    d["routes_to_review"] = True
+    return d
+
+
+def _legacy_arrears(h: dict) -> dict:
+    return {
+        "expected_balance": h.get("expected_balance", h.get("expected") or 0.0) or 0.0,
+        "interval": h.get("interval", []),
+        "reason_codes": h["reason_codes"], "confidence": h["confidence"],
+        "source": h["source"], "model_type": h["model_type"],
+    }
+
+
+def _legacy_churn(h: dict) -> dict:
+    return {
+        "probability": h.get("probability"),
+        "band": h.get("band", "not_applicable"),
+        "months_to_lease_end": h.get("months_to_lease_end"),
+        "reason_codes": h.get("reason_codes", []),
+        "confidence": h.get("confidence", "high"),
+        "source": h.get("source", "not_applicable"),
     }
 
 
 # --------------------------------------------------------------------------
 # Public entrypoint — NEVER raises
 # --------------------------------------------------------------------------
-def predict_resident(resident, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
-    """Score one resident on all four targets. Returns the multi-target result
-    dict. Each sub-result degrades to its heuristic independently; never raises."""
-    scored_at = datetime.now(timezone.utc).isoformat()
+# Heads always needed so the legacy top-level aliases are always present.
+_ALIAS_HEADS = frozenset({"late_3m", "serious", "arrears_3m", "churn"})
+# Minimal head set the bulk rows + property-health components need. late_1m is
+# included so the late-horizon monotone clamp on late_3m matches the full detail
+# path exactly (keeps row/health late probabilities identical to /residents/{id}).
+BULK_HEADS = ["late_1m", "late_3m", "serious", "churn", "arrears_3m", "p_30d_12m"]
+
+# Per-resident prediction cache. Data + model + snapshot are STATIC and
+# deterministic for a running server, so committed residents (with an id) are
+# memoized by (resident_id, snapshot, with_reasons, heads-key). Cleared on
+# (re)train via ``_clear_prediction_caches`` / ``ensure_model``.
+_PRED_CACHE: dict = {}
+_PORTFOLIO_CACHE: dict = {}
+
+
+def _clear_prediction_caches() -> None:
+    _PRED_CACHE.clear()
+    _PORTFOLIO_CACHE.clear()
+
+
+def predict_resident(resident, snapshot: date = RESIDENT_SNAPSHOT,
+                     with_reasons: bool = True, heads: list = None) -> dict:
+    """Score one resident. Returns a backward-compatible superset: legacy
+    top-level late/arrears/churn/serious + heads{} + families{}. Never raises.
+
+    Fast bulk path:
+      * ``with_reasons=False`` SKIPS all TreeSHAP / heuristic reason-code work
+        (reason_codes=[]) — the dominant cost when scoring the whole portfolio.
+      * ``heads`` (a list of head names) computes ONLY those heads (plus the four
+        alias heads), instead of all 19.
+    Committed residents (those with a ``resident_id``) are cached deterministically."""
     r = _as_dict(resident)
+    rid = r.get("resident_id", "")
+    snap_iso = _to_date(snapshot).isoformat()
+    want = None if heads is None else (frozenset(heads) | _ALIAS_HEADS)
+    cache_key = (rid, snap_iso, bool(with_reasons), want)
+    if rid and cache_key in _PRED_CACHE:
+        return _PRED_CACHE[cache_key]
+
+    scored_at = datetime.now(timezone.utc).isoformat()
     try:
         features = extract_resident_features(r, snapshot)
     except Exception as exc:  # noqa: BLE001 — extraction must never break scoring
@@ -715,29 +1182,43 @@ def predict_resident(resident, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
         features = dict(_NEUTRAL)
     low_conf = _confidence(r, features) == "low"
     bundle = _model()
+    mtle = round(float(features.get("months_to_lease_end", 0.0)), 1)
 
-    def guarded(fn, *a):
+    heads_out: dict = {}
+    for base_spec in HEADS:
+        if want is not None and base_spec["name"] not in want:
+            continue
+        spec = dict(base_spec)
+        spec["_mtle"] = mtle
         try:
-            return fn(*a)
-        except Exception as exc:  # noqa: BLE001 — a broken target never sinks the rest
-            print(f"residents_risk: sub-prediction failed ({type(exc).__name__}: {exc}).")
-            return None
+            heads_out[spec["name"]] = _predict_head(spec, features, bundle, low_conf, with_reasons)
+        except Exception as exc:  # noqa: BLE001 — a broken head never sinks the rest
+            print(f"residents_risk: head {spec['name']} failed ({type(exc).__name__}: {exc}); neutral.")
+            heads_out[spec["name"]] = {
+                "kind": spec["kind"], "family": spec["family"], "source": "heuristic",
+                "confidence": "low", "reason_codes": [],
+                **({"probability": 0.3, "band": "low", "range": [0.2, 0.4], "model_type": "heuristic"}
+                   if spec["kind"] == "binary" else {}),
+            }
 
-    late = guarded(_predict_bin, "late", features, bundle, low_conf) or _bin_result("late", 0.3, [], low_conf, 0.1, "heuristic", "heuristic")
-    serious = guarded(_predict_bin, "serious", features, bundle, low_conf) or _bin_result("serious", 0.1, [], low_conf, 0.1, "heuristic", "heuristic")
-    arrears = guarded(_predict_arrears, features, bundle, low_conf) or {"expected_balance": 0.0, "interval": [0.0, 0.0], "reason_codes": [], "confidence": "low", "source": "heuristic", "model_type": "heuristic"}
-    churn = guarded(_predict_churn, features, bundle, low_conf) or {"probability": None, "band": "not_applicable", "months_to_lease_end": features.get("months_to_lease_end"), "reason_codes": [], "confidence": "low", "source": "not_applicable"}
+    _apply_monotone_clamps(heads_out)
 
-    return {
-        "resident_id": r.get("resident_id", ""),
+    result = {
+        "resident_id": rid,
         "property_id": r.get("property_id", ""),
-        "snapshot_date": _to_date(snapshot).isoformat(),
-        "late": late,
-        "arrears": arrears,
-        "churn": churn,
-        "serious": serious,
+        "name": r.get("name", ""),
+        "snapshot_date": snap_iso,
+        "late": _legacy_late(heads_out["late_3m"]),
+        "arrears": _legacy_arrears(heads_out["arrears_3m"]),
+        "churn": _legacy_churn(heads_out["churn"]),
+        "serious": _legacy_serious(heads_out["serious"]),
+        "heads": heads_out,
+        "families": {fam: list(names) for fam, names in FAMILIES.items()},
         "scored_at": scored_at,
     }
+    if rid:
+        _PRED_CACHE[cache_key] = result
+    return result
 
 
 def predict_residents(residents: list, snapshot: date = RESIDENT_SNAPSHOT) -> list:
@@ -751,12 +1232,271 @@ def predict_residents(residents: list, snapshot: date = RESIDENT_SNAPSHOT) -> li
     return out
 
 
+def predict_bulk(residents: list, snapshot: date = RESIDENT_SNAPSHOT,
+                 heads: list = None) -> list:
+    """VECTORIZED bulk scoring for portfolio views. Runs ONE model call per head
+    across ALL residents (not one call per resident) — the fix for the per-call
+    predict_proba overhead that made whole-portfolio scoring slow. Never computes
+    reason codes (bulk path). Returns the same superset shape as
+    ``predict_resident`` (legacy aliases + heads{} + families{}) for the requested
+    heads, and populates the per-resident cache so later reads are instant.
+
+    Falls back to per-resident ``predict_resident`` on any batch failure."""
+    residents = [_as_dict(r) for r in residents or []]
+    if not residents:
+        return []
+    snap_iso = _to_date(snapshot).isoformat()
+    want = _ALIAS_HEADS if heads is None else (frozenset(heads) | _ALIAS_HEADS)
+    want_specs = [h for h in HEADS if h["name"] in want]
+    bundle = _model()
+    scored_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        import numpy as np
+        import pandas as pd
+
+        feats = [extract_resident_features(r, snapshot) for r in residents]
+        lows = [_confidence(residents[i], feats[i]) == "low" for i in range(len(residents))]
+
+        # One batched model call per head over all residents.
+        batched: dict = {}
+        for spec in want_specs:
+            name, fo, kind = spec["name"], spec["feature_order"], spec["kind"]
+            sub = (bundle or {}).get("heads", {}).get(name) if bundle else None
+            key = "regressor" if kind in ("count", "regression") else "calibrated_model"
+            if sub is not None and key in sub:
+                try:
+                    X = pd.DataFrame(
+                        [[float(f.get(k, _NEUTRAL.get(k, 0.0))) for k in fo] for f in feats],
+                        columns=fo,
+                    )
+                    if kind in ("count", "regression"):
+                        vals = np.clip(sub["regressor"].predict(X), 0.0, None)
+                    elif kind == "multiclass":
+                        vals = sub["calibrated_model"].predict_proba(X)
+                    else:
+                        vals = sub["calibrated_model"].predict_proba(X)[:, 1]
+                    batched[name] = (sub, vals)
+                    continue
+                except Exception as exc:  # noqa: BLE001 — this head degrades to heuristic
+                    print(f"residents_risk: bulk {name} predict failed ({type(exc).__name__}: {exc}); heuristic.")
+            batched[name] = (None, None)
+
+        out = []
+        for i, r in enumerate(residents):
+            f, low = feats[i], lows[i]
+            mtle = round(float(f.get("months_to_lease_end", 0.0)), 1)
+            heads_out: dict = {}
+            for spec in want_specs:
+                s = dict(spec)
+                s["_mtle"] = mtle
+                heads_out[spec["name"]] = _bulk_head_payload(s, f, batched.get(spec["name"]), i, low)
+            _apply_monotone_clamps(heads_out)
+            result = {
+                "resident_id": r.get("resident_id", ""),
+                "property_id": r.get("property_id", ""),
+                "name": r.get("name", ""),
+                "snapshot_date": snap_iso,
+                "late": _legacy_late(heads_out["late_3m"]),
+                "arrears": _legacy_arrears(heads_out["arrears_3m"]),
+                "churn": _legacy_churn(heads_out["churn"]),
+                "serious": _legacy_serious(heads_out["serious"]),
+                "heads": heads_out,
+                "families": {fam: list(names) for fam, names in FAMILIES.items()},
+                "scored_at": scored_at,
+            }
+            rid = result["resident_id"]
+            if rid:
+                _PRED_CACHE[(rid, snap_iso, False, want)] = result
+            out.append(result)
+        return out
+    except Exception as exc:  # noqa: BLE001 — never raise; fall back to per-resident path
+        print(f"residents_risk: predict_bulk failed ({type(exc).__name__}: {exc}); per-resident fallback.")
+        return [predict_resident(r, snapshot, with_reasons=False, heads=heads) for r in residents]
+
+
+def _bulk_head_payload(spec, features, batch, i, low) -> dict:
+    """Assemble one head payload from a precomputed BATCHED value (no reasons).
+    Mirrors the eligibility / kind branches of ``_predict_head``."""
+    kind = spec["kind"]
+    elig = spec["eligibility"]
+    lo = low or spec["low_confidence"]
+
+    if elig is not None and not elig(features):
+        payload = {"kind": kind, "family": spec["family"], "band": "not_applicable",
+                   "reason_codes": [], "confidence": "low" if lo else "high",
+                   "source": "not_applicable", "model_type": "not_applicable"}
+        if kind == "binary":
+            payload["probability"] = None
+            payload["range"] = []
+        elif kind in ("count", "regression"):
+            payload["expected"] = None
+            payload["interval"] = []
+            if spec["family"] == "arrears":
+                payload["expected_balance"] = None
+        if spec["family"] == "retention":
+            payload["months_to_lease_end"] = round(float(features.get("months_to_lease_end", 0.0)), 1)
+        return payload
+
+    sub, vals = (batch or (None, None))
+    if sub is not None and vals is not None:
+        if kind == "binary":
+            edge_half = float(sub.get("range_half_width", 0.08))
+            return _binary_payload(spec, float(vals[i]), [], lo, edge_half, "model", sub.get("model_type", "xgboost"))
+        if kind == "multiclass":
+            return _multiclass_payload(spec, vals[i], [], lo, "model", sub.get("model_type", "xgboost"))
+        # count / regression
+        pred = max(0.0, float(vals[i]))
+        q = sub.get("residual_quantiles") or [-0.5 * pred, 0.5 * pred]
+        plo = max(0.0, pred + float(q[0]))
+        phi = max(plo, pred + float(q[1]))
+        if lo:
+            span = (phi - plo) * 0.2
+            plo = max(0.0, plo - span)
+            phi = phi + span
+        return _regression_payload(spec, pred, [plo, phi], [], lo, "model", sub.get("model_type", "xgboost"))
+
+    # Heuristic fallback (no model / batch failed) — no reasons.
+    val, _ = _heuristic_head(spec["name"], features)
+    if kind == "binary":
+        return _binary_payload(spec, val, [], lo, 0.08, "heuristic", "heuristic")
+    if kind == "multiclass":
+        return _multiclass_payload(spec, val, [], lo, "heuristic", "heuristic")
+    pred = max(0.0, float(val))
+    half = (max(1.0, 0.6 * pred + 1.0) if kind == "count" else 1.28 * max(50.0, 0.4 * pred + 40.0)) * (1.3 if lo else 1.0)
+    return _regression_payload(spec, pred, [max(0.0, pred - half), pred + half], [], lo, "heuristic", "heuristic")
+
+
 def top_driver(sub_result: dict) -> str:
     """Strongest 'increases' reason label from a sub-result (for portfolio rows)."""
     ups = [rc for rc in (sub_result or {}).get("reason_codes", []) if rc.get("direction") == "increases"]
     if not ups:
         return ""
     return max(ups, key=lambda rc: abs(rc.get("contribution", 0)))["label"]
+
+
+def heuristic_top_driver(features: dict) -> str:
+    """Cheap top late-risk driver from transparent heuristic weights — NO TreeSHAP.
+    Lets bulk rows keep a driver label without the per-head SHAP cost."""
+    try:
+        _, contribs = _heuristic_head("late_3m", features)
+        return top_driver({"reason_codes": _reason_codes(contribs, features, FEATURE_ORDER_BASE)})
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# --------------------------------------------------------------------------
+# Property / portfolio health (regional-director best->worst ranking)
+# --------------------------------------------------------------------------
+_HEALTH_WEIGHTS = {
+    "on_time": 0.30,        # 1 - predicted next-quarter late rate
+    "not_serious": 0.25,    # 1 - serious-flag rate
+    "retention": 0.20,      # 1 - churn-risk rate (among eligible)
+    "collection": 0.15,     # 1 - normalized total expected arrears / rent roll
+    "not_chronic": 0.10,    # 1 - mean P(30+ days late next 12mo)
+}
+_HEALTH_LABELS = {
+    "on_time": "on-time payment rate",
+    "not_serious": "serious-delinquency flags",
+    "retention": "renewal / churn risk",
+    "collection": "arrears vs rent roll",
+    "not_chronic": "chronic-delinquency risk",
+}
+
+
+def _grade(score: float) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
+def _health_from_preds(property_id: str, residents: list, preds: list) -> dict:
+    n = len(preds)
+    if n == 0:
+        comps = {k: {"value": 1.0, "weight": w, "contribution": round(100 * w, 1)}
+                 for k, w in _HEALTH_WEIGHTS.items()}
+        return {"property_id": property_id, "score": 100.0, "grade": "A",
+                "resident_count": 0, "components": comps, "drivers": [], "top_driver": ""}
+
+    late_rate = sum((p["late"].get("probability") or 0.0) for p in preds) / n
+    serious_flag_rate = sum(1 for p in preds if p["serious"].get("band") == "high") / n
+    elig = [p for p in preds if p["churn"].get("probability") is not None]
+    churn_risk_rate = (sum(1 for p in elig if p["churn"].get("band") == "high") / len(elig)) if elig else 0.0
+    total_arrears = sum((p["arrears"].get("expected_balance") or 0.0) for p in preds)
+    rent_roll = sum(float((r or {}).get("base_rent") or 0.0) for r in residents) or 1.0
+    collection = 1.0 - _clamp(total_arrears / rent_roll, 0.0, 1.0)
+    mean_p30 = sum((p["heads"].get("p_30d_12m", {}).get("probability") or 0.0) for p in preds) / n
+
+    values = {
+        "on_time": _clamp(1.0 - late_rate),
+        "not_serious": _clamp(1.0 - serious_flag_rate),
+        "retention": _clamp(1.0 - churn_risk_rate),
+        "collection": _clamp(collection),
+        "not_chronic": _clamp(1.0 - mean_p30),
+    }
+    score = round(100.0 * sum(_HEALTH_WEIGHTS[k] * values[k] for k in _HEALTH_WEIGHTS), 1)
+    components = {
+        k: {"value": round(values[k], 4), "weight": _HEALTH_WEIGHTS[k],
+            "contribution": round(100.0 * _HEALTH_WEIGHTS[k] * values[k], 1)}
+        for k in _HEALTH_WEIGHTS
+    }
+    drags = sorted(_HEALTH_WEIGHTS.keys(), key=lambda k: -(_HEALTH_WEIGHTS[k] * (1.0 - values[k])))
+    drivers = [
+        {"component": k, "label": _HEALTH_LABELS[k],
+         "lost_points": round(100.0 * _HEALTH_WEIGHTS[k] * (1.0 - values[k]), 1)}
+        for k in drags if (1.0 - values[k]) > 1e-6
+    ][:3]
+    return {
+        "property_id": property_id, "score": score, "grade": _grade(score),
+        "resident_count": n, "components": components, "drivers": drivers,
+        "top_driver": drivers[0]["label"] if drivers else "healthy across the board",
+    }
+
+
+def property_health(property_id: str, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Composite health (0-100 + letter grade) for one property, from its
+    residents' predictions. Higher = healthier. Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        # Fast bulk path: only the heads health needs, no reason codes.
+        preds = predict_bulk(residents, snapshot, heads=BULK_HEADS)
+        return _health_from_preds(property_id, residents, preds)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_health failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "score": 0.0, "grade": "F",
+                "resident_count": 0, "components": {}, "drivers": [], "top_driver": ""}
+
+
+def portfolio_health(snapshot: date = RESIDENT_SNAPSHOT) -> list:
+    """Ranked property-health list, healthiest first. Memoized by snapshot (data
+    + model are static). Uses the fast bulk path (no reasons, needed heads only).
+    Never raises."""
+    snap_iso = _to_date(snapshot).isoformat()
+    if snap_iso in _PORTFOLIO_CACHE:
+        return _PORTFOLIO_CACHE[snap_iso]
+    try:
+        by_prop: dict = {}
+        for r in load_residents():
+            by_prop.setdefault(r.get("property_id"), []).append(r)
+        ordered = [p for p in RESIDENT_PROPERTY_IDS if p in by_prop]
+        ordered += [p for p in by_prop if p not in ordered]
+        out = []
+        for pid in ordered:
+            residents = by_prop[pid]
+            preds = predict_bulk(residents, snapshot, heads=BULK_HEADS)
+            out.append(_health_from_preds(pid, residents, preds))
+        out.sort(key=lambda h: -h["score"])
+        _PORTFOLIO_CACHE[snap_iso] = out
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_health failed ({type(exc).__name__}: {exc}).")
+        return []
 
 
 # --------------------------------------------------------------------------
@@ -790,19 +1530,20 @@ def get_resident(resident_id: str):
 # Startup + status + model card
 # --------------------------------------------------------------------------
 def ensure_model() -> dict:
-    """Best-effort: train the bundle if missing. Never raises. Clears caches."""
+    """Best-effort: train the bundle if missing/stale. Never raises. Clears caches."""
     try:
-        if ARTIFACT_PATH.exists():
-            _model.cache_clear()
+        if ARTIFACT_PATH.exists() and _model() is not None:
             return {"trained": True, "action": "already_present"}
         import train_residents
 
         train_residents.train()
         _model.cache_clear()
-        return {"trained": ARTIFACT_PATH.exists(), "action": "trained"}
+        _clear_prediction_caches()
+        return {"trained": _model() is not None, "action": "trained"}
     except Exception as exc:  # noqa: BLE001 — startup must never fail
         print(f"residents_risk.ensure_model: training skipped ({type(exc).__name__}: {exc}).")
         _model.cache_clear()
+        _clear_prediction_caches()
         return {"trained": False, "action": "failed", "error": type(exc).__name__}
 
 
@@ -810,72 +1551,75 @@ def status() -> dict:
     """Health/status summary. Never raises."""
     try:
         bundle = _model()
+        head_specs = [
+            {"name": h["name"], "family": h["family"], "kind": h["kind"],
+             "label_window": h["label_window"]}
+            for h in HEADS
+        ]
         if bundle is None:
-            return {
-                "trained": False,
-                "source": "heuristic",
-                "targets": list(TARGETS),
-                "artifact": str(ARTIFACT_PATH),
-            }
+            return {"trained": False, "source": "heuristic", "schema": BUNDLE_SCHEMA,
+                    "heads": head_specs, "targets": list(TARGETS), "artifact": str(ARTIFACT_PATH)}
         return {
-            "trained": True,
-            "source": "model",
-            "targets": list(TARGETS),
-            "metrics": {t: bundle.get(t, {}).get("metrics", {}) for t in TARGETS},
-            "dgp_version": bundle.get("dgp_version"),
-            "seed": bundle.get("seed"),
-            "generated_at": bundle.get("generated_at"),
-            "artifact": str(ARTIFACT_PATH),
+            "trained": True, "source": "model", "schema": BUNDLE_SCHEMA,
+            "heads": head_specs, "targets": list(TARGETS),
+            "metrics": {h["name"]: bundle.get("heads", {}).get(h["name"], {}).get("metrics", {}) for h in HEADS},
+            "dgp_version": bundle.get("dgp_version"), "seed": bundle.get("seed"),
+            "generated_at": bundle.get("generated_at"), "artifact": str(ARTIFACT_PATH),
         }
     except Exception as exc:  # noqa: BLE001
         return {"trained": False, "source": "heuristic", "error": type(exc).__name__}
 
 
 def model_card() -> dict:
-    """The resident-risk model card. Never raises."""
+    """The resident-risk model card (v2). Never raises."""
     bundle = _model()
 
-    def target_card(t: str, kind: str, desc: str) -> dict:
-        sub = (bundle or {}).get(t, {})
+    def head_card(h: dict) -> dict:
+        sub = (bundle or {}).get("heads", {}).get(h["name"], {})
         card = {
-            "target": t,
-            "kind": kind,
-            "description": desc,
-            "features": list(FEATURE_ORDER[t]),
-            "metrics": sub.get("metrics", {}),
+            "name": h["name"], "family": h["family"], "kind": h["kind"],
+            "objective": h["objective"], "label_window": h["label_window"],
+            "learnable": h["learnable"], "features": list(h["feature_order"]),
+            "metrics": sub.get("metrics", {}), "low_confidence": h["low_confidence"],
         }
-        if t in _BAND_EDGES:
-            card["bands"] = BANDS[t]
+        if h["band_edges"]:
+            card["bands"] = BANDS.get(h["name"])
+        if h["eligibility"] is not None:
+            card["eligibility"] = "current_balance>0 (in arrears)" if h["family"] == "cure" else "lease ending within horizon"
         return card
 
     return {
-        "name": "Resident Risk (multi-target)",
-        "version": DGP_VERSION,
+        "name": "Resident Risk (multi-head)", "version": DGP_VERSION, "schema": BUNDLE_SCHEMA,
         "trained_at": (bundle or {}).get("generated_at"),
         "description": (
-            "Four gradient-boosted models estimating next-quarter outcomes for "
-            "current residents from a 5-year rent ledger, trained on SYNTHETIC "
-            "data. Reason codes come from TreeSHAP (model) or transparent weights "
-            "(heuristic fallback)."
+            "A catalog of gradient-boosted heads estimating late-payment, frequency, "
+            "severity, arrears, cure, and retention outcomes for current residents from "
+            "a 5-year rent ledger, trained on SYNTHETIC data. Reason codes come from "
+            "TreeSHAP (model) or transparent weights (heuristic fallback). Legacy "
+            "late/arrears/churn/serious remain as aliases."
         ),
         "intended_use": (
-            "Decision-support for proactive outreach and retention ONLY. NOT for "
-            "eviction, denial, pricing, lease conditioning, or any automated "
-            "action. Serious-delinquency routes to a human reviewer."
+            "Decision-support for proactive outreach and retention ONLY. NOT for eviction, "
+            "denial, pricing, lease conditioning, or any automated action. Serious-"
+            "delinquency routes to a human reviewer."
         ),
-        "targets": [
-            target_card("late", "classifier", "P(any late payment next quarter)."),
-            target_card("arrears", "regressor", "Expected $ balance at the end of next quarter."),
-            target_card("churn", "classifier", "P(non-renewal) for leases ending within 6 months; not applicable otherwise."),
-            target_card("serious", "classifier", "P(serious delinquency: 30+ days late or a full month in arrears). Routes to review."),
+        "families": {fam: list(names) for fam, names in FAMILIES.items()},
+        "heads": [head_card(h) for h in HEADS],
+        "deferred_families": [
+            {"family": "engagement",
+             "reason": "Future maintenance / complaint / login volume is NOT learnable: the DGP stores only static snapshot counts, with no forward engagement panel. Omitted until the DGP simulates one."},
+            {"family": "move_out_timing",
+             "reason": "Intra-lease move-out timing beyond the lease-end date is not modeled by the DGP; served as the lease-end date (rule-derived), not a learned head."},
         ],
         "excluded": EXCLUDED_FEATURES,
         "limitations": [
             "Trained on SYNTHETIC data — not validated on real residents.",
             "Estimates, not guarantees; individual outcomes vary.",
+            "Rare-tail heads (60+/90+ day delinquency) are low-power — treat as directional.",
+            "Long-horizon (12-month) heads are lower-confidence for short-tenure residents.",
             "Missing history is neutral-imputed and lowers confidence, never raising risk.",
             "Never uses race, national origin, sex, familial status, disability, age, or location.",
-            "property/neighborhood are used only to audit fairness, never as model inputs.",
+            "property/neighborhood/display-name are used only for audit or display, never as model inputs.",
             "Not a consumer report; not a substitute for lawful, human-in-the-loop decisions.",
         ],
         "source": "model" if bundle else "heuristic",

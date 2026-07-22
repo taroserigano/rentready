@@ -1,4 +1,4 @@
-import type { ChurnBand, LedgerStatus, RiskBand } from "../../types";
+import type { ChurnBand, HealthGrade, LedgerStatus, RiskBand } from "../../types";
 
 /**
  * Residents tone helpers — mirror the Risk page's riskTone conventions so the
@@ -92,4 +92,79 @@ export function usd(n: number | null | undefined): string {
 export function pct(p: number | null | undefined): string {
   if (p == null || Number.isNaN(p)) return "—";
   return `${Math.round(p * 100)}%`;
+}
+
+// --- Property health --------------------------------------------------------
+
+/**
+ * Letter grade → tone-class suffix (same good/warn/bad vocabulary as the risk
+ * bands, so the ranking's meters and chips match the rest of the app). Health
+ * is "higher is better", so A/B read good, C warns, D/F read bad. Meaning never
+ * rests on colour — the grade letter and score always accompany the tone.
+ */
+export function gradeTone(
+  grade: HealthGrade | string,
+): "good" | "warn" | "bad" | "info" {
+  switch (grade) {
+    case "A":
+    case "B":
+      return "good";
+    case "C":
+      return "warn";
+    case "D":
+    case "F":
+      return "bad";
+    default:
+      return "info";
+  }
+}
+
+// --- Multi-head labels ------------------------------------------------------
+
+/** Family → section heading in the resident detail. */
+export const FAMILY_LABEL: Record<string, string> = {
+  late: "Late-payment outlook",
+  frequency: "How often",
+  severity: "How severe",
+  arrears: "Arrears ($)",
+  cure: "Getting current",
+  retention: "Retention",
+};
+
+/** Family → one-line supporting description. */
+export const FAMILY_HINT: Record<string, string> = {
+  late: "Chance of any late/partial/missed payment across each horizon.",
+  frequency: "Expected number of trouble months over the next year.",
+  severity: "How bad lateness could get — days late and delinquency depth.",
+  arrears: "Projected dollar balance owed at each horizon.",
+  cure: "Whether and when an outstanding balance clears.",
+  retention: "Chance the resident does not renew (renewal window only).",
+};
+
+/** Head name → short human label used on tiles/gauges. */
+export const HEAD_LABEL: Record<string, string> = {
+  late_1m: "Next month",
+  late_3m: "Next quarter",
+  late_6m: "Next 6 months",
+  late_12m: "Next year",
+  late_count_12m: "Late months",
+  missed_count_12m: "Missed payments",
+  max_days_late_12m: "Max days late",
+  p_30d_12m: "30+ days late",
+  p_60d_12m: "60+ days late",
+  p_90d_12m: "90+ days late",
+  delinquency_bucket_12m: "Worst delinquency",
+  serious: "Serious delinquency",
+  arrears_3m: "In 3 months",
+  arrears_12m: "In 12 months",
+  peak_balance_12m: "Peak balance",
+  p_cure_6m: "Clears in 6 months",
+  months_to_cure: "Time to clear",
+  churn: "Non-renewal (≤6mo)",
+  churn_12m: "Non-renewal (≤12mo)",
+};
+
+/** Fall back to a de-slugged label for any head the map doesn't name. */
+export function headLabel(name: string): string {
+  return HEAD_LABEL[name] ?? name.replace(/_/g, " ");
 }

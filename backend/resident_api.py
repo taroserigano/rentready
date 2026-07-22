@@ -14,12 +14,15 @@ DECISION-SUPPORT ONLY: proactive outreach and retention. Never eviction,
 denial, pricing, lease conditioning, or automated action.
 """
 
+import json
 import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 import graph
+import residents_chat
 import residents_risk
 import store
 from models import (
@@ -28,10 +31,14 @@ from models import (
     ChurnPrediction,
     LatePrediction,
     LedgerStats,
+    PortfolioHealthResponse,
     PortfolioSummary,
+    PropertyHealth,
     PropertyResidentRollup,
     PropertyResidentsResponse,
     Resident,
+    ResidentChatRequest,
+    ResidentChatResponse,
     ResidentDetail,
     ResidentListResponse,
     ResidentModelCard,
@@ -56,10 +63,15 @@ def _resident_or_404(resident_id: str) -> dict:
     return r
 
 
-def _score_row(resident: dict) -> tuple[ResidentRow, dict]:
+def _score_row(resident: dict, pred: dict | None = None) -> tuple[ResidentRow, dict]:
     """Score one resident and build (table row, aggregate record). The aggregate
-    record carries just the numbers the rollups need."""
-    pred = residents_risk.predict_resident(resident)
+    record carries just the numbers the rollups need. ``pred`` may be a
+    precomputed (fast, no-reasons) prediction from the batched bulk scorer."""
+    if pred is None:
+        # Fast bulk path: only the heads the row/rollup need, no TreeSHAP reasons.
+        pred = residents_risk.predict_resident(
+            resident, with_reasons=False, heads=residents_risk.BULK_HEADS
+        )
     feats = residents_risk.extract_resident_features(resident)
 
     late = pred.get("late") or {}
@@ -74,6 +86,7 @@ def _score_row(resident: dict) -> tuple[ResidentRow, dict]:
         resident_id=resident.get("resident_id", ""),
         property_id=resident.get("property_id", ""),
         unit_id=resident.get("unit_id", ""),
+        name=resident.get("name", ""),
         base_rent=float(resident.get("base_rent") or 0.0),
         tenure_months=int(round(float(feats.get("tenure_months", 0.0)))),
         late_probability=float(late.get("probability") or 0.0),
@@ -84,7 +97,7 @@ def _score_row(resident: dict) -> tuple[ResidentRow, dict]:
         serious_probability=float(serious.get("probability") or 0.0),
         serious_band=serious.get("band", "low"),
         current_balance=round(float(feats.get("current_balance", 0.0)), 2),
-        top_driver=residents_risk.top_driver(late),
+        top_driver=residents_risk.heuristic_top_driver(feats),
     )
 
     agg = {
@@ -106,9 +119,17 @@ def _score_many(residents: list) -> tuple[list, list, str]:
     rows: list = []
     aggs: list = []
     source = "heuristic"
-    for r in residents or []:
+    # One VECTORIZED model pass over the whole batch (one call per head, not one
+    # per resident) — the fast path. Reason codes are skipped for bulk.
+    try:
+        preds = residents_risk.predict_bulk(
+            residents or [], heads=residents_risk.BULK_HEADS
+        )
+    except Exception:  # noqa: BLE001 — fall back to per-resident inside the loop
+        preds = [None] * len(residents or [])
+    for r, pred in zip(residents or [], preds):
         try:
-            row, agg = _score_row(r)
+            row, agg = _score_row(r, pred)
             rows.append(row)
             aggs.append(agg)
         except Exception as exc:  # noqa: BLE001 — skip a bad row, never fail the batch
@@ -335,6 +356,140 @@ def property_residents(property_id: str) -> PropertyResidentsResponse:
         count=len(rows),
         rollup=rollup,
         source=source,
+    )
+
+
+@router.get("/residents/health")
+def residents_health() -> PortfolioHealthResponse:
+    """Regional-director property-health ranking (healthiest first). Composite
+    0-100 score + letter grade per property, from its residents' predictions,
+    with the property display name attached and an explicit worst-property
+    callout. Always 200 — health degrades server-side and never raises."""
+    t0 = time.perf_counter()
+    ranked = residents_risk.portfolio_health()
+
+    # Attach the property display name (map property_id -> name), like
+    # /residents/properties does. Names are cosmetic — fall back to the id.
+    names: dict[str, str] = {}
+    try:
+        for p in graph.load_properties():
+            pid = p.get("id")
+            if pid:
+                names[pid] = p.get("name") or pid
+    except Exception:  # noqa: BLE001
+        pass
+
+    items = [
+        PropertyHealth(**{**h, "name": names.get(h.get("property_id"), h.get("property_id") or "")})
+        for h in ranked
+    ]
+    # portfolio_health already sorts best->worst; be explicit and defensive.
+    items.sort(key=lambda h: h.score, reverse=True)
+
+    try:
+        source = "model" if residents_risk.status().get("trained") else "heuristic"
+    except Exception:  # noqa: BLE001
+        source = "heuristic"
+
+    store.log_event(
+        endpoint="residents_health",
+        latency_ms=(time.perf_counter() - t0) * 1000,
+        source=source,
+        meta={
+            "properties": len(items),
+            "healthiest": items[0].property_id if items else "",
+            "needs_attention": items[-1].property_id if items else "",
+        },
+    )
+    return PortfolioHealthResponse(
+        properties=items,
+        count=len(items),
+        healthiest=items[0] if items else None,
+        needs_attention=items[-1] if items else None,
+        snapshot_date=residents_risk.RESIDENT_SNAPSHOT.isoformat(),
+        source=source,
+    )
+
+
+@router.post("/residents/chat")
+def residents_chat_ask(req: ResidentChatRequest) -> ResidentChatResponse:
+    """Residents decision-support chat. ALWAYS 200 — the agent degrades
+    server-side and never raises. ``resident_id`` scopes to one resident;
+    ``property_id`` (or no id) scopes to property / portfolio health. Unknown ids
+    deflect gracefully (never a 404)."""
+    t0 = time.perf_counter()
+    history = [m.model_dump() for m in (req.history or [])]
+    result = residents_chat.answer(
+        question=req.question,
+        resident_id=req.resident_id,
+        property_id=req.property_id,
+        history=history,
+    )
+    store.log_event(
+        endpoint="residents_chat",
+        latency_ms=(time.perf_counter() - t0) * 1000,
+        source=result.get("source"),
+        meta={
+            "intent": result.get("intent"),
+            "scope": result.get("scope"),
+            "resident_id": req.resident_id or "",
+            "property_id": req.property_id or "",
+            "sources": len(result.get("sources") or []),
+        },
+    )
+    return ResidentChatResponse(**result)
+
+
+@router.post("/residents/chat/stream")
+def residents_chat_stream(req: ResidentChatRequest) -> StreamingResponse:
+    """Stream a residents-chat answer as Server-Sent Events: a ``meta`` frame
+    (the deterministic pass — scope, intent, artifact, follow_ups) first, then
+    ``token`` frames as the LLM prose streams, then a final ``done`` (source).
+    Degrades to a single deterministic token on any error — the generator never
+    crashes the response, and this endpoint never 404s."""
+    t0 = time.perf_counter()
+    history = [m.model_dump() for m in (req.history or [])]
+
+    def _event_stream():
+        intent = ""
+        scope = ""
+        source = "rules"
+        try:
+            for event in residents_chat.answer_stream(
+                question=req.question,
+                resident_id=req.resident_id,
+                property_id=req.property_id,
+                history=history,
+            ):
+                etype = event.get("type")
+                if etype == "meta":
+                    intent = event.get("intent", "")
+                    scope = event.get("scope", "")
+                elif etype == "done":
+                    source = event.get("source", "rules")
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:  # noqa: BLE001 — last-ditch guard
+            print(f"resident_api: chat stream failed ({type(exc).__name__}: {exc}).")
+            fallback = {"type": "token", "text": "Sorry, I hit a snag. Please try again."}
+            yield f"data: {json.dumps(fallback)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'source': 'rules'})}\n\n"
+        finally:
+            store.log_event(
+                endpoint="residents_chat_stream",
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                source=source,
+                meta={
+                    "intent": intent,
+                    "scope": scope,
+                    "resident_id": req.resident_id or "",
+                    "property_id": req.property_id or "",
+                },
+            )
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

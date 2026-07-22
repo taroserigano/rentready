@@ -1,40 +1,46 @@
-"""Generate the SYNTHETIC resident dataset — 5-year rent ledgers + labels.
+"""Generate the SYNTHETIC resident dataset — 5-year rent ledgers + labels (v2).
 
 Deterministic (seed=42) and snapshot-relative (default RESIDENT_SNAPSHOT; NO
 ``datetime.now()`` anywhere), so re-running reproduces data/residents.json byte
-for byte. ~250 residents across 10 frozen properties, each with a 60-month rent
-ledger.
+for byte. ~250 residents across 10 frozen properties, each with a rent ledger of
+up to 60 months.
 
 Data-generating process
 ------------------------
 Per resident we draw latent traits (reliability, income stability, rent burden,
 engagement, stay propensity), then simulate a monthly payment panel with:
-  * autocorrelation (ρ·prev-trouble) so lateness clusters into streaks —
-    ESSENTIAL for a learnable, honest task (not month-independent noise);
-  * transient burden shocks (1–3 month spikes);
+  * autocorrelation (rho·prev-trouble) so lateness clusters into streaks;
+  * transient burden shocks (1-3 month spikes);
   * mild December/January seasonality.
 Each month maps a trouble log-odds -> payment fraction -> status
 (paid / paid_late / partial / missed), accumulating arrears into balance_after.
 
-Leakage safety (non-negotiable)
---------------------------------
-We simulate HISTORY_MONTHS months of history ending the month BEFORE the
-snapshot, PLUS LABEL_HORIZON_MONTHS future months. The four labels are computed
-ONLY from that future window, then the future is DISCARDED — the serialized
-ledger holds exactly HISTORY_MONTHS entries, none dated on/after the snapshot.
-Labels are never written into residents.json; ``build_training_frame`` returns
-them separately for train_residents / residents_eval.
+Leakage safety + determinism (non-negotiable) — v2 substream split
+------------------------------------------------------------------
+HISTORY is drawn from the per-resident stream ``rng = default_rng(SEED+idx)``,
+EXACTLY as in v1 (same draw order and sizes), so the serialized ledger is
+BYTE-IDENTICAL to the committed v1 dataset. The FUTURE label window is drawn from
+an INDEPENDENT substream ``default_rng(SeedSequence([SEED+idx, 0xF0]))`` and
+extended to ``FUTURE_HORIZON_MONTHS`` (15) — long enough for clean 1/3/6/12-month
+labels. Because the future uses its own generator, lengthening it never perturbs
+the history bytes. The global intercepts (c_late / c_sev / c_churn) are fit on
+the v1-compatible 3-month tail of the HISTORY stream, so they equal v1's values
+and the history simulation (which depends on c_late/c_sev) is unchanged.
 
-Global intercepts are bisected (like train_risk) so the label base rates land
-on target: late ≈ 0.30, serious ≈ 0.10, churn ≈ 0.35 (eligible). ~3% of binary
-labels are flipped so the task is learnable but NOT trivially separable.
+The serialized ledger holds exactly ``hist_len`` entries, none dated on/after the
+snapshot. Labels are computed ONLY from the discarded future window and are never
+written into residents.json; ``build_training_frame`` returns them separately.
+
+Global intercepts are bisected so the legacy label base rates land on target:
+late ~ 0.30, serious ~ 0.10, churn ~ 0.35 (eligible). ~3% of BINARY head labels
+are flipped so the tasks are learnable but not trivially separable.
 
 Run:  python generate_residents.py   |   python -m generate_residents
 """
 
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -49,31 +55,26 @@ from settings import DATA_DIR  # noqa: E402
 SEED = rr.SEED
 RESIDENTS_PER_PROPERTY = 25
 DATA_PATH = DATA_DIR / "residents.json"
+FUTURE_SEQ_TAG = 0xF0  # SeedSequence tag for the independent future substream
 
 # Monthly trouble log-odds weights (direction mirrors the feature policy).
-# These are deliberately large relative to the per-month Bernoulli noise so a
-# resident's realized 60-month history is a strong estimator of their future
-# propensity — the whole point of keeping 5 years of ledger.
 _W_REL = 4.4        # low reliability -> more trouble
 _W_BURDEN = 6.5     # rent burden above 0.30 -> more trouble
 _W_UNSTABLE = 2.2   # unstable income -> more trouble
 _RHO = 1.15         # autocorrelation on previous-month trouble (streaks)
 _SEASONAL = 0.12    # small Dec/Jan bump
 
-# Severity weights (given a trouble month, how bad it is) — trait-driven so
-# past severity predicts future severity.
+# Severity weights (given a trouble month, how bad it is).
 _WS_REL = 3.2
 _WS_BURDEN = 4.2
 
-# Churn (non-renewal) log-odds weights among horizon-eligible leases. Leans on
-# OBSERVABLE factors (burden, engagement, recent lateness, renewal offer) so the
-# label is learnable from features, with a smaller latent stay-propensity part.
-_CH_STAY = 1.1      # low stay propensity -> churn (small latent part)
-_CH_BURDEN = 4.2    # rent burden -> churn (observable via rent_to_income)
-_CH_ENGAGE = 1.9    # low engagement -> churn (observable via logins/complaints)
-_CH_LATE = 0.32     # recent lateness nudges churn (observable)
-_CH_RENEWAL = 0.6   # a renewal offer reduces churn
-_CH_RENEWALS = 0.22  # prior renewals (loyalty) reduce churn
+# Churn (non-renewal) log-odds weights among horizon-eligible leases.
+_CH_STAY = 1.1
+_CH_BURDEN = 4.2
+_CH_ENGAGE = 1.9
+_CH_LATE = 0.32
+_CH_RENEWAL = 0.6
+_CH_RENEWALS = 0.22
 
 _FLIP_RATE = 0.03
 _TARGET_LATE = 0.30
@@ -81,6 +82,35 @@ _TARGET_SERIOUS = 0.10
 _TARGET_CHURN = 0.35
 
 LATE_FEE = 60.0  # flat late fee applied on any non-"paid" month
+
+FUTURE_MONTHS = rr.FUTURE_HORIZON_MONTHS  # 15
+CURE_EPS = rr.CURE_EPS
+
+# Binary head names (labels these get the 3% flip). Derived from the registry.
+_BINARY_HEADS = [h["name"] for h in rr.HEADS if h["kind"] == "binary"]
+
+# Deterministic gender-neutral-ish display-name pools (DISPLAY ONLY — never a
+# feature; see EXCLUDED_FEATURES). Indexed by resident number for determinism.
+_FIRST_NAMES = [
+    "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery",
+    "Quinn", "Skyler", "Cameron", "Reese", "Devon", "Harper", "Rowan", "Emerson",
+    "Finley", "Sage", "Dakota", "Hayden", "Kendall", "Logan", "Parker", "Elliot",
+    "Marlowe", "Blake", "Charlie", "Frankie", "Sam", "Toni", "Robin", "Drew",
+    "Lane", "Micah", "Noel", "Shawn", "Adrian", "Bailey", "Corey", "Dana",
+]
+_LAST_NAMES = [
+    "Rivera", "Nguyen", "Patel", "Kim", "Garcia", "Okafor", "Silva", "Cohen",
+    "Alvarez", "Haddad", "Ivanov", "Yamamoto", "Mbeki", "Rossi", "Novak", "Costa",
+    "Reyes", "Flores", "Bauer", "Larsen", "Duarte", "Sato", "Abbas", "Weber",
+    "Mensah", "Petrov", "Khan", "Torres", "Bianchi", "Vargas", "Ito", "Sharma",
+    "Diaz", "Fischer", "Moreno", "Park", "Osei", "Romano", "Serrano", "Wan",
+]
+
+
+def _display_name(idx: int) -> str:
+    first = _FIRST_NAMES[idx % len(_FIRST_NAMES)]
+    last = _LAST_NAMES[(idx // len(_FIRST_NAMES) + idx * 7) % len(_LAST_NAMES)]
+    return f"{first} {last}"
 
 
 def _sigmoid(z):
@@ -97,19 +127,14 @@ def _add_months(d: date, n: int) -> date:
 # --------------------------------------------------------------------------
 def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) -> list:
     """One dict of per-resident latent traits + immutable facts + fixed RNG
-    draws. Everything that does NOT depend on the bisected intercepts, so the
-    intercept search can re-simulate deterministically.
+    draws. HISTORY draws use ``rng = default_rng(SEED+idx)`` in the EXACT v1 order
+    and sizes (byte-identical ledgers). FUTURE draws use an INDEPENDENT substream
+    so extending the future window never perturbs history.
 
-    ``n_per_property`` defaults to 25 (the committed residents.json). Training
-    and eval pass larger cohorts of the SAME DGP for stable metrics; per-resident
-    RNG is anchored on ``SEED + idx`` so the first 25 units of the first property
-    always reproduce the committed residents."""
+    ``n_per_property`` defaults to 25 (the committed residents.json)."""
     import graph
 
     props = {p["id"]: p for p in graph.load_properties()}
-    # History ends the month BEFORE the snapshot (all history strictly precedes
-    # the snapshot -> airtight leakage guard). Each resident's first ledger month
-    # is computed per-resident from their own tenure below.
 
     metas = []
     idx = 0
@@ -121,11 +146,10 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
         for u in range(n_per_property):
             rng = np.random.default_rng(SEED + idx)
 
-            # Wider trait spread => more separable residents (higher, honest AUC).
+            # ---- v1 HISTORY stream (draw order + sizes preserved verbatim) ----
             reliability = float(rng.beta(3.5, 2.0))
             income_stability = float(rng.beta(3.5, 2.0))
             engagement = float(rng.beta(3.0, 3.0))
-            # Income drawn from the property's income multiplier -> rent burden.
             income_multiple = float(np.clip(rng.normal(min_mult + 0.6, 0.9), 1.4, 8.0))
             base_rent = round(prop_rent * float(rng.uniform(0.96, 1.06)), 2)
             monthly_income = round(base_rent * income_multiple, 2)
@@ -137,17 +161,11 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
                 0.0, 1.0,
             ))
 
-            # TRUE tenure (months since move-in): a realistic spread from
-            # brand-new (~2-3 months) up to long-term (capped ~96 months). The
-            # serialized ledger holds only the resident's ACTUAL months, capped
-            # at HISTORY_MONTHS — so a 10-month resident has a 10-entry ledger
-            # and a 7-year resident keeps the most recent 60.
             true_tenure = int(np.clip(round(rng.gamma(2.2, 22.0)), 2, 96))
             hist_len = min(true_tenure, rr.HISTORY_MONTHS)   # == serialized ledger length
-            gen_months = hist_len + rr.LABEL_HORIZON_MONTHS  # +3 future months for labels
+            gen_months = hist_len + rr.LABEL_HORIZON_MONTHS  # v1 stream length (history + 3-mo tail)
             lease_term = int(rng.choice([12, 12, 12, 6, 18, 24]))
             move_in = _add_months(snapshot, -true_tenure)
-            # Current lease end: next term boundary strictly after the snapshot.
             renewals = 0
             lease_end = _add_months(move_in, lease_term)
             while lease_end <= snapshot:
@@ -163,18 +181,16 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
             logins = int(np.clip(rng.poisson(2 + 18 * engagement), 0, 120))
             unit_beds = int(np.clip(base_beds + rng.integers(-1, 2), 0, 5))
 
-            # Fixed per-month random draws over the resident's own panel length
-            # (hist_len history + 3 future). The intercept bisection stays
-            # deterministic in the intercepts, with feedback through ρ.
+            # v1 per-month arrays at size gen_months (history uses [:hist_len];
+            # the 3-mo tail feeds ONLY the v1-compatible intercept bisection).
             u_trouble = rng.random(gen_months)
             u_sev = rng.random(gen_months)
-            u_kind = rng.random(gen_months)      # partial vs missed split
+            u_kind = rng.random(gen_months)
             frac_draw = rng.uniform(0.2, 0.8, gen_months)
-            days_mild = rng.gamma(2.0, 5.0, gen_months)   # paid_late days
+            days_mild = rng.gamma(2.0, 5.0, gen_months)
             days_severe = rng.gamma(3.0, 12.0, gen_months)
             catchup_draw = rng.uniform(0.3, 0.7, gen_months)
             notice_resp = rng.random(gen_months)
-            # Shocks: additive burden spikes lasting 1–3 months.
             shock = np.zeros(gen_months)
             m = 0
             while m < gen_months:
@@ -187,15 +203,38 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
                 else:
                     m += 1
             u_churn = float(rng.random())
-            u_flip = rng.random(3)
-            # History is a contiguous run of hist_len months ENDING at the
-            # snapshot month; the 3 label months follow it (t+1..t+3) and are
-            # never serialized. First ledger period = snapshot - (hist_len - 1).
+            u_flip = rng.random(3)  # v1 draw kept so the rng stream is unchanged
+            # ---- end v1 HISTORY stream (rng untouched beyond this point) ------
+
             first_month = _add_months(snapshot, -(hist_len - 1))
+
+            # ---- INDEPENDENT future substream (never perturbs history) --------
+            frng = np.random.default_rng(np.random.SeedSequence([SEED + idx, FUTURE_SEQ_TAG]))
+            f_u_trouble = frng.random(FUTURE_MONTHS)
+            f_u_sev = frng.random(FUTURE_MONTHS)
+            f_u_kind = frng.random(FUTURE_MONTHS)
+            f_frac = frng.uniform(0.2, 0.8, FUTURE_MONTHS)
+            f_days_mild = frng.gamma(2.0, 5.0, FUTURE_MONTHS)
+            f_days_severe = frng.gamma(3.0, 12.0, FUTURE_MONTHS)
+            f_catchup = frng.uniform(0.3, 0.7, FUTURE_MONTHS)
+            f_shock = np.zeros(FUTURE_MONTHS)
+            m = 0
+            while m < FUTURE_MONTHS:
+                if frng.random() < 0.04:
+                    dur = int(frng.integers(1, 4))
+                    mag = float(frng.uniform(0.8, 1.8))
+                    for k in range(m, min(m + dur, FUTURE_MONTHS)):
+                        f_shock[k] += mag
+                    m += dur
+                else:
+                    m += 1
+            # Binary-head label flips, drawn LAST from the future substream.
+            u_flip_v2 = frng.random(len(_BINARY_HEADS))
 
             metas.append({
                 "idx": idx,
                 "resident_id": f"RES-{idx + 1:04d}",
+                "name": _display_name(idx),
                 "property_id": pid,
                 "unit_id": f"{pid}-U{u + 1:03d}",
                 "unit_bedrooms": unit_beds,
@@ -236,19 +275,31 @@ def _build_meta(snapshot: date, n_per_property: int = RESIDENTS_PER_PROPERTY) ->
                 "shock": shock,
                 "u_churn": u_churn,
                 "u_flip": u_flip,
+                # future substream draws (independent of history)
+                "f_u_trouble": f_u_trouble,
+                "f_u_sev": f_u_sev,
+                "f_u_kind": f_u_kind,
+                "f_frac": f_frac,
+                "f_days_mild": f_days_mild,
+                "f_days_severe": f_days_severe,
+                "f_catchup": f_catchup,
+                "f_shock": f_shock,
+                "u_flip_v2": u_flip_v2,
             })
             idx += 1
     return metas
 
 
 # --------------------------------------------------------------------------
-# Panel simulation (deterministic given the intercepts + fixed draws)
+# Panel simulation
 # --------------------------------------------------------------------------
 def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
-    """Simulate the resident's own panel (hist_len history + 3 future months).
-    Returns the serialized ledger (exactly hist_len entries) plus raw
-    future-window quantities for label computation. The 3 future months are
-    ALWAYS simulated (labels need them) but never serialized."""
+    """Simulate the resident's history (byte-identical to v1) plus BOTH futures:
+      * ``future_v1`` — the v1 3-month tail from the HISTORY stream, used ONLY to
+        reproduce v1's intercept bisection so history bytes are unchanged;
+      * ``future`` — the v2 15-month window from the INDEPENDENT substream, used
+        for all v2 head labels. Continues balance + prev_trouble from history end.
+    Returns the serialized ledger (exactly hist_len entries) + both futures."""
     base_rent = meta["base_rent"]
     rel = meta["reliability"]
     burden = meta["rent_burden"]
@@ -262,8 +313,11 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
     ledger = []
     balance = 0.0
     prev_trouble = 0
-    future = []  # (status, days_late, balance_after) for the label window
+    future_v1 = []
+    bal_hist_end = 0.0
+    prev_hist_end = 0
 
+    # ---- v1 loop (history + 3-mo tail): identical to v1, byte-for-byte -------
     for m in range(gen_months):
         period_date = _add_months(first_month, m)
         seasonal = _SEASONAL if period_date.month in (12, 1) else 0.0
@@ -302,19 +356,18 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
             if not severe:
                 status = "paid_late"
                 days_late = int(np.clip(round(1 + meta["days_mild"][m]), 1, 29))
-                amount_paid = rent_charged  # full rent, just late (fee accrues)
+                amount_paid = rent_charged
             elif meta["u_kind"][m] < 0.5:
                 status = "partial"
                 days_late = int(np.clip(round(5 + meta["days_severe"][m]), 5, 90))
                 amount_paid = round(meta["frac_draw"][m] * rent_charged, 2)
             else:
                 status = "missed"
-                days_late = 30  # nothing paid this cycle -> 30+ days delinquent
+                days_late = 30
                 amount_paid = 0.0
             balance = max(0.0, balance + rent_charged + late_fee - amount_paid)
 
         on_time = status == "paid"
-        # Notices when the month is troubled; response ~ engagement.
         notices_sent = 0 if on_time else int(1 + (1 if status == "missed" else 0))
         notice_responded = 0
         if notices_sent and meta["notice_resp"][m] < meta["engagement"]:
@@ -322,12 +375,6 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
 
         paid_date = None
         if amount_paid > 0:
-            # 1st of month + days_late. A late payment on a very recent month can
-            # settle on/after the snapshot; as of the snapshot that payment is
-            # still clearing, so we leave paid_date None (guarantees no ledger
-            # entry is dated on/after the snapshot — the leakage guard).
-            from datetime import timedelta
-
             settled = period_date + timedelta(days=days_late)
             paid_date = settled.isoformat() if settled <= snapshot else None
 
@@ -346,42 +393,174 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
         }
         if m < hist_len:
             ledger.append(entry)
+            if m == hist_len - 1:
+                bal_hist_end = balance
+                prev_hist_end = prev_trouble
         else:
-            future.append({"status": status, "days_late": int(days_late), "balance_after": round(balance, 2)})
+            future_v1.append({"status": status, "days_late": int(days_late), "balance_after": round(balance, 2)})
 
-    return {"ledger": ledger, "future": future, "base_rent": base_rent}
+    # ---- v2 future window (independent substream), continuing history state --
+    future = _simulate_future(meta, bal_hist_end, prev_hist_end, c_late, c_sev, snapshot)
+
+    return {"ledger": ledger, "future_v1": future_v1, "future": future,
+            "base_rent": base_rent, "current_balance": round(bal_hist_end, 2)}
+
+
+def _simulate_future(meta: dict, balance: float, prev_trouble: int,
+                     c_late: float, c_sev: float, snapshot: date) -> list:
+    """Simulate FUTURE_MONTHS forward months from the independent substream,
+    continuing from the history-end (balance, prev_trouble). Same monthly logic
+    as history; each future dict carries everything the head labels need."""
+    base_rent = meta["base_rent"]
+    rel = meta["reliability"]
+    burden = meta["rent_burden"]
+    unstable = 1.0 - meta["income_stability"]
+    fshock = meta["f_shock"]
+    future = []
+    for j in range(FUTURE_MONTHS):
+        period_date = _add_months(snapshot, j + 1)
+        seasonal = _SEASONAL if period_date.month in (12, 1) else 0.0
+        z = (
+            c_late
+            + _W_REL * (1.0 - rel)
+            + _W_BURDEN * (burden - 0.30)
+            + _W_UNSTABLE * unstable
+            + _RHO * prev_trouble
+            + seasonal
+            + fshock[j]
+        )
+        trouble = meta["f_u_trouble"][j] < _sigmoid(z)
+        rent_charged = base_rent
+        if not trouble:
+            prev_trouble = 0
+            status = "paid"
+            days_late = 0
+            late_fee = 0.0
+            catchup = min(balance, meta["f_catchup"][j] * base_rent)
+            amount_paid = rent_charged + catchup
+            balance = max(0.0, balance + rent_charged - amount_paid)
+        else:
+            prev_trouble = 1
+            late_fee = LATE_FEE
+            z_sev = (
+                c_sev
+                + _WS_REL * (1.0 - rel)
+                + _WS_BURDEN * (burden - 0.30)
+                + 0.4 * _RHO * prev_trouble
+                + fshock[j]
+            )
+            severe = meta["f_u_sev"][j] < _sigmoid(z_sev)
+            if not severe:
+                status = "paid_late"
+                days_late = int(np.clip(round(1 + meta["f_days_mild"][j]), 1, 29))
+                amount_paid = rent_charged
+            elif meta["f_u_kind"][j] < 0.5:
+                status = "partial"
+                days_late = int(np.clip(round(5 + meta["f_days_severe"][j]), 5, 90))
+                amount_paid = round(meta["f_frac"][j] * rent_charged, 2)
+            else:
+                status = "missed"
+                days_late = 30
+                amount_paid = 0.0
+            balance = max(0.0, balance + rent_charged + late_fee - amount_paid)
+        future.append({
+            "status": status,
+            "days_late": int(days_late),
+            "balance_after": round(balance, 2),
+            "amount_paid": round(amount_paid, 2),
+            "rent_charged": round(rent_charged, 2),
+        })
+    return future
 
 
 # --------------------------------------------------------------------------
-# Labels from the (discarded) future window ONLY
+# Labels
 # --------------------------------------------------------------------------
-def _labels(sim: dict, meta: dict, c_churn: float) -> dict:
-    future = sim["future"]
+def _labels_v1(sim: dict, meta: dict, c_churn: float) -> dict:
+    """The v1 (legacy) labels from the 3-month history tail. Used ONLY by the
+    intercept bisection so c_late / c_sev / c_churn reproduce v1 exactly."""
+    future = sim["future_v1"]
     base_rent = sim["base_rent"]
     late = int(any(f["status"] != "paid" for f in future))
     serious = int(any(f["days_late"] >= 30 or f["balance_after"] >= base_rent for f in future))
     arrears = float(future[-1]["balance_after"]) if future else 0.0
-
-    eligible = 0 < meta["months_to_lease_end"] <= rr.CHURN_HORIZON_MONTHS
-    churn = None
-    if eligible:
-        # Recent lateness comes from HISTORY only (no leakage): last 12 months.
-        recent_late = sum(1 for e in sim["ledger"][-12:] if e["status"] != "paid")
-        z = (
-            c_churn
-            + _CH_STAY * (0.5 - meta["stay_propensity"]) * 2.0
-            + _CH_BURDEN * (meta["rent_burden"] - 0.30)
-            + _CH_ENGAGE * (0.5 - meta["engagement"]) * 2.0
-            + _CH_LATE * recent_late
-            - _CH_RENEWAL * (1.0 if meta["renewal_offer_sent"] else 0.0)
-            - _CH_RENEWALS * meta["prior_renewals"]
-        )
-        churn = int(meta["u_churn"] < _sigmoid(z))
+    churn = _churn_label(sim, meta, c_churn) if (0 < meta["months_to_lease_end"] <= rr.CHURN_HORIZON_MONTHS) else None
     return {"late": late, "serious": serious, "arrears": round(arrears, 2), "churn": churn}
 
 
+def _churn_label(sim: dict, meta: dict, c_churn: float):
+    """Non-renewal decision (uses HISTORY-only recent lateness; no leakage)."""
+    recent_late = sum(1 for e in sim["ledger"][-12:] if e["status"] != "paid")
+    z = (
+        c_churn
+        + _CH_STAY * (0.5 - meta["stay_propensity"]) * 2.0
+        + _CH_BURDEN * (meta["rent_burden"] - 0.30)
+        + _CH_ENGAGE * (0.5 - meta["engagement"]) * 2.0
+        + _CH_LATE * recent_late
+        - _CH_RENEWAL * (1.0 if meta["renewal_offer_sent"] else 0.0)
+        - _CH_RENEWALS * meta["prior_renewals"]
+    )
+    return int(meta["u_churn"] < _sigmoid(z))
+
+
+def _emit_labels(sim: dict, meta: dict, c_churn: float) -> dict:
+    """All v2 head labels from the discarded 15-month future window. Keyed by head
+    name. Eligibility-gated heads return None when ineligible."""
+    fut = sim["future"]
+    base_rent = sim["base_rent"]
+    current_balance = sim["current_balance"]
+
+    def any_late(k):
+        return int(any(f["status"] != "paid" for f in fut[:k]))
+
+    w12 = fut[:12]
+    days12 = [f["days_late"] for f in w12]
+    max_days = max(days12) if days12 else 0
+    bal12 = [f["balance_after"] for f in w12]
+
+    labels = {
+        "late_1m": any_late(1),
+        "late_3m": any_late(3),
+        "late_6m": any_late(6),
+        "late_12m": any_late(12),
+        "late_count_12m": int(sum(1 for f in w12 if f["status"] != "paid")),
+        "missed_count_12m": int(sum(1 for f in w12 if f["status"] == "missed")),
+        "max_days_late_12m": float(max_days),
+        "p_30d_12m": int(any(d >= 30 for d in days12)),
+        "p_60d_12m": int(any(d >= 60 for d in days12)),
+        "p_90d_12m": int(any(d >= 90 for d in days12)),
+        "delinquency_bucket_12m": rr._delinq_bucket(max_days),
+        "serious": int(any(f["days_late"] >= 30 or f["balance_after"] >= base_rent for f in fut[:3])),
+        "arrears_3m": round(float(fut[2]["balance_after"]) if len(fut) >= 3 else 0.0, 2),
+        "arrears_12m": round(float(fut[11]["balance_after"]) if len(fut) >= 12 else 0.0, 2),
+        "peak_balance_12m": round(float(max(bal12)) if bal12 else 0.0, 2),
+    }
+
+    # Cure heads — only for residents currently carrying a balance.
+    if current_balance > CURE_EPS:
+        cure_month = None
+        for k, f in enumerate(fut[:rr.CURE_HORIZON_MONTHS], start=1):
+            if f["balance_after"] <= CURE_EPS:
+                cure_month = k
+                break
+        labels["p_cure_6m"] = int(any(f["balance_after"] <= CURE_EPS for f in fut[:6]))
+        labels["months_to_cure"] = {
+            "duration": cure_month if cure_month is not None else rr.CURE_HORIZON_MONTHS,
+            "event": 1 if cure_month is not None else 0,
+        }
+    else:
+        labels["p_cure_6m"] = None
+        labels["months_to_cure"] = None
+
+    # Retention heads — eligibility by lease timing.
+    mtle = meta["months_to_lease_end"]
+    churn_val = _churn_label(sim, meta, c_churn)
+    labels["churn"] = churn_val if (0 < mtle <= rr.CHURN_HORIZON_MONTHS) else None
+    labels["churn_12m"] = churn_val if (0 < mtle <= rr.CHURN_12M_HORIZON_MONTHS) else None
+    return labels
+
+
 def _bisect(fn, target, lo=-12.0, hi=12.0, iters=50):
-    """Find intercept c so mean(fn(c)) ≈ target (fn increasing in c)."""
     for _ in range(iters):
         mid = (lo + hi) / 2
         if fn(mid) > target:
@@ -395,14 +574,13 @@ def _bisect(fn, target, lo=-12.0, hi=12.0, iters=50):
 # Public generation API
 # --------------------------------------------------------------------------
 _INTERCEPT_CACHE: dict = {}
-_CAL_PER_PROPERTY = 40  # calibration cohort size per property for intercept fit
+_CAL_PER_PROPERTY = 40
 
 
 def _fit_intercepts(snapshot: date) -> tuple:
-    """Bisect the three global intercepts (late / severity / churn) so the label
-    base rates hit target. These are DGP-level constants — fit ONCE on a fixed
-    calibration cohort at SEED and reused for every cohort/seed, so generating a
-    large training cohort does not re-run the (expensive) bisection."""
+    """Bisect the three global intercepts on the v1-compatible labels so they
+    equal v1's values (keeping history bytes unchanged). Fit ONCE on a fixed
+    calibration cohort at SEED and reused for every cohort/seed."""
     key = snapshot.isoformat()
     if key in _INTERCEPT_CACHE:
         return _INTERCEPT_CACHE[key]
@@ -415,18 +593,18 @@ def _fit_intercepts(snapshot: date) -> tuple:
         SEED = prev
 
     def late_rate(c):
-        return float(np.mean([_labels(_simulate(mt, c, 0.0), mt, 0.0)["late"] for mt in metas]))
+        return float(np.mean([_labels_v1(_simulate(mt, c, 0.0), mt, 0.0)["late"] for mt in metas]))
 
     c_late = _bisect(late_rate, _TARGET_LATE)
 
     def serious_rate(c):
-        return float(np.mean([_labels(_simulate(mt, c_late, c), mt, 0.0)["serious"] for mt in metas]))
+        return float(np.mean([_labels_v1(_simulate(mt, c_late, c), mt, 0.0)["serious"] for mt in metas]))
 
     c_sev = _bisect(serious_rate, _TARGET_SERIOUS)
     sims = [_simulate(mt, c_late, c_sev) for mt in metas]
 
     def churn_rate(c):
-        vals = [_labels(s, mt, c)["churn"] for s, mt in zip(sims, metas)]
+        vals = [_labels_v1(s, mt, c)["churn"] for s, mt in zip(sims, metas)]
         elig = [v for v in vals if v is not None]
         return float(np.mean(elig)) if elig else 0.0
 
@@ -437,13 +615,11 @@ def _fit_intercepts(snapshot: date) -> tuple:
 
 def generate(seed: int = SEED, snapshot: date = rr.RESIDENT_SNAPSHOT,
              n_per_property: int = RESIDENTS_PER_PROPERTY):
-    """Return (residents, labels) fully deterministically.
+    """Return (residents, labels_by_head) fully deterministically.
 
-    ``residents`` are serialized dicts (60-month ledger + immutable facts, ready
-    for residents.json). ``labels`` is an aligned list of
-    {late, serious, arrears, churn} used only for training/eval (never written).
-    ``seed`` anchors every per-resident RNG stream (``seed + idx``); the eval
-    holdout uses ``seed + 1000`` for a fully disjoint cohort."""
+    ``residents`` are serialized dicts (ledger + immutable facts + display name).
+    ``labels_by_head`` is an aligned list of per-head label dicts used only for
+    training/eval (never written). ~3% flip applied to BINARY head labels."""
     c_late, c_sev, c_churn = _fit_intercepts(snapshot)
 
     global SEED
@@ -458,18 +634,15 @@ def generate(seed: int = SEED, snapshot: date = rr.RESIDENT_SNAPSHOT,
 
     residents, labels = [], []
     for sim, mt in zip(sims, metas):
-        lab = _labels(sim, mt, c_churn)
-        # ~3% label flip on the binaries (learnable, not trivially separable).
-        flip = mt["u_flip"] < _FLIP_RATE
-        if flip[0]:
-            lab["late"] = 1 - lab["late"]
-        if flip[1]:
-            lab["serious"] = 1 - lab["serious"]
-        if flip[2] and lab["churn"] is not None:
-            lab["churn"] = 1 - lab["churn"]
+        lab = _emit_labels(sim, mt, c_churn)
+        # ~3% label flip on the BINARY heads (learnable, not trivially separable).
+        for i, head in enumerate(_BINARY_HEADS):
+            if mt["u_flip_v2"][i] < _FLIP_RATE and lab.get(head) is not None:
+                lab[head] = 1 - lab[head]
 
         residents.append({
             "resident_id": mt["resident_id"],
+            "name": mt["name"],
             "property_id": mt["property_id"],
             "unit_id": mt["unit_id"],
             "unit_bedrooms": mt["unit_bedrooms"],
@@ -497,9 +670,8 @@ def generate(seed: int = SEED, snapshot: date = rr.RESIDENT_SNAPSHOT,
 
 def build_training_frame(seed: int = SEED, snapshot: date = rr.RESIDENT_SNAPSHOT,
                          n_per_property: int = 100):
-    """(residents, labels) for training/eval. Labels are kept OUT of
-    residents.json. Defaults to a 100/property (~1000 resident) cohort of the
-    same DGP so the four estimators have enough data for stable metrics."""
+    """(residents, labels_by_head) for training/eval. Labels are kept OUT of
+    residents.json."""
     return generate(seed=seed, snapshot=snapshot, n_per_property=n_per_property)
 
 
@@ -523,17 +695,25 @@ def write_dataset(seed: int = SEED, snapshot: date = rr.RESIDENT_SNAPSHOT) -> di
 
 
 def _base_rates(labels: list) -> dict:
-    late = [l["late"] for l in labels]
-    serious = [l["serious"] for l in labels]
-    arrears = [l["arrears"] for l in labels]
+    def rate(key):
+        vals = [l[key] for l in labels if l.get(key) is not None]
+        return round(float(np.mean(vals)), 4) if vals else 0.0
+
+    def mean(key):
+        vals = [l[key] for l in labels if l.get(key) is not None]
+        return round(float(np.mean(vals)), 2) if vals else 0.0
+
     churn = [l["churn"] for l in labels if l["churn"] is not None]
+    cure = [l["p_cure_6m"] for l in labels if l["p_cure_6m"] is not None]
     return {
-        "late": round(float(np.mean(late)), 4),
-        "serious": round(float(np.mean(serious)), 4),
-        "arrears_mean": round(float(np.mean(arrears)), 2),
-        "arrears_nonzero_frac": round(float(np.mean([a > 0 for a in arrears])), 4),
-        "churn_eligible": len(churn),
-        "churn": round(float(np.mean(churn)), 4) if churn else 0.0,
+        "late_1m": rate("late_1m"), "late_3m": rate("late_3m"),
+        "late_6m": rate("late_6m"), "late_12m": rate("late_12m"),
+        "late_count_12m_mean": mean("late_count_12m"),
+        "serious": rate("serious"),
+        "p_30d_12m": rate("p_30d_12m"), "p_60d_12m": rate("p_60d_12m"), "p_90d_12m": rate("p_90d_12m"),
+        "arrears_3m_mean": mean("arrears_3m"), "arrears_12m_mean": mean("arrears_12m"),
+        "cure_eligible": len(cure), "p_cure_6m": rate("p_cure_6m"),
+        "churn_eligible": len(churn), "churn": rate("churn"),
     }
 
 
@@ -541,28 +721,22 @@ def _verify(residents: list, snapshot: date) -> dict:
     """Assert the committed dataset's invariants. Returns a small summary."""
     snap_month = (snapshot.year, snapshot.month)
     tenures = []
-    n_after = 0
-    n_bad_len = 0
-    n_bad_contig = 0
-    n_bad_end = 0
+    n_after = n_bad_len = n_bad_contig = n_bad_end = n_no_name = 0
     for r in residents:
         led = r["ledger"]
         tenure = rr._months_between(rr._to_date(r["move_in_date"]), snapshot)
         tenures.append(tenure)
-        # Invariant 1: ledger length == min(tenure, HISTORY_MONTHS).
         if len(led) != min(tenure, rr.HISTORY_MONTHS):
             n_bad_len += 1
-        # Parse periods.
+        if not r.get("name"):
+            n_no_name += 1
         months = [tuple(int(x) for x in e["period"].split("-")) for e in led]
-        # Invariant 2: contiguous months.
         for a, b in zip(months, months[1:]):
             if _add_months(date(a[0], a[1], 1), 1) != date(b[0], b[1], 1):
                 n_bad_contig += 1
                 break
-        # Invariant 3: last period == snapshot month.
         if months and months[-1] != snap_month:
             n_bad_end += 1
-        # Leakage guard: no entry dated AFTER the snapshot (period or paid_date).
         for e in led:
             y, m = (int(x) for x in e["period"].split("-"))
             if date(y, m, 1) > snapshot:
@@ -574,15 +748,22 @@ def _verify(residents: list, snapshot: date) -> dict:
     assert n_bad_contig == 0, f"{n_bad_contig} residents have non-contiguous ledgers"
     assert n_bad_end == 0, f"{n_bad_end} residents do not end at the snapshot month"
     assert n_after == 0, f"LEAKAGE: {n_after} ledger entries dated after snapshot {snapshot}"
+    assert n_no_name == 0, f"{n_no_name} residents missing a display name"
     mid = tenures[len(tenures) // 2]
     return {
-        "tenure_min": tenures[0],
-        "tenure_median": mid,
-        "tenure_max": tenures[-1],
+        "tenure_min": tenures[0], "tenure_median": mid, "tenure_max": tenures[-1],
         "count_tenure_lt_60": sum(1 for t in tenures if t < rr.HISTORY_MONTHS),
         "count_tenure_ge_60": sum(1 for t in tenures if t >= rr.HISTORY_MONTHS),
         "ledger_len_range": (min(len(r["ledger"]) for r in residents), max(len(r["ledger"]) for r in residents)),
     }
+
+
+def ledger_signature(residents: list) -> str:
+    """Stable sha256 over just the ledgers — the byte-identity check vs v1."""
+    import hashlib
+
+    led = [r["ledger"] for r in residents]
+    return hashlib.sha256(json.dumps(led, sort_keys=True).encode()).hexdigest()
 
 
 if __name__ == "__main__":
@@ -593,9 +774,10 @@ if __name__ == "__main__":
     _residents, labels = build_training_frame()  # larger cohort for base-rate sanity
     print(f"Wrote {info['path']}")
     print(f"residents={info['residents']} properties={info['properties']}")
-    print(f"invariants: PASS  len(ledger)==min(tenure,60) for all; contiguous; end at snapshot month {snap}")
+    print(f"invariants: PASS  len(ledger)==min(tenure,60) for all; contiguous; end at snapshot month {snap}; names present")
     print(f"leakage_guard: PASS (0 entries dated after snapshot {snap})")
     print(f"tenure distribution: min={summary['tenure_min']} median={summary['tenure_median']} "
           f"max={summary['tenure_max']} | tenure<60: {summary['count_tenure_lt_60']} "
           f"tenure>=60: {summary['count_tenure_ge_60']} | ledger_len_range={summary['ledger_len_range']}")
+    print(f"ledger_signature: {ledger_signature(committed)}")
     print(f"label base rates: {_base_rates(labels)}")

@@ -337,6 +337,7 @@ class Resident(BaseModel):
 
     # Identity / unit
     resident_id: str  # "RES-0001"
+    name: str = ""  # synthetic display name — DISPLAY ONLY, never a model feature
     property_id: str
     unit_id: str
     unit_bedrooms: int = Field(default=1, ge=0)
@@ -468,16 +469,23 @@ class SeriousPrediction(BaseModel):
 
 
 class ResidentPredictions(BaseModel):
-    """The full multi-target result for one resident — mirrors the dict returned
-    by ``residents_risk.predict_resident`` exactly."""
+    """The full multi-HEAD result for one resident — mirrors the dict returned by
+    ``residents_risk.predict_resident``. The four legacy sub-models
+    (late/arrears/churn/serious) are the backward-compatible aliases; the full v2
+    catalog rides along in ``heads`` (per-head payloads, kind-specific) grouped by
+    ``families``. ``heads`` is a loose dict passthrough so new heads never force a
+    schema migration."""
 
     resident_id: str = ""
     property_id: str = ""
+    name: str = ""  # synthetic display name (DISPLAY ONLY)
     snapshot_date: str = ""
     late: LatePrediction
     arrears: ArrearsPrediction
     churn: ChurnPrediction
     serious: SeriousPrediction
+    heads: dict = Field(default_factory=dict)  # {head_name: kind-specific payload}
+    families: dict = Field(default_factory=dict)  # {family: [head_name, ...]}
     scored_at: Optional[str] = None
 
 
@@ -488,6 +496,7 @@ class ResidentRow(BaseModel):
     resident_id: str
     property_id: str
     unit_id: str
+    name: str = ""
     base_rent: float
     tenure_months: int
     late_probability: float
@@ -608,7 +617,7 @@ class PortfolioSummary(BaseModel):
 
 class ResidentModelCard(BaseModel):
     """The resident-risk model card. Loosely typed (``extra='allow'``) so the
-    rich per-target detail from ``residents_risk.model_card`` passes through
+    rich per-head detail from ``residents_risk.model_card`` passes through
     untouched for the frontend."""
 
     model_config = ConfigDict(extra="allow")
@@ -618,6 +627,85 @@ class ResidentModelCard(BaseModel):
     description: str = ""
     intended_use: str = ""
     targets: list[dict] = Field(default_factory=list)
+    heads: list[dict] = Field(default_factory=list)
+    families: dict = Field(default_factory=dict)
     excluded: list[dict] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     source: str = "heuristic"
+
+
+# ---------------------------------------------------------------------------
+# Property / portfolio health (regional-director best->worst ranking).
+# Mirrors ``residents_risk.property_health`` / ``portfolio_health``. Loosely
+# typed so the components/drivers detail passes through for the frontend.
+# ---------------------------------------------------------------------------
+class PropertyHealth(BaseModel):
+    """Composite 0-100 health score (+ letter grade A-F) for one property, from
+    its residents' predictions. Higher = healthier."""
+
+    model_config = ConfigDict(extra="allow")
+
+    property_id: str
+    name: str = ""  # property display name (filled by the API layer)
+    score: float = 0.0
+    grade: Literal["A", "B", "C", "D", "F"] = "F"
+    resident_count: int = 0
+    top_driver: str = ""
+    drivers: list[dict] = Field(default_factory=list)
+    components: dict = Field(default_factory=dict)
+
+
+class PortfolioHealthResponse(BaseModel):
+    """Ranked property-health list (healthiest first) for the regional director,
+    with an explicit worst-property callout."""
+
+    properties: list[PropertyHealth] = Field(default_factory=list)
+    count: int = 0
+    healthiest: Optional[PropertyHealth] = None
+    needs_attention: Optional[PropertyHealth] = None  # worst-scoring property
+    snapshot_date: str = ""
+    source: Literal["model", "heuristic"] = "heuristic"
+
+
+# ---------------------------------------------------------------------------
+# Residents Chat — the decision-support agent embedded in the Residents page.
+# Mirrors ``RiskChat*`` (and the concierge shapes). The ``artifact`` is a plain
+# dict built by ``residents_chat``; its runtime shape is a discriminated union
+# keyed on ``kind`` (none | resident | property_health | compare) carrying the
+# RELEVANT head payloads (a resident's predictions, or a property-health
+# ranking) so the UI can render gauges / lists inline. Intentionally NOT
+# over-modeled so the backend can add union members without a schema migration.
+# ---------------------------------------------------------------------------
+class ResidentChatMessage(BaseModel):
+    """One turn of prior chat history."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ResidentChatRequest(BaseModel):
+    """A question for the residents chat agent. ``resident_id`` scopes to one
+    resident; ``property_id`` (or no id) scopes to a property / portfolio health
+    view. Unknown ids do NOT 404 — the agent deflects gracefully."""
+
+    question: str
+    resident_id: Optional[str] = None
+    property_id: Optional[str] = None
+    history: Optional[list[ResidentChatMessage]] = None
+
+
+class ResidentChatResponse(BaseModel):
+    """The residents chat agent's answer. ALWAYS returned with a 200 — the agent
+    never raises. ``source`` is ``"anthropic"`` when the LLM synthesized the
+    prose, else ``"rules"`` (deterministic / offline). Every number in ``answer``
+    originates in ``artifact`` (the head payloads); the LLM never computes one."""
+
+    answer: str
+    scope: str
+    resident_id: str = ""
+    property_id: str = ""
+    intent: str
+    sources: list[dict] = Field(default_factory=list)
+    artifact: dict = Field(default_factory=lambda: {"kind": "none"})
+    follow_ups: list[str] = Field(default_factory=list)
+    source: Literal["rules", "anthropic"] = "rules"

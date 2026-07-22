@@ -27,7 +27,7 @@ export function SampleApplicants({
         {samples.map((s) => (
           <button
             key={s.slug}
-            className="btn-ghost btn-small"
+            className="btn-ghost btn-small sample-chip"
             onClick={() => onPick(s.slug)}
             disabled={disabled}
           >

@@ -85,6 +85,16 @@
   --chart-grid: rgba(255, 255, 255, 0.06);
   --chart-axis: #9095b6;
 
+  /* ---- tone identity palette (Workspace: badges + how-it-works icons) ----
+     Cool hues alias existing, already-validated tokens (no new base hues);
+     coral is the one new "warm" accent, kept away from --warn/--bad hues. */
+  --tone-violet-text: var(--accent-text);    --tone-violet-soft: var(--accent-soft);    --tone-violet-line: rgba(139, 109, 255, 0.36);
+  --tone-teal-text:   var(--accent-2);       --tone-teal-soft:   rgba(53, 224, 200, 0.14);   --tone-teal-line:   rgba(53, 224, 200, 0.34);
+  --tone-magenta-text: var(--accent-tertiary); --tone-magenta-soft: rgba(168, 85, 247, 0.14); --tone-magenta-line: rgba(168, 85, 247, 0.34);
+  --tone-blue-text:   var(--chart-5);        --tone-blue-soft:   rgba(86, 168, 232, 0.14);   --tone-blue-line:   rgba(86, 168, 232, 0.34);
+  --accent-warm:      #ff7a45;  --accent-warm-hover: #ff9265;  --accent-warm-text: #ff8a5c;  /* ~8.6:1 on --bg */
+  --accent-warm-soft: rgba(255, 122, 69, 0.14);  --accent-warm-line: rgba(255, 122, 69, 0.34);  --accent-warm-ink: #2a0f02;
+
   /* ---- glass ---- */
   --glass-blur: 18px;
 
@@ -227,6 +237,16 @@
   --chart-5: #2b7fd4;
   --chart-grid: #eaecf4;
   --chart-axis: #56597a;
+
+  /* ---- tone identity palette (Workspace: badges + how-it-works icons) ----
+     Teal/blue need NEW darker picks here: the raw --accent-2/--chart-5 values
+     only clear ~3.7:1 / ~4.1:1 on white and fail AA text-grade contrast. */
+  --tone-violet-text: var(--accent-text);    --tone-violet-soft: var(--accent-soft);    --tone-violet-line: rgba(104, 54, 230, 0.28);
+  --tone-teal-text:   #0f766e;               --tone-teal-soft:   rgba(13, 148, 136, 0.10);   --tone-teal-line:   rgba(13, 148, 136, 0.30);
+  --tone-magenta-text: var(--accent-tertiary); --tone-magenta-soft: rgba(147, 51, 234, 0.10); --tone-magenta-line: rgba(147, 51, 234, 0.30);
+  --tone-blue-text:   #1a6bb8;                --tone-blue-soft:   rgba(43, 127, 212, 0.10);   --tone-blue-line:   rgba(43, 127, 212, 0.30);
+  --accent-warm:      #c2410c;  --accent-warm-hover: #a8380a;  --accent-warm-text: #c2410c;  /* ~5.2:1 on #fff */
+  --accent-warm-soft: rgba(194, 65, 12, 0.10);  --accent-warm-line: rgba(194, 65, 12, 0.28);  --accent-warm-ink: #ffffff;
 
   /* ---- depth (soft violet drop shadows) ---- */
   --shadow-card: 0 1px 2px rgba(60, 50, 120, 0.08), 0 1px 3px rgba(60, 50, 120, 0.06);
@@ -399,6 +419,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: var(--accent); filter: none;
 }
 .btn-ghost.danger:hover:not(:disabled) { color: var(--bad-text); border-color: var(--bad-line); }
+.sample-chip:hover:not(:disabled) {
+  background: var(--accent-warm-soft); color: var(--accent-warm-text);
+  border-color: var(--accent-warm-line); filter: none;
+}
 
 .btn-small { padding: 5px 11px; font-size: var(--fs-xs); border-radius: 8px; }
 .btn-sm { padding: 6px 12px; font-size: var(--fs-xs); border-radius: 6px; }
@@ -537,6 +561,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .badge .dot.blue { background: var(--chart-5); }
 .badge .dot.teal { background: var(--chart-2); }
 
+/* Service-identity tint per header badge. The connected/disconnected .dot
+   (good/bad, above) is untouched — it alone still carries health state. */
+.badge[data-tone="violet"]  { background: var(--tone-violet-soft);  border-color: var(--tone-violet-line);  color: var(--tone-violet-text); }
+.badge[data-tone="teal"]    { background: var(--tone-teal-soft);    border-color: var(--tone-teal-line);    color: var(--tone-teal-text); }
+.badge[data-tone="magenta"] { background: var(--tone-magenta-soft); border-color: var(--tone-magenta-line); color: var(--tone-magenta-text); }
+.badge[data-tone="blue"]    { background: var(--tone-blue-soft);    border-color: var(--tone-blue-line);    color: var(--tone-blue-text); }
+
+/* Reviewed-count stat — one warm human touch, never a pass/fail state. */
+.badge.tone-warm { background: var(--accent-warm-soft); color: var(--accent-warm-text); border-color: var(--accent-warm-line); }
+.badge.tone-warm .dot { background: var(--accent-warm-text); }
+
 /* legacy on/off health pills keep the pill shape */
 .on, .off {
   display: inline-flex; align-items: center; gap: 6px;
@@ -666,18 +701,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
-  border: 1px dashed var(--line-strong);
+  border: 1.5px solid transparent;
   border-radius: var(--r-lg);
-  background: var(--field);
+  background:
+    linear-gradient(var(--field), var(--field)) padding-box,
+    linear-gradient(120deg, var(--tone-violet-line), var(--tone-teal-line)) border-box;
   padding: var(--s-8) var(--s-5);
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s var(--ease-spring);
 }
 
-.dropzone:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.dropzone:hover, .dropzone:focus-visible {
+  background:
+    linear-gradient(var(--accent-soft), var(--accent-soft)) padding-box,
+    linear-gradient(120deg, var(--accent), var(--accent-2)) border-box;
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
 }
 
 .dropzone input { display: none; }
@@ -704,9 +744,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .how-icon {
   flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px;
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--accent-text); background: var(--accent-soft);
-  border: 1px solid var(--line-strong);
+  color: var(--tone-violet-text); background: var(--tone-violet-soft);   /* fallback if data-tone omitted */
+  border: 1px solid var(--tone-violet-line);
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-normal) ease;
 }
+.how-step:hover .how-icon { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+
+.how-icon[data-tone="violet"]  { color: var(--tone-violet-text);  background: var(--tone-violet-soft);  border-color: var(--tone-violet-line); }
+.how-icon[data-tone="teal"]    { color: var(--tone-teal-text);    background: var(--tone-teal-soft);    border-color: var(--tone-teal-line); }
+.how-icon[data-tone="magenta"] { color: var(--tone-magenta-text); background: var(--tone-magenta-soft); border-color: var(--tone-magenta-line); }
+.how-icon[data-tone="warm"]    { color: var(--accent-warm-text);  background: var(--accent-warm-soft);  border-color: var(--accent-warm-line); }
 .how-body { display: grid; gap: 3px; }
 .how-title { font-weight: var(--w-semi); font-size: var(--fs-sm); color: var(--text); }
 .how-desc { font-size: var(--fs-xs); color: var(--muted); line-height: 1.5; }
@@ -2341,6 +2388,108 @@ button:active:not(:disabled),
 .res-prop-name { font-size: var(--fs-sm); font-weight: var(--w-semi); }
 .res-prop-meta { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .res-prop-card.active .res-prop-meta { color: var(--accent-text); }
+
+/* Neutral meter fill for non-highlighted multiclass bars (token-driven). */
+.meter > i.info { background: var(--chart-5); }
+
+/* Detail + chat rail: side-by-side on wide viewports, stacked when narrow. */
+.residents-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .residents-detail-layout { grid-template-columns: 1fr; }
+  .residents-detail-layout .risk-chat-rail { position: static; max-height: none; }
+}
+
+/* --- Property-health ranking (regional-director view) --- */
+.health-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.health-list { display: grid; gap: var(--s-2); }
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-soft);
+  background: var(--panel-2);
+  box-shadow: none;
+}
+.health-row.is-clickable { cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.health-row.is-clickable:hover { background: var(--hover); border-color: var(--accent); filter: none; transform: none; }
+.health-row-body { flex: 1; min-width: 0; }
+.health-row-name { font-weight: var(--w-semi); color: var(--text); }
+.health-row-meta {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 5px; font-size: var(--fs-xs); color: var(--muted);
+}
+.health-row-go { flex-shrink: 0; color: var(--muted); }
+
+/* Letter-grade chip — reuses the shared tone tokens; never colour-only
+   (the grade letter and the score always accompany it). */
+.grade-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  font-weight: var(--w-bold);
+  font-size: var(--fs-md);
+  border: 1px solid var(--info-line);
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+.grade-chip.tone-good { background: var(--good-bg); color: var(--good-vibrant); border-color: var(--good-line); }
+.grade-chip.tone-warn { background: var(--warn-bg); color: var(--warn-vibrant); border-color: var(--warn-line); }
+.grade-chip.tone-bad  { background: var(--bad-bg);  color: var(--bad-vibrant);  border-color: var(--bad-line); }
+
+/* --- Prediction families (heads grouped by family in the detail) --- */
+.fam-section .fam-head { margin-bottom: var(--s-3); }
+.fam-section .fam-head h3 { font-size: var(--fs-md); font-weight: var(--w-semi); }
+.head-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-3);
+}
+.head-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-soft);
+  background: var(--panel-2);
+}
+.head-tile--wide { grid-column: 1 / -1; align-items: stretch; }
+.head-tile-title {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--fs-xs); font-weight: var(--w-semi);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.head-tile-sub { font-size: var(--fs-xs); color: var(--text-2); }
+.fam-why { margin-top: var(--s-3); }
+.fam-why > summary {
+  cursor: pointer;
+  font-size: var(--fs-xs); font-weight: var(--w-semi);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.fam-why > summary:hover { color: var(--text-2); }
 
 /* Modal overlay (model card, etc.) */
 .modal-overlay {

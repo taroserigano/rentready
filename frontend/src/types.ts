@@ -707,6 +707,7 @@ export interface Resident {
   resident_id: string;
   property_id: string;
   unit_id: string;
+  name: string;
   unit_bedrooms: number;
   base_rent: number;
   // lease
@@ -743,6 +744,7 @@ export interface ResidentRow {
   resident_id: string;
   property_id: string;
   unit_id: string;
+  name: string;
   base_rent: number;
   tenure_months: number;
   /** Calibrated P(any late payment next quarter), 0..1. */
@@ -817,18 +819,186 @@ export interface ResidentChurnPrediction {
   source: string;
 }
 
-/** The four forward-looking predictions for one resident. */
+// --- Multi-head predictions (v2) -------------------------------------------
+//
+// The v2 backend expands the four legacy targets into a catalogue of ~19
+// prediction HEADS grouped into six FAMILIES. Each head carries a kind-specific
+// payload plus its own TreeSHAP reason codes. The legacy `late/arrears/churn/
+// serious` fields are kept as backward-compatible aliases; `heads`/`families`
+// are the v2 superset (optional so an older backend still typechecks).
+
+/** Head payload kinds. */
+export type HeadKind =
+  | "binary"
+  | "count"
+  | "regression"
+  | "survival"
+  | "multiclass";
+
+/** The six prediction families the heads are grouped into. */
+export type ResidentFamily =
+  | "late"
+  | "frequency"
+  | "severity"
+  | "arrears"
+  | "cure"
+  | "retention";
+
+/** Fields every head payload shares. */
+export interface ResidentHeadBase {
+  kind: HeadKind;
+  family: ResidentFamily | string;
+  reason_codes: ReasonCode[];
+  confidence: "high" | "low";
+  source: string;
+  model_type?: string;
+}
+
+/** binary → calibrated probability + band + calibration range. */
+export interface BinaryHead extends ResidentHeadBase {
+  kind: "binary";
+  probability: number;
+  band: RiskBand;
+  range: [number, number];
+}
+
+/** count / regression → point estimate + prediction interval. */
+export interface CountHead extends ResidentHeadBase {
+  kind: "count";
+  expected: number;
+  interval: [number, number];
+}
+
+export interface RegressionHead extends ResidentHeadBase {
+  kind: "regression";
+  expected: number;
+  interval: [number, number];
+}
+
+/** survival → median/expected months-to-event + a discrete survival curve. */
+export interface SurvivalHead extends ResidentHeadBase {
+  kind: "survival";
+  /** null when the event isn't reached within the horizon. */
+  median_months: number | null;
+  expected_months?: number;
+  survival_curve: number[];
+}
+
+/** multiclass → per-label probabilities (ordinal buckets). */
+export interface MulticlassHead extends ResidentHeadBase {
+  kind: "multiclass";
+  class_probs: Record<string, number>;
+  predicted_bucket?: string;
+}
+
+/**
+ * One prediction head. A discriminated union on `kind`; consumers switch on it
+ * and render defensively (an unknown kind falls through to nothing).
+ */
+export type ResidentHead =
+  | BinaryHead
+  | CountHead
+  | RegressionHead
+  | SurvivalHead
+  | MulticlassHead;
+
+/** The forward-looking predictions for one resident (v1 aliases + v2 heads). */
 export interface ResidentPredictions {
+  /** Legacy aliases (== late_3m / arrears_3m / churn / serious) — unchanged. */
   late: ResidentClassPrediction;
   arrears: ResidentArrearsPrediction;
   churn: ResidentChurnPrediction;
   serious: ResidentSeriousPrediction;
+  /** Resident display name (echoed by the v2 endpoint). */
+  name?: string;
+  /** v2: every head keyed by name (late_1m, arrears_12m, months_to_cure, …). */
+  heads?: Record<string, ResidentHead>;
+  /** v2: family → ordered head names, driving the grouped detail sections. */
+  families?: Record<string, string[]>;
 }
 
-/** GET /residents/{id} — full resident record + the four predictions. */
+/** GET /residents/{id} — full resident record + predictions (+ ledger stats). */
 export interface ResidentDetail {
   resident: Resident;
   predictions: ResidentPredictions;
+  ledger_stats?: Record<string, unknown>;
+  source?: string;
+}
+
+// --- Property health (regional-director ranking) ---------------------------
+
+/** Letter grade A (healthiest) → F (worst). */
+export type HealthGrade = "A" | "B" | "C" | "D" | "F";
+
+/** One property's composite health, best→worst in the ranking. */
+export interface PropertyHealth {
+  property_id: string;
+  name: string;
+  /** 0–100, higher = healthier. */
+  score: number;
+  grade: HealthGrade;
+  resident_count: number;
+  /** Plain-English strongest driver of the score. */
+  top_driver: string;
+  /** Weighted sub-scores (on-time, serious, churn, collection, chronic). */
+  components: Record<string, number>;
+}
+
+/** GET /residents/health — ranked best→worst (healthiest first). */
+export type PortfolioHealth = PropertyHealth[];
+
+// --- Residents chat agent (grounded in the model's head signals) -----------
+
+/** The deterministic router's chosen intent for a residents-chat turn. */
+export type ResidentChatIntent =
+  | "explain"
+  | "horizon"
+  | "frequency"
+  | "severity"
+  | "arrears"
+  | "cure"
+  | "retention"
+  | "property_health"
+  | "compare"
+  | "governance"
+  | "general";
+
+/** Scope a turn is grounded in. */
+export type ResidentChatScope = "resident" | "property" | "portfolio";
+
+/**
+ * The structured payload attached to a chat turn. Deliberately LOOSE — the
+ * backend may send a single-resident prediction bundle (heads/families), a
+ * single head, or a property-health ranking. The UI sniffs its shape and
+ * renders defensively; there is no discriminated `kind` to rely on.
+ */
+export type ResidentChatArtifact = Record<string, unknown> | unknown[] | null;
+
+/** First SSE frame of a streamed residents-chat answer (the router pass). */
+export interface ResidentChatMeta {
+  scope: ResidentChatScope | string;
+  intent: ResidentChatIntent | string;
+  resident_id?: string;
+  property_id?: string;
+  /** 0–3 suggested next questions. */
+  follow_ups: string[];
+  artifact: ResidentChatArtifact;
+}
+
+/** Full response from POST /residents/chat (always 200; degrades server-side). */
+export interface ResidentChatAnswer extends ResidentChatMeta {
+  answer: string;
+  sources?: unknown[];
+  /** "rules" => answered offline from deterministic templates (no LLM). */
+  source: "anthropic" | "rules" | string;
+}
+
+export interface ResidentChatRequest {
+  question: string;
+  /** Scope to one resident; else the property / portfolio. */
+  resident_id?: string;
+  property_id?: string;
+  history?: { role: string; content: string }[];
 }
 
 /** Per-property rollup used by the selector and the property drill-down. */

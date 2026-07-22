@@ -8,6 +8,7 @@ import {
   LatePredictionCard,
   SeriousPredictionCard,
 } from "./PredictionCards";
+import { ResidentFamilies } from "./ResidentFamilies";
 import { STATUS_STYLE, usd } from "./residentsTone";
 
 const LEDGER_PREVIEW = 12;
@@ -95,9 +96,9 @@ export function ResidentDetail({
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h2 style={{ margin: "0 0 2px" }}>Unit {r.unit_id}</h2>
+            <h2 style={{ margin: "0 0 2px" }}>{r.name || `Unit ${r.unit_id}`}</h2>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              {r.resident_id} · {r.property_id} · base rent {usd(r.base_rent)}
+              Unit {r.unit_id} · {r.resident_id} · {r.property_id} · base rent {usd(r.base_rent)}
               {r.autopay_enrolled ? " · autopay on" : ""}
             </p>
           </div>
@@ -129,13 +130,18 @@ export function ResidentDetail({
         </div>
       </div>
 
-      {/* Four predictions */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 18 }}>
-        <LatePredictionCard pred={p.late} />
-        <SeriousPredictionCard pred={p.serious} />
-        <ArrearsPredictionCard pred={p.arrears} />
-        <ChurnPredictionCard pred={p.churn} />
-      </div>
+      {/* Predictions: v2 heads grouped by family when available, else the four
+          legacy cards (keeps the page working against an older backend). */}
+      {p.heads && p.families && Object.keys(p.heads).length > 0 ? (
+        <ResidentFamilies heads={p.heads} families={p.families} />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 18 }}>
+          <LatePredictionCard pred={p.late} />
+          <SeriousPredictionCard pred={p.serious} />
+          <ArrearsPredictionCard pred={p.arrears} />
+          <ChurnPredictionCard pred={p.churn} />
+        </div>
+      )}
 
       {/* Payment history */}
       <div className="card" style={{ marginTop: 0 }}>

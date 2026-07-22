@@ -10,11 +10,13 @@ import type {
 } from "../../types";
 import { ResidentDetail } from "./ResidentDetail";
 import { ResidentModelCard } from "./ResidentModelCard";
+import { PropertyHealthRanking } from "./PropertyHealthRanking";
+import { ResidentsChat } from "./ResidentsChat";
 import { BAND_LABEL, BAND_TONE, churnTone, pct, usd } from "./residentsTone";
 
 const ROW_CAP = 25;
 
-type SortKey = "unit" | "tenure" | "late" | "arrears" | "churn" | "serious" | "balance";
+type SortKey = "name" | "unit" | "tenure" | "late" | "arrears" | "churn" | "serious" | "balance";
 type BandFilter = "all" | RiskBand;
 
 const BAND_FILTERS: { key: BandFilter; label: string }[] = [
@@ -120,6 +122,16 @@ export function Residents({
   const kpi = rollup;
   const selectedName =
     propOptions?.find((p) => p.property_id === selectedProperty)?.name ?? selectedProperty;
+  const selectedResidentName = residents?.find(
+    (r) => r.resident_id === selectedResident,
+  )?.name;
+
+  // Drill into a property from the health ranking or a chat result.
+  const selectProperty = useCallback((id: string) => {
+    setSelectedProperty(id);
+    setSelectedResident(null);
+    setShowAll(false);
+  }, []);
 
   // The selected property's residents, searched + band-filtered, then sorted.
   const filtered = useMemo<ResidentRow[]>(() => {
@@ -130,11 +142,13 @@ export function Residents({
         (bandFilter === "all" || r.late_band === bandFilter) &&
         (q === "" ||
           r.unit_id.toLowerCase().includes(q) ||
-          r.resident_id.toLowerCase().includes(q)),
+          r.resident_id.toLowerCase().includes(q) ||
+          r.name.toLowerCase().includes(q)),
     );
     const dir = sortAsc ? 1 : -1;
     const val = (r: ResidentRow): number | string => {
       switch (sortKey) {
+        case "name": return r.name;
         case "unit": return r.unit_id;
         case "tenure": return r.tenure_months;
         case "arrears": return r.expected_arrears;
@@ -160,7 +174,7 @@ export function Residents({
       setSortAsc((v) => !v);
     } else {
       setSortKey(key);
-      setSortAsc(key === "unit"); // text asc, numbers desc on first click
+      setSortAsc(key === "unit" || key === "name"); // text asc, numbers desc on first click
     }
     setShowAll(false);
   }
@@ -269,12 +283,21 @@ export function Residents({
             </div>
           )}
 
+          {/* No property selected → the regional-director health ranking
+              (best→worst) in place of a bare prompt, plus a portfolio chat. */}
           {!selectedProperty && (
-            <div className="card">
-              <p className="muted" style={{ margin: 0 }}>
-                Select a property above to view its residents and their forward-looking risk.
-              </p>
-            </div>
+            <>
+              <div style={{ marginTop: 18 }}>
+                <PropertyHealthRanking onSelect={selectProperty} />
+              </div>
+              <div style={{ marginTop: 18 }}>
+                <ResidentsChat
+                  residentId={null}
+                  propertyId={null}
+                  onSelectProperty={selectProperty}
+                />
+              </div>
+            </>
           )}
 
           {selectedProperty && listLoading && (
@@ -332,6 +355,7 @@ export function Residents({
               <table className="table rows-clickable">
                 <thead>
                   <tr>
+                    <SortHeader label="Resident" keyName="name" />
                     <SortHeader label="Unit" keyName="unit" />
                     <SortHeader label="Tenure" keyName="tenure" />
                     <SortHeader label="Late next Q" keyName="late" />
@@ -350,7 +374,8 @@ export function Residents({
                       onClick={() => setSelectedResident(r.resident_id)}
                       style={selectedResident === r.resident_id ? { background: "var(--panel2)" } : undefined}
                     >
-                      <td>{r.unit_id}</td>
+                      <td style={{ fontWeight: 600 }}>{r.name}</td>
+                      <td className="secondary">{r.unit_id}</td>
                       <td>{r.tenure_months} mo</td>
                       <td>{pct(r.late_probability)}</td>
                       <td>
@@ -387,12 +412,34 @@ export function Residents({
             )}
           </div>
 
-          {/* Detail region */}
-          {selectedResident && (
+          {/* Detail + chat rail. With a resident selected the detail and a
+              sticky chat rail sit side by side; otherwise the chat runs full
+              width below the table, scoped to the property. */}
+          {selectedResident ? (
+            <div className="residents-detail-layout" style={{ marginTop: 18 }}>
+              <div>
+                <ResidentDetail
+                  key={selectedResident}
+                  residentId={selectedResident}
+                />
+              </div>
+              <aside className="risk-chat-rail">
+                <ResidentsChat
+                  residentId={selectedResident}
+                  residentName={selectedResidentName}
+                  propertyId={selectedProperty}
+                  propertyName={selectedName}
+                  onSelectProperty={selectProperty}
+                />
+              </aside>
+            </div>
+          ) : (
             <div style={{ marginTop: 18 }}>
-              <ResidentDetail
-                key={selectedResident}
-                residentId={selectedResident}
+              <ResidentsChat
+                residentId={null}
+                propertyId={selectedProperty}
+                propertyName={selectedName}
+                onSelectProperty={selectProperty}
               />
             </div>
           )}
