@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Info, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, Info, Search, X } from "lucide-react";
 import { getResidentModelCard, getResidentProperties, listPropertyResidents } from "../../api";
 import type {
   PropertyResidentRollup,
@@ -8,10 +8,9 @@ import type {
   ResidentRow,
   RiskBand,
 } from "../../types";
-import { RiskDisclaimer } from "../risk/RiskCard";
 import { ResidentDetail } from "./ResidentDetail";
 import { ResidentModelCard } from "./ResidentModelCard";
-import { BAND_LABEL, BAND_TONE, RESIDENT_DISCLAIMER, churnTone, pct, usd } from "./residentsTone";
+import { BAND_LABEL, BAND_TONE, churnTone, pct, usd } from "./residentsTone";
 
 const ROW_CAP = 25;
 
@@ -52,7 +51,7 @@ export function Residents({
   const [listLoading, setListLoading] = useState(false);
 
   const [selectedProperty, setSelectedProperty] = useState<string>(initialPropertyId ?? "");
-  const [showInfo, setShowInfo] = useState(false);
+  const [showModelCard, setShowModelCard] = useState(false);
   const [selectedResident, setSelectedResident] = useState<string | null>(initialResidentId ?? null);
 
   const [query, setQuery] = useState("");
@@ -61,9 +60,15 @@ export function Residents({
   const [sortAsc, setSortAsc] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  const modelCardRef = useRef<HTMLDivElement>(null);
-  const scrollToModelCard = () =>
-    modelCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Close the model-card modal on Escape.
+  useEffect(() => {
+    if (!showModelCard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowModelCard(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showModelCard]);
 
   // Initial load is CHEAP: just the property picker (no scoring) + the model
   // card. Residents are fetched per-property, on selection (below).
@@ -182,26 +187,23 @@ export function Residents({
       <header>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <h1 style={{ margin: 0 }}>Residents</h1>
-          <button
-            type="button"
-            className="linklike icon-line"
-            aria-label="About these estimates"
-            aria-expanded={showInfo}
-            title="About these estimates"
-            onClick={() => setShowInfo((v) => !v)}
-          >
-            <Info size={16} aria-hidden />
-          </button>
+          {card && (
+            <button
+              type="button"
+              className="linklike icon-line"
+              aria-label="Model card & how we measure"
+              title="Model card & how we measure"
+              onClick={() => setShowModelCard(true)}
+            >
+              <Info size={16} aria-hidden />
+            </button>
+          )}
         </div>
         <p>
           A decision-support view of forward-looking risk across current residents — to focus
           proactive outreach and retention, not to decide.
         </p>
       </header>
-
-      {showInfo && (
-        <RiskDisclaimer variant="banner" text={RESIDENT_DISCLAIMER} onViewModelCard={card ? scrollToModelCard : undefined} />
-      )}
 
       {loading && (
         <div className="card">
@@ -391,7 +393,6 @@ export function Residents({
               <ResidentDetail
                 key={selectedResident}
                 residentId={selectedResident}
-                onViewModelCard={card ? scrollToModelCard : undefined}
               />
             </div>
           )}
@@ -400,9 +401,25 @@ export function Residents({
         </>
       )}
 
-      {card && (
-        <div ref={modelCardRef}>
-          <ResidentModelCard card={card} />
+      {showModelCard && card && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Resident risk model card and metrics"
+          onClick={() => setShowModelCard(false)}
+        >
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              aria-label="Close"
+              onClick={() => setShowModelCard(false)}
+            >
+              <X size={18} aria-hidden />
+            </button>
+            <ResidentModelCard card={card} />
+          </div>
         </div>
       )}
     </div>

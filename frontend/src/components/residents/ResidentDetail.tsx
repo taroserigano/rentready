@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getResident } from "../../api";
 import type { LedgerEntry, ResidentDetail as ResidentDetailT } from "../../types";
-import { RiskDisclaimer } from "../risk/RiskCard";
 import { PaymentHistoryTimeline } from "./PaymentHistoryTimeline";
 import {
   ArrearsPredictionCard,
@@ -9,7 +8,7 @@ import {
   LatePredictionCard,
   SeriousPredictionCard,
 } from "./PredictionCards";
-import { RESIDENT_DISCLAIMER, STATUS_STYLE, usd } from "./residentsTone";
+import { STATUS_STYLE, usd } from "./residentsTone";
 
 const LEDGER_PREVIEW = 12;
 
@@ -46,10 +45,8 @@ function derived(ledger: LedgerEntry[]) {
  */
 export function ResidentDetail({
   residentId,
-  onViewModelCard,
 }: {
   residentId: string;
-  onViewModelCard?: () => void;
 }) {
   const [data, setData] = useState<ResidentDetailT | null>(null);
   const [error, setError] = useState("");
@@ -202,7 +199,6 @@ export function ResidentDetail({
         )}
       </div>
 
-      <RiskDisclaimer text={RESIDENT_DISCLAIMER} onViewModelCard={onViewModelCard} />
     </div>
   );
 }

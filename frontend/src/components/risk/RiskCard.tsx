@@ -220,7 +220,6 @@ export function RiskCard(props: RiskCardProps) {
         </p>
       )}
 
-      <RiskDisclaimer onViewModelCard={onViewModelCard} />
     </div>
   );
 }

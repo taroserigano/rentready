@@ -1,7 +1,6 @@
 import { Sparkles, WifiOff } from "lucide-react";
 import type { RiskChatAnswer, RiskChatIntent } from "../../types";
-import { RiskDisclaimer } from "./RiskCard";
-import { RiskChatArtifact, artifactHasNumber } from "./RiskChatArtifact";
+import { RiskChatArtifact } from "./RiskChatArtifact";
 
 /** One message in the risk-chat thread. */
 export interface RiskChatMsg {
@@ -94,7 +93,6 @@ export function RiskChatMessage({
             onSelectApplicant={onSelectApplicant}
           />
 
-          {artifactHasNumber(artifact) && <RiskDisclaimer />}
 
           {followUps.length > 0 && (
             <>

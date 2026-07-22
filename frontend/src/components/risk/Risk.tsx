@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { getRiskModelCard, listRisk } from "../../api";
 import type { RiskBand, RiskListResponse, RiskModelCard, RiskRow } from "../../types";
-import { RiskCard, RiskDisclaimer } from "./RiskCard";
+import { RiskCard } from "./RiskCard";
 import { RiskDistribution } from "./RiskDistribution";
 import { ModelCard } from "./ModelCard";
 import { RiskWhatIf } from "./RiskWhatIf";
@@ -146,8 +146,6 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
           across saved applicants — to focus a human review, not to decide.
         </p>
       </header>
-
-      <RiskDisclaimer variant="banner" onViewModelCard={scrollToModelCard} />
 
       {loading && (
         <div className="card">

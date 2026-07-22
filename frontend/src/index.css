@@ -2306,14 +2306,12 @@ button:active:not(:disabled),
 
 /* Property selector: horizontal strip of small selectable tiles */
 .res-prop-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--s-2);
-  overflow-x: auto;
   padding-bottom: var(--s-2);
-  -webkit-overflow-scrolling: touch;
 }
 .res-prop-card {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -2343,6 +2341,47 @@ button:active:not(:disabled),
 .res-prop-name { font-size: var(--fs-sm); font-weight: var(--w-semi); }
 .res-prop-meta { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .res-prop-card.active .res-prop-meta { color: var(--accent-text); }
+
+/* Modal overlay (model card, etc.) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh var(--s-3);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 940px;
+  margin: auto 0;
+}
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.modal-close:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--hover);
+}
 
 /* 60-month heatmap: 12 columns (one year per row) */
 .pay-grid {
