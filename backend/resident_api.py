@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
+import graph
 import residents_risk
 import store
 from models import (
@@ -35,6 +36,8 @@ from models import (
     ResidentListResponse,
     ResidentModelCard,
     ResidentPredictions,
+    ResidentPropertiesResponse,
+    ResidentPropertyOption,
     ResidentRow,
     ResidentRollup,
     SeriousPrediction,
@@ -215,6 +218,44 @@ def list_residents(property_id: str | None = None) -> ResidentListResponse:
     return ResidentListResponse(
         residents=rows, count=len(rows), property_id=property_id, source=source
     )
+
+
+@router.get("/residents/properties")
+def resident_properties() -> ResidentPropertiesResponse:
+    """Cheap property picker for the Residents page: the properties that actually
+    have residents, with a display name and headcount — NO scoring. The UI loads
+    residents only when a property is chosen, never the whole portfolio."""
+    t0 = time.perf_counter()
+    counts: dict[str, int] = {}
+    for r in residents_risk.load_residents():
+        pid = r.get("property_id") or ""
+        if pid:
+            counts[pid] = counts.get(pid, 0) + 1
+
+    names: dict[str, str] = {}
+    try:
+        for p in graph.load_properties():
+            pid = p.get("id")
+            if pid:
+                names[pid] = p.get("name") or pid
+    except Exception:  # noqa: BLE001 — names are cosmetic; fall back to the id
+        pass
+
+    # Preserve the canonical property order, then any stragglers.
+    ordered = [p for p in residents_risk.RESIDENT_PROPERTY_IDS if p in counts]
+    ordered += [p for p in counts if p not in ordered]
+    options = [
+        ResidentPropertyOption(
+            property_id=p, name=names.get(p, p), resident_count=counts[p]
+        )
+        for p in ordered
+    ]
+    store.log_event(
+        endpoint="residents_properties",
+        latency_ms=(time.perf_counter() - t0) * 1000,
+        meta={"properties": len(options)},
+    )
+    return ResidentPropertiesResponse(properties=options, count=len(options))
 
 
 @router.get("/residents/model-card")

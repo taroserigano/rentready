@@ -581,6 +581,21 @@ class PropertyResidentsResponse(BaseModel):
     source: Literal["model", "heuristic"] = "heuristic"
 
 
+class ResidentPropertyOption(BaseModel):
+    """One entry in the property selector — cheap (no scoring): id, display name,
+    and how many residents live there. Powers the Residents-page picker so the
+    UI never loads/scores the whole portfolio just to render the selector."""
+
+    property_id: str
+    name: str
+    resident_count: int
+
+
+class ResidentPropertiesResponse(BaseModel):
+    properties: list[ResidentPropertyOption] = Field(default_factory=list)
+    count: int = 0
+
+
 class PortfolioSummary(BaseModel):
     properties: list[PropertyResidentRollup] = Field(default_factory=list)
     overall: ResidentRollup = Field(default_factory=ResidentRollup)

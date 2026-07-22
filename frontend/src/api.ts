@@ -34,6 +34,7 @@ import type {
   ResidentDetail,
   ResidentPredictions,
   PropertyResidentsResponse,
+  ResidentPropertiesResponse,
   PortfolioSummary,
   ResidentModelCard,
 } from "./types";
@@ -706,6 +707,11 @@ export async function listPropertyResidents(
   return json(
     await fetch(`${BASE}/properties/${encodeURIComponent(propertyId)}/residents`),
   );
+}
+
+/** Cheap property picker (id, name, headcount) — no scoring. */
+export async function getResidentProperties(): Promise<ResidentPropertiesResponse> {
+  return json(await fetch(`${BASE}/residents/properties`));
 }
 
 /** Per-property + overall portfolio rollups (KPI tiles + selector). */

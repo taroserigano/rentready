@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Info, Search } from "lucide-react";
-import { getProperties, getResidentModelCard, getResidentsPortfolio, listResidents } from "../../api";
+import { getResidentModelCard, getResidentProperties, listPropertyResidents } from "../../api";
 import type {
-  PortfolioProperty,
-  PortfolioSummary,
-  ResidentListResponse,
+  PropertyResidentRollup,
   ResidentModelCard as ResidentModelCardT,
+  ResidentPropertyOption,
   ResidentRow,
   RiskBand,
 } from "../../types";
@@ -32,10 +31,6 @@ function errText(e: unknown): string {
   return "Could not reach the server. Is the backend running?";
 }
 
-function propName(p: PortfolioProperty, names: Record<string, string>): string {
-  return names[p.property_id]?.trim() || p.name?.trim() || p.property_id;
-}
-
 /**
  * Residents page — a portfolio-wide, decision-support view of current-resident
  * risk across the 10 properties. A property selector, four portfolio KPI tiles,
@@ -48,12 +43,13 @@ export function Residents({
   initialPropertyId?: string;
   initialResidentId?: string;
 }) {
-  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
-  const [list, setList] = useState<ResidentListResponse | null>(null);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [propOptions, setPropOptions] = useState<ResidentPropertyOption[] | null>(null);
+  const [residents, setResidents] = useState<ResidentRow[] | null>(null);
+  const [rollup, setRollup] = useState<PropertyResidentRollup | null>(null);
   const [card, setCard] = useState<ResidentModelCardT | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
 
   const [selectedProperty, setSelectedProperty] = useState<string>(initialPropertyId ?? "");
   const [showInfo, setShowInfo] = useState(false);
@@ -69,27 +65,16 @@ export function Residents({
   const scrollToModelCard = () =>
     modelCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
+  // Initial load is CHEAP: just the property picker (no scoring) + the model
+  // card. Residents are fetched per-property, on selection (below).
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    Promise.all([getResidentsPortfolio(), listResidents()])
-      .then(([pf, rows]) => {
-        setPortfolio(pf);
-        setList(rows);
-      })
+    getResidentProperties()
+      .then((r) => setPropOptions(r.properties))
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
     getResidentModelCard().then(setCard).catch(() => {});
-    getProperties()
-      .then((r) => {
-        const list = Array.isArray(r) ? r : (r?.properties ?? []);
-        setNames(
-          Object.fromEntries(
-            list.map((p: { id: string; name?: string }) => [p.id, p.name ?? p.id]),
-          ),
-        );
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(load, [load]);
@@ -99,19 +84,44 @@ export function Residents({
     if (initialResidentId) setSelectedResident(initialResidentId);
   }, [initialPropertyId, initialResidentId]);
 
-  // KPI tiles: the selected property's rollup, or the portfolio overall.
-  const kpi = useMemo(() => {
-    if (!portfolio || !selectedProperty) return null;
-    return portfolio.properties.find((x) => x.property_id === selectedProperty) ?? null;
-  }, [portfolio, selectedProperty]);
+  // Load (and score) residents for the SELECTED property only — never the whole
+  // portfolio. Clearing the selection clears the table.
+  useEffect(() => {
+    if (!selectedProperty) {
+      setResidents(null);
+      setRollup(null);
+      return;
+    }
+    let alive = true;
+    setListLoading(true);
+    setError("");
+    listPropertyResidents(selectedProperty)
+      .then((r) => {
+        if (!alive) return;
+        setResidents(r.residents);
+        setRollup(r.rollup);
+      })
+      .catch((e) => alive && setError(errText(e)))
+      .finally(() => {
+        if (alive) setListLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedProperty]);
 
-  // Rows scoped to the property, then searched + band-filtered, then sorted.
+  // KPI tiles: the selected property's rollup, or the portfolio overall.
+  // KPI tiles reflect the selected property's rollup (from the per-property fetch).
+  const kpi = rollup;
+  const selectedName =
+    propOptions?.find((p) => p.property_id === selectedProperty)?.name ?? selectedProperty;
+
+  // The selected property's residents, searched + band-filtered, then sorted.
   const filtered = useMemo<ResidentRow[]>(() => {
-    const rows = list?.residents ?? [];
+    const rows = residents ?? [];
     const q = query.trim().toLowerCase();
     const matched = rows.filter(
       (r) =>
-        r.property_id === selectedProperty &&
         (bandFilter === "all" || r.late_band === bandFilter) &&
         (q === "" ||
           r.unit_id.toLowerCase().includes(q) ||
@@ -135,7 +145,7 @@ export function Residents({
       if (typeof av === "string" && typeof bv === "string") return dir * av.localeCompare(bv);
       return dir * ((av as number) - (bv as number));
     });
-  }, [list, selectedProperty, bandFilter, query, sortKey, sortAsc]);
+  }, [residents, bandFilter, query, sortKey, sortAsc]);
 
   const total = filtered.length;
   const capped = showAll ? filtered : filtered.slice(0, ROW_CAP);
@@ -208,11 +218,11 @@ export function Residents({
         </div>
       )}
 
-      {!loading && !error && portfolio && list && (
+      {!loading && !error && propOptions && (
         <>
           {/* Property selector */}
           <div className="res-prop-strip" style={{ marginTop: 8 }}>
-            {portfolio.properties.map((p) => {
+            {propOptions.map((p) => {
               const on = selectedProperty === p.property_id;
               return (
                 <button
@@ -220,11 +230,11 @@ export function Residents({
                   key={p.property_id}
                   className={`res-prop-card${on ? " active" : ""}`}
                   aria-pressed={on}
-                  onClick={() => { setSelectedProperty(p.property_id); setShowAll(false); }}
+                  onClick={() => { setSelectedProperty(p.property_id); setSelectedResident(null); setShowAll(false); }}
                 >
-                  <span className="res-prop-name">{propName(p, names)}</span>
+                  <span className="res-prop-name">{p.name}</span>
                   <span className="res-prop-meta">
-                    {p.resident_count} residents · {pct(p.predicted_late_rate)} late
+                    {p.resident_count} resident{p.resident_count === 1 ? "" : "s"}
                   </span>
                 </button>
               );
@@ -265,11 +275,17 @@ export function Residents({
             </div>
           )}
 
-          {selectedProperty && (
+          {selectedProperty && listLoading && (
+            <div className="card">
+              <p className="muted" style={{ margin: 0 }}>Scoring residents at {selectedName}…</p>
+            </div>
+          )}
+
+          {selectedProperty && !listLoading && residents && (
             <>
           {/* Resident table */}
           <div className="card">
-            <h2>Residents — {names[selectedProperty] ?? selectedProperty}</h2>
+            <h2>Residents — {selectedName}</h2>
 
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
               <label className="field" style={{ flex: "1 1 200px", minWidth: 160 }}>

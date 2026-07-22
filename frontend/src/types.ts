@@ -767,6 +767,19 @@ export interface ResidentListResponse {
   source: string;
 }
 
+/** One entry in the property picker — cheap (no scoring). */
+export interface ResidentPropertyOption {
+  property_id: string;
+  name: string;
+  resident_count: number;
+}
+
+/** GET /residents/properties — the picker source. */
+export interface ResidentPropertiesResponse {
+  properties: ResidentPropertyOption[];
+  count: number;
+}
+
 /** Binary-classifier prediction (late / serious) — shape reused by RiskGauge. */
 export interface ResidentClassPrediction {
   probability: number;
@@ -822,11 +835,11 @@ export interface ResidentDetail {
 export interface PropertyResidentRollup {
   property_id?: string;
   name?: string;
-  count: number;
-  predicted_late_rate?: number;
-  total_expected_arrears?: number;
-  churn_risk_count?: number;
-  serious_flag_count?: number;
+  resident_count: number;
+  predicted_late_rate: number;
+  total_expected_arrears: number;
+  churn_risk_count: number;
+  serious_flag_count: number;
   [k: string]: unknown;
 }
 
