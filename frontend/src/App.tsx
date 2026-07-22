@@ -69,20 +69,31 @@ type View =
   | "ab"
   | "learn";
 
-/** "#/property/PROP-007" -> "PROP-007"; anything else -> null. */
-function parsePropertyHash(): string | null {
-  const m = /^#\/property\/([\w-]+)/.exec(window.location.hash);
-  return m ? m[1] : null;
+const VIEWS: View[] = [
+  "workspace", "apply", "applicants", "properties", "property", "tours", "ask",
+  "dashboard", "risk", "residents", "evaluations", "monitoring", "ab", "learn",
+];
+const VIEW_SET = new Set<string>(VIEWS);
+
+/**
+ * The URL hash is the source of truth for the current page + any deep-link ids:
+ *   "#/residents/PROP-041/RES-0018" -> {view:"residents", ids:["PROP-041","RES-0018"]}
+ *   "#/property/PROP-007"           -> {view:"property",  ids:["PROP-007"]}
+ *   "#/risk/APP-123"                -> {view:"risk",      ids:["APP-123"]}
+ *   ""                              -> {view:"workspace", ids:[]}
+ */
+function parseHash(): { view: View; ids: string[] } {
+  const parts = window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const slug = parts[0] || "workspace";
+  if (!VIEW_SET.has(slug)) return { view: "workspace", ids: [] };
+  return { view: slug as View, ids: parts.slice(1) };
 }
 
-function clearPropertyHash() {
-  if (parsePropertyHash()) {
-    history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search,
-    );
-  }
+/** Build the hash for a view (+ optional deep-link ids). workspace -> "#/". */
+function routeToHash(view: View, ids: (string | null | undefined)[] = []): string {
+  const clean = ids.filter(Boolean) as string[];
+  if (view === "workspace" && clean.length === 0) return "#/";
+  return "#/" + [view, ...clean].join("/");
 }
 
 export default function App() {
@@ -94,96 +105,64 @@ export default function App() {
   const [error, setError] = useState("");
   const runIdRef = useRef(0);
   const loading = phase === "extracting" || phase === "screening";
-  // Deep link: opening the app at "#/property/PROP-XXX" lands on that page.
-  const [propertyId, setPropertyId] = useState<string | null>(parsePropertyHash);
-  // When the Tours page is opened from a property page it lands pre-locked
-  // to that home; null means "let the user pick".
-  const [tourPropertyId, setTourPropertyId] = useState<string | null>(null);
-  // When the Ask page is opened from a property page it lands scoped to that
-  // home; null means "All properties".
-  const [askPropertyId, setAskPropertyId] = useState<string | null>(null);
-  // When the Risk page is opened from an applicant it lands with that person
-  // pre-selected; null means "rank everyone".
-  const [riskApplicantId, setRiskApplicantId] = useState<string | null>(null);
-  // When the Residents page is opened from elsewhere it can land pre-scoped to
-  // a property and/or a specific resident; null means "whole portfolio".
-  const [residentPropertyId, setResidentPropertyId] = useState<string | null>(null);
-  const [residentId, setResidentId] = useState<string | null>(null);
-  const [view, setView] = useState<View>(() =>
-    parsePropertyHash() ? "property" : "workspace",
-  );
+  // Initial view + any deep-link ids come from the URL hash (see parseHash).
+  const r0 = parseHash();
+  const idAt = (v: View, i: number) => (r0.view === v ? (r0.ids[i] ?? null) : null);
+  const [propertyId, setPropertyId] = useState<string | null>(() => idAt("property", 0));
+  const [tourPropertyId, setTourPropertyId] = useState<string | null>(() => idAt("tours", 0));
+  const [askPropertyId, setAskPropertyId] = useState<string | null>(() => idAt("ask", 0));
+  const [riskApplicantId, setRiskApplicantId] = useState<string | null>(() => idAt("risk", 0));
+  const [residentPropertyId, setResidentPropertyId] = useState<string | null>(() => idAt("residents", 0));
+  const [residentId, setResidentId] = useState<string | null>(() => idAt("residents", 1));
+  const [view, setView] = useState<View>(r0.view);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null));
   }, []);
 
-  // Keep view state in sync with the hash so the browser back button works.
+  // URL hash is the source of truth: nav clicks set the hash, and this syncs
+  // view + deep-link ids on every change (so back/forward and direct links work).
   useEffect(() => {
     const onHash = () => {
-      const id = parsePropertyHash();
-      if (id) {
-        setPropertyId(id);
-        setView("property");
-      } else {
-        setPropertyId(null);
-        setView((v) => (v === "property" ? "properties" : v));
-      }
+      const r = parseHash();
+      setPropertyId(r.view === "property" ? (r.ids[0] ?? null) : null);
+      setTourPropertyId(r.view === "tours" ? (r.ids[0] ?? null) : null);
+      setAskPropertyId(r.view === "ask" ? (r.ids[0] ?? null) : null);
+      setRiskApplicantId(r.view === "risk" ? (r.ids[0] ?? null) : null);
+      setResidentPropertyId(r.view === "residents" ? (r.ids[0] ?? null) : null);
+      setResidentId(r.view === "residents" ? (r.ids[1] ?? null) : null);
+      setView(r.view);
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  /** Open the dedicated page for a property and record it in the URL hash. */
+  // Navigation is expressed as a URL-hash change; the hashchange listener above
+  // then syncs view + deep-link ids. Every page therefore has its own URL.
+  /** Open the dedicated page for a property. */
   function goToProperty(id: string) {
-    setPropertyId(id);
-    setView("property");
-    if (parsePropertyHash() !== id) window.location.hash = `/property/${id}`;
+    window.location.hash = routeToHash("property", [id]);
   }
-
   /** Open the Tour Scheduler locked to a specific property. */
   function goToTours(id: string) {
-    setTourPropertyId(id);
-    setView("tours");
-    clearPropertyHash();
+    window.location.hash = routeToHash("tours", [id]);
   }
-
   /** Open the Concierge (Ask) page scoped to a specific property. */
   function goToAsk(id: string) {
-    setAskPropertyId(id);
-    setView("ask");
-    clearPropertyHash();
+    window.location.hash = routeToHash("ask", [id]);
   }
-
   /** Open the Risk page with a specific applicant pre-selected. */
   function goToRisk(id: string) {
-    setRiskApplicantId(id);
-    setView("risk");
-    clearPropertyHash();
+    window.location.hash = routeToHash("risk", [id]);
   }
-
   /** Open the Residents page, optionally scoped to a property and/or resident. */
   function goToResidents(opts?: { propertyId?: string; residentId?: string }) {
-    setResidentPropertyId(opts?.propertyId ?? null);
-    setResidentId(opts?.residentId ?? null);
-    setView("residents");
-    clearPropertyHash();
+    window.location.hash = routeToHash("residents", [opts?.propertyId, opts?.residentId]);
   }
-
-  /** Nav switcher that also drops the property hash when leaving the page. */
+  /** Nav switcher — sets the URL for the target view. */
   function navigate(v: View) {
-    if (v !== "property") {
-      setPropertyId(null);
-      clearPropertyHash();
-    }
-    if (v !== "tours") setTourPropertyId(null);
-    if (v !== "ask") setAskPropertyId(null);
-    if (v !== "risk") setRiskApplicantId(null);
-    if (v !== "residents") {
-      setResidentPropertyId(null);
-      setResidentId(null);
-    }
-    setView(v);
+    window.location.hash = routeToHash(v);
   }
 
   async function runFlow(getUpload: () => Promise<UploadResponse>) {
@@ -412,7 +391,7 @@ export default function App() {
     return (
       <>
         <Nav view={view} setView={navigate} commands={commands} />
-        <Learn setView={setView} />
+        <Learn setView={navigate} />
       </>
     );
   }
@@ -523,7 +502,7 @@ export default function App() {
             )}
             <button
               className="btn-small btn-ghost"
-              onClick={() => setView("learn")}
+              onClick={() => navigate("learn")}
             >
               Take the tour <ArrowRight size={13} aria-hidden />
             </button>
@@ -614,10 +593,6 @@ function Nav({
       {tab("dashboard", "Dashboard")}
       {tab("risk", "Risk")}
       {tab("residents", "Residents")}
-      {tab("evaluations", "Evaluations")}
-      {tab("monitoring", "Monitoring")}
-      {tab("ab", "A/B Lab")}
-      {tab("learn", "Learn")}
       <ThemeToggle />
       {commands && <CommandPalette commands={commands} />}
       <Toaster />
