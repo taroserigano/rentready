@@ -31,8 +31,10 @@ import knowledge
 _PROPERTY_RE = re.compile(
     r"\b("
     r"price|cost|how much|monthly rent|what'?s the rent|what is the rent|rental rate|"
+    r"the rent|negotiable|"
     r"bedroom|bed\b|bathroom|bath\b|square feet|square footage|sq ?ft|size|how big|"
-    r"amenit|gym|fitness|pool|swim|rooftop|deck|bike|concierge|playground|"
+    r"amenit|gym\w*|fitness|pool|swim|rooftop|deck|bike|concierge|playground|"
+    r"parking|garage|"
     r"balcony|laundry|washer|dryer|furnished|gated|storage|"
     r"walk score|transit|neighborhood|located|location|address|"
     r"available|availability|move[- ]?in|year built|floor|"
@@ -49,14 +51,14 @@ _LEASE_RE = re.compile(
     r"late fee|late payment|returned payment|nsf|bounced|"
     r"guests?|visitor|occupan|"
     r"can i|am i allowed|allowed to|what happens if|do i have to|how do i|"
-    r"pet policy|pets? allowed|pet deposit|pet rent|"
+    r"pet policy|pets? allowed|pet deposit|pet rent|dogs?|cats?|"
     r"insurance|liability|"
     r"renew|renewal|month[- ]to[- ]month|"
     r"landlord enter|landlord entry|enter the|entry|"
     r"utilit\w*|maintenance|repair|"
     r"lease term|how long is the lease|"
     r"rule|alteration|paint|change the lock|smoking|"
-    r"evict|default|policy"
+    r"evict\w*|default|policy"
     r")\b",
     re.IGNORECASE,
 )
@@ -74,6 +76,29 @@ _COMPARE_INTENT_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+
+# Generic question SHAPES ("how much …", "is there a …") that _PROPERTY_RE also
+# matches. On their own they are just the form of the question, not a concrete
+# property fact — so when a real lease term is also present they must not force a
+# "both" route (a "how much is the security deposit?" is a pure lease question).
+_GENERIC_PROPERTY_RE = re.compile(
+    r"\b(how much|does it have|do they have|is there a|are there|is there|do you have)\b",
+    re.IGNORECASE,
+)
+
+# Explicit property ids named in the question, e.g. "compare PROP-001 and PROP-002".
+_NAMED_ID_RE = re.compile(r"\bPROP-\d+\b", re.IGNORECASE)
+
+
+def _named_ids(question: str) -> list[str]:
+    """Distinct PROP-0XX ids named in the question, in first-seen order."""
+    seen: list[str] = []
+    for m in _NAMED_ID_RE.finditer(question or ""):
+        pid = m.group(0).upper()
+        if pid not in seen:
+            seen.append(pid)
+    return seen
+
 
 # "Singular" phrasing — the user is clearly asking about ONE (scoped) home.
 # These veto the filter-phrase compare trigger so scoped Q&A still routes to
@@ -104,7 +129,7 @@ _PETS_RE = re.compile(
 # just returns the cheapest homes instead), so keep this in sync with
 # whatever amenities the data contains.
 _AMENITY_MAP = [
-    (re.compile(r"\b(gym|fitness)\b", re.I), "Gym", "has a gym"),
+    (re.compile(r"\b(gym\w*|fitness)\b", re.I), "Gym", "has a gym"),
     (re.compile(r"\b(pool|swim)\b", re.I), "Pool", "has a pool"),
     (re.compile(r"\b(rooftop|roof deck|deck)\b", re.I), "Rooftop Deck", "has a rooftop deck"),
     (re.compile(r"\bconcierge\b", re.I), "Concierge", "has a concierge"),
@@ -188,7 +213,14 @@ def route(question: str, property_id: str | None = None) -> str:
     is_property = bool(_PROPERTY_RE.search(q))
     is_lease = bool(_LEASE_RE.search(q))
     if is_property and is_lease:
-        return "both"
+        # A generic question shape ("how much …", "is there a …") counts as a
+        # property signal, but on its own it is only the FORM of the question — a
+        # concrete lease term (security deposit, late fee, …) should own it.
+        # Route "both" only when a CONCRETE property fact keyword also survives
+        # once the generic shapes are stripped out.
+        if _PROPERTY_RE.search(_GENERIC_PROPERTY_RE.sub(" ", q)):
+            return "both"
+        return "lease"
     if is_lease:
         return "lease"
     if is_property:
@@ -246,7 +278,7 @@ def _fact_sheet(p: dict) -> str:
 
 # Feature detectors used by the deterministic property answer.
 _FEATURE_CHECKS = [
-    (re.compile(r"\b(gym|fitness)\b", re.I), lambda p: "Gym" in (p.get("amenities") or []), "a gym"),
+    (re.compile(r"\b(gym\w*|fitness)\b", re.I), lambda p: "Gym" in (p.get("amenities") or []), "a gym"),
     (re.compile(r"\b(pool|swim)\b", re.I), lambda p: "Pool" in (p.get("amenities") or []), "a pool"),
     (re.compile(r"\b(rooftop|deck)\b", re.I), lambda p: "Rooftop Deck" in (p.get("amenities") or []), "a rooftop deck"),
     (re.compile(r"\bbike\b", re.I), lambda p: "Bike Storage" in (p.get("amenities") or []), "bike storage"),
@@ -263,37 +295,65 @@ _FEATURE_CHECKS = [
 
 
 def _deterministic_property_answer(p: dict, question: str) -> str:
-    """Answer a property question from exact fields, no LLM."""
+    """Answer a property question from exact fields, no LLM.
+
+    Collects a clause for EVERY fact the question asks about, so a multi-part
+    question ("how big is it, what's the rent, and is there parking?") surfaces
+    ALL of the requested fields — size, rent AND parking — not just the first
+    match. Falls back to a one-line summary when nothing specific is recognized.
+    """
     name = p.get("name", "This property")
     q = question or ""
+    clauses: list[str] = []
 
-    # "Does it have X?" / "Is it X?" / "Is there X?" style — yes/no on a
-    # concrete feature. Bare "is"/"are" catches the very common "Is it
-    # furnished?"/"Is the community gated?" phrasing, not just "is there".
-    if re.search(r"\b(does|do|is|are|has|have)\b", q, re.I):
-        for rx, check, phrase in _FEATURE_CHECKS:
-            if rx.search(q):
-                if check(p):
-                    return f"Yes — {name} includes {phrase}."
-                return f"No — {name} does not list {phrase}."
+    # Amenity / feature yes-no — one clause per feature the question names.
+    # Lead with an explicit "yes/no" so a boolean amenity question ("does it
+    # have a gym?") gets a crisp affirmation, and it still reads fine when the
+    # question is multi-part ("yes, it has a gym; it's ~900 sq ft; …").
+    for rx, check, phrase in _FEATURE_CHECKS:
+        if rx.search(q):
+            clauses.append(
+                f"yes, it has {phrase}" if check(p) else f"no, it does not have {phrase}"
+            )
 
-    # Specific numeric fields.
-    if re.search(r"\b(rent|price|cost|how much|monthly)\b", q, re.I):
-        return f"{name} rents for {_money(p.get('monthly_rent'))} per month."
-    if re.search(r"\b(bedroom|beds?)\b", q, re.I):
-        return f"{name} has {p.get('bedrooms')} bedroom(s) and {p.get('bathrooms')} bathroom(s)."
-    if re.search(r"\b(square feet|sq ?ft|size|how big)\b", q, re.I):
-        return f"{name} is approximately {p.get('square_feet'):,} square feet."
+    # Size.
+    if re.search(r"\b(square feet|sq ?ft|size|how big|how large)\b", q, re.I):
+        sf = p.get("square_feet")
+        clauses.append(
+            f"it's approximately {sf:,} square feet" if sf else "its size isn't listed"
+        )
+
+    # Rent / price. Also the "is the rent negotiable / can you lower it"
+    # governance case — we state the LISTED rent and never offer to change it.
+    if re.search(r"\b(rent|price|cost|how much|monthly|negotiable|lower)\b", q, re.I):
+        clauses.append(f"the rent is {_money(p.get('monthly_rent'))} per month")
+
+    # Bedrooms / bathrooms — kept in the "N-bed / M-bath" shape. Uses a leading
+    # boundary only (no trailing \b) so "bedrooms"/"bathrooms" match.
+    if re.search(r"\b(bed|bath)", q, re.I):
+        clauses.append(
+            f"it's a {p.get('bedrooms')}-bed / {p.get('bathrooms')}-bath home"
+        )
+
+    # Pets (the property flag; the lease pet policy is retrieved separately).
     if re.search(r"\bpets?\b", q, re.I):
         allowed = p.get("pets_allowed")
-        return (
-            f"Pets are {'allowed' if allowed else 'not allowed'} at {name}"
-            + ("." if allowed else " (assistance animals excepted).")
+        clauses.append(
+            "pets are allowed" if allowed
+            else "pets are not allowed (assistance animals excepted)"
         )
-    if re.search(r"\bavailab|move[- ]?in\b", q, re.I):
-        return f"{name} is available from {p.get('availability_date','the posted date')}."
 
-    # Generic fact summary.
+    # Availability.
+    if re.search(r"\bavailab|move[- ]?in\b", q, re.I):
+        clauses.append(
+            f"it's available from {p.get('availability_date','the posted date')}"
+        )
+
+    if clauses:
+        body = "; ".join(clauses)
+        return f"{name}: {body[0].upper()}{body[1:]}."
+
+    # Generic one-line summary when nothing specific was recognized.
     n = p.get("neighborhood") or {}
     return (
         f"{name} is a {p.get('bedrooms')}-bed / {p.get('bathrooms')}-bath "
@@ -356,6 +416,19 @@ def compare_properties(question: str) -> list[dict]:
     question (AND semantics), and return CompareItem dicts sorted by rent asc,
     capped at 6. With no parseable filter, returns the 6 cheapest."""
     q = question or ""
+
+    # Explicitly named ids ("compare PROP-001 and PROP-002") win outright — the
+    # comparison must contain THOSE homes, not the cheapest fallback.
+    named = _named_ids(q)
+    if named:
+        chosen = [
+            p for p in graph.load_properties()
+            if (p.get("id") or "").upper() in named
+        ]
+        chosen.sort(
+            key=lambda p: (p.get("monthly_rent") is None, p.get("monthly_rent") or 0)
+        )
+        return [_compare_item(p, ["you asked about this home"]) for p in chosen][:6]
 
     max_rent = _parse_max_rent(q)
     min_beds = _parse_min_bedrooms(q)
