@@ -189,7 +189,7 @@ function LiveProduction({
       </div>
       <p className="muted" style={{ marginTop: 4 }}>
         Telemetry from real requests served by the app (not the golden set).
-        Use the Workspace to generate traffic, then refresh.
+        Use the Apply tab to generate traffic, then refresh.
       </p>
 
       {alerts.length > 0 && (

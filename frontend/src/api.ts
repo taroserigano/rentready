@@ -25,7 +25,6 @@ import type {
   LeaseDoc,
   RiskResult,
   RiskListResponse,
-  RiskModelCard,
   RiskEvalResult,
   RiskChatRequest,
   RiskChatAnswer,
@@ -572,10 +571,6 @@ export async function scoreRisk(profile: ApplicantProfile): Promise<RiskResult> 
 /** Batch risk over all saved applicants, ranked highest-first. */
 export async function listRisk(): Promise<RiskListResponse> {
   return json(await fetch(`${BASE}/risk`));
-}
-
-export async function getRiskModelCard(): Promise<RiskModelCard> {
-  return json(await fetch(`${BASE}/risk/model-card`));
 }
 
 export async function runRiskEval(): Promise<RiskEvalResult> {

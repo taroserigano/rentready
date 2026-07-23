@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type {
   RiskArtifact,
   RiskBand,
@@ -263,7 +264,10 @@ function RiskComparison({
  * ReasonCodes, .meter, .delta) so numbers render identically to the Risk page.
  * All framing (bands, tones, colours) comes from riskTone.ts; nothing fetches.
  */
-export function RiskChatArtifact({
+/* memo()'d: the artifact reference stays stable while a message's prose keeps
+ * streaming token-by-token, so this skips re-rendering the gauge/comparison
+ * table on every token instead of only when the artifact itself changes. */
+export const RiskChatArtifact = memo(function RiskChatArtifact({
   artifact,
   onSelectApplicant,
 }: {
@@ -368,4 +372,4 @@ export function RiskChatArtifact({
       return _never;
     }
   }
-}
+});

@@ -1,5 +1,7 @@
+import { memo } from "react";
 import { Sparkles, WifiOff } from "lucide-react";
 import type { RiskChatAnswer, RiskChatIntent } from "../../types";
+import { Markdown } from "../Markdown";
 import { RiskChatArtifact } from "./RiskChatArtifact";
 
 /** One message in the risk-chat thread. */
@@ -36,7 +38,10 @@ function isExploratory(intent: RiskChatIntent): boolean {
   return intent === "whatif" || intent === "counterfactual";
 }
 
-export function RiskChatMessage({
+/* memo()'d: patchMsg keeps unchanged messages at the same object reference,
+ * so this skips re-rendering (and re-parsing Markdown for) every prior
+ * transcript row on each streamed token of the message currently answering. */
+export const RiskChatMessage = memo(function RiskChatMessage({
   msg,
   onFollowUp,
   onSelectApplicant,
@@ -66,7 +71,7 @@ export function RiskChatMessage({
 
   return (
     <div className="chat-msg bot">
-      {msg.text}
+      <Markdown text={msg.text} />
       {res && (
         <>
           <div className="chat-actions">
@@ -117,4 +122,4 @@ export function RiskChatMessage({
       )}
     </div>
   );
-}
+});

@@ -186,7 +186,13 @@ HEADS = [
        band_edges=(0.10, 0.30)),
     _H("late_3m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
        "P(any late payment in the next 3 months / quarter)", "reliable",
-       band_edges=(0.15, 0.40), legacy_alias="late"),
+       # Recalibrated against the actual served-probability distribution: the
+       # model's floor sits around ~0.12-0.17 (even a spotless 36mo tenant
+       # scores ~0.24), so a 0.15 edge left ~0% of residents ever banding
+       # "low" (every property, no exceptions). (0.24, 0.42) gives every
+       # property a real low/medium/elevated mix -- verified against the
+       # committed dataset (min 9 low / 3 high per property).
+       band_edges=(0.24, 0.42), legacy_alias="late"),
     _H("late_6m", "late", "binary", "binary:logistic", FEATURE_ORDER_BASE,
        "P(any late payment in the next 6 months)", "reliable",
        band_edges=(0.25, 0.55)),
@@ -1405,13 +1411,16 @@ _HEALTH_LABELS = {
 
 
 def _grade(score: float) -> str:
-    if score >= 90:
+    # Graded off the rounded (displayed) score so the letter always matches
+    # what's shown, e.g. a displayed "85" is never a hair under an A cutoff.
+    s = round(score)
+    if s >= 85:
         return "A"
-    if score >= 80:
+    if s >= 75:
         return "B"
-    if score >= 70:
+    if s >= 65:
         return "C"
-    if score >= 60:
+    if s >= 55:
         return "D"
     return "F"
 

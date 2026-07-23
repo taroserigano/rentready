@@ -219,6 +219,7 @@ class TourBooking(BaseModel):
     agent_name: str  # denormalized
     prospect_name: str
     prospect_email: str = ""  # "" if unknown
+    prospect_phone: str = ""  # "" if unknown
     status: Literal["booked", "cancelled"] = "booked"
     created_at: str  # UTC ISO
     # "Add to Google Calendar" template link (self-contained; no server creds).
@@ -233,9 +234,13 @@ class ChatMessage(BaseModel):
 
 class ChatState(BaseModel):
     phase: Literal[
-        "greeting", "proposing", "confirming", "awaiting_name", "booked", "no_availability"
+        "greeting", "proposing", "confirming", "awaiting_name",
+        "awaiting_phone", "awaiting_email", "booked", "no_availability",
+        "awaiting_cancel_email",
     ] = "greeting"
     prospect_name: str = ""
+    prospect_phone: str = ""
+    prospect_email: str = ""
     last_proposed: list[Slot] = Field(default_factory=list)
     pending_slot_id: str = ""
 

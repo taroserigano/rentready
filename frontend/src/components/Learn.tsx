@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-type TabId = "workspace" | "evaluations" | "monitoring" | "ab";
+type TabId = "apply" | "evaluations" | "monitoring" | "ab";
 
 interface Quiz {
   q: string;
@@ -261,8 +261,8 @@ function buildModules(setView: (v: TabId) => void): Module[] {
         </>
       ),
       tryIt: {
-        label: "Open Workspace →",
-        tab: "workspace",
+        label: "Open Apply →",
+        tab: "apply",
         hint: "Pick a sample applicant to fire a real request. That single click generates a trace (with many spans) in LangSmith and Phoenix behind the scenes.",
       },
       quiz: {
@@ -308,7 +308,7 @@ function buildModules(setView: (v: TabId) => void): Module[] {
             </li>
           </ul>
           <p>
-            The <b>Claude</b> badge at the top of the Workspace and the{" "}
+            The <b>Claude</b> badge at the top of Apply and the{" "}
             <b>LangSmith</b> badge tell you whether real keys are present. With no
             key, the app falls back to a mock LLM and simply skips tracing — it
             never breaks.
@@ -395,7 +395,7 @@ function buildModules(setView: (v: TabId) => void): Module[] {
       tryIt: {
         label: "Open Phoenix (localhost:6006) →",
         href: "http://localhost:6006",
-        hint: "Ask a question in the Workspace chat first, then open Phoenix and expand the trace. Look at the 'retrieve' span to see which PDF chunks were used.",
+        hint: "Ask a question in the Apply page's chat first, then open Phoenix and expand the trace. Look at the 'retrieve' span to see which PDF chunks were used.",
       },
       quiz: {
         q: "An answer from the PDF chat is wrong. In Phoenix, what should you check first?",

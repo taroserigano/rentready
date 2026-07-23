@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, Sparkles } from "lucide-react";
 import { graphAsk } from "../api";
+import { Markdown } from "./Markdown";
 
 const EXAMPLES = [
   "Which properties in South Congress allow pets?",
@@ -88,7 +89,7 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
         </>
       )}
 
-      {answer && <div className="chat-msg bot">{answer}</div>}
+      {answer && <div className="chat-msg bot"><Markdown text={answer} /></div>}
       {cypher && (
         <div className="code-wrap">
           <pre className="code-block">{cypher}</pre>

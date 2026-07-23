@@ -7,6 +7,7 @@ later. Profiles are stored as JSON.
 """
 
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -14,7 +15,9 @@ from pathlib import Path
 
 from models import ApplicantProfile
 
-DB_PATH = Path(__file__).resolve().parent.parent / "rentready.db"
+# The SQLite file. Overridable via ``RENTREADY_DB`` so e2e/integration runs can
+# point at a throwaway copy instead of mutating the real ``rentready.db``.
+DB_PATH = Path(os.environ.get("RENTREADY_DB") or (Path(__file__).resolve().parent.parent / "rentready.db"))
 
 
 class SlotConflict(Exception):

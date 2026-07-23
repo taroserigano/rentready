@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Info, Search, X } from "lucide-react";
 import { getResidentModelCard, getResidentProperties, listPropertyResidents } from "../../api";
 import type {
@@ -32,6 +32,37 @@ function errText(e: unknown): string {
   return "Could not reach the server. Is the backend running?";
 }
 
+/** Module-level (not redefined per render) so React can reconcile instead of
+ * remounting the header cells on every keystroke/filter/sort change. */
+const SortHeader = memo(function SortHeader({
+  label,
+  keyName,
+  sortKey,
+  sortAsc,
+  onToggle,
+}: {
+  label: string;
+  keyName: SortKey;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onToggle: (key: SortKey) => void;
+}) {
+  const active = sortKey === keyName;
+  return (
+    <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        className="linklike icon-line"
+        style={{ color: active ? "var(--text)" : "inherit", fontWeight: "inherit" }}
+        onClick={() => onToggle(keyName)}
+      >
+        {label}
+        {active && (sortAsc ? <ArrowUp size={12} aria-hidden /> : <ArrowDown size={12} aria-hidden />)}
+      </button>
+    </th>
+  );
+});
+
 /**
  * Residents page — a portfolio-wide, decision-support view of current-resident
  * risk across the 10 properties. A property selector, four portfolio KPI tiles,
@@ -60,7 +91,6 @@ export function Residents({
   const [bandFilter, setBandFilter] = useState<BandFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("late");
   const [sortAsc, setSortAsc] = useState(false);
-  const [showAll, setShowAll] = useState(false);
 
   // Close the model-card modal on Escape.
   useEffect(() => {
@@ -130,7 +160,6 @@ export function Residents({
   const selectProperty = useCallback((id: string) => {
     setSelectedProperty(id);
     setSelectedResident(null);
-    setShowAll(false);
   }, []);
 
   // The selected property's residents, searched + band-filtered, then sorted.
@@ -167,34 +196,21 @@ export function Residents({
   }, [residents, bandFilter, query, sortKey, sortAsc]);
 
   const total = filtered.length;
-  const capped = showAll ? filtered : filtered.slice(0, ROW_CAP);
 
-  function toggleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortAsc((v) => !v);
-    } else {
-      setSortKey(key);
-      setSortAsc(key === "unit" || key === "name"); // text asc, numbers desc on first click
-    }
-    setShowAll(false);
-  }
-
-  const SortHeader = ({ label, keyName }: { label: string; keyName: SortKey }) => {
-    const active = sortKey === keyName;
-    return (
-      <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"}>
-        <button
-          type="button"
-          className="linklike icon-line"
-          style={{ color: active ? "var(--text)" : "inherit", fontWeight: "inherit" }}
-          onClick={() => toggleSort(keyName)}
-        >
-          {label}
-          {active && (sortAsc ? <ArrowUp size={12} aria-hidden /> : <ArrowDown size={12} aria-hidden />)}
-        </button>
-      </th>
-    );
-  };
+  // useCallback (keyed only on sortKey) so its identity is stable across
+  // unrelated re-renders (typing in search, toggling a band chip), which lets
+  // SortHeader's memo actually skip work instead of re-rendering every time.
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (key === sortKey) {
+        setSortAsc((v) => !v);
+      } else {
+        setSortKey(key);
+        setSortAsc(key === "unit" || key === "name"); // text asc, numbers desc on first click
+      }
+    },
+    [sortKey],
+  );
 
   return (
     <div className="app">
@@ -246,7 +262,7 @@ export function Residents({
                   key={p.property_id}
                   className={`res-prop-card${on ? " active" : ""}`}
                   aria-pressed={on}
-                  onClick={() => { setSelectedProperty(p.property_id); setSelectedResident(null); setShowAll(false); }}
+                  onClick={() => { setSelectedProperty(p.property_id); setSelectedResident(null); }}
                 >
                   <span className="res-prop-name">{p.name}</span>
                   <span className="res-prop-meta">
@@ -327,7 +343,7 @@ export function Residents({
                     placeholder="Search unit or resident…"
                     aria-label="Search residents by unit or id"
                     style={{ paddingLeft: 34, width: "100%" }}
-                    onChange={(e) => { setQuery(e.target.value); setShowAll(false); }}
+                    onChange={(e) => setQuery(e.target.value)}
                   />
                 </span>
               </label>
@@ -342,7 +358,7 @@ export function Residents({
                       className="chip"
                       aria-pressed={on}
                       style={on ? { borderColor: "var(--accent)", color: "var(--accent-text)", background: "var(--accent-soft)" } : undefined}
-                      onClick={() => { setBandFilter(f.key); setShowAll(false); }}
+                      onClick={() => setBandFilter(f.key)}
                     >
                       {f.label}
                     </button>
@@ -351,24 +367,27 @@ export function Residents({
               </div>
             </div>
 
-            <div className="table-scroll" style={{ marginTop: 8 }}>
+            <div
+              className={`table-scroll${total >= ROW_CAP ? " table-scroll--capped" : ""}`}
+              style={{ marginTop: 8 }}
+            >
               <table className="table rows-clickable">
                 <thead>
                   <tr>
-                    <SortHeader label="Resident" keyName="name" />
-                    <SortHeader label="Unit" keyName="unit" />
-                    <SortHeader label="Tenure" keyName="tenure" />
-                    <SortHeader label="Late next Q" keyName="late" />
+                    <SortHeader label="Resident" keyName="name" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Unit" keyName="unit" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Tenure" keyName="tenure" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Late next Q" keyName="late" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
                     <th>Band</th>
-                    <SortHeader label="Exp. balance" keyName="arrears" />
-                    <SortHeader label="Churn" keyName="churn" />
-                    <SortHeader label="Serious" keyName="serious" />
-                    <SortHeader label="Balance" keyName="balance" />
+                    <SortHeader label="Exp. balance" keyName="arrears" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Churn" keyName="churn" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Serious" keyName="serious" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
+                    <SortHeader label="Balance" keyName="balance" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
                     <th>Top driver</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {capped.map((r) => (
+                  {filtered.map((r) => (
                     <tr
                       key={r.resident_id}
                       onClick={() => setSelectedResident(r.resident_id)}
@@ -402,13 +421,10 @@ export function Residents({
               </p>
             )}
 
-            {total > ROW_CAP && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <span className="muted" style={{ fontSize: 12 }}>Showing {capped.length} of {total}</span>
-                <button type="button" className="btn-small btn-ghost" onClick={() => setShowAll((v) => !v)}>
-                  {showAll ? "Show top 25" : "Show all"}
-                </button>
-              </div>
+            {total >= ROW_CAP && (
+              <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+                {total} residents — scroll for more
+              </p>
             )}
           </div>
 

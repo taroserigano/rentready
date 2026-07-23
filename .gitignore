@@ -13,6 +13,8 @@ chroma_db/
 storage/
 uploads/
 rentready.db
+rentready.db.bak
+rentready.e2e.db
 backend/evals/results/*.json
 
 # Trained model artifacts (regenerated via train_risk.py)
@@ -25,6 +27,11 @@ backend/artifacts/
 node_modules/
 frontend/dist/
 frontend/.vite/
+
+# Playwright e2e
+frontend/test-results/
+frontend/playwright-report/
+frontend/.playwright/
 
 # OS
 .DS_Store

@@ -14,42 +14,27 @@ import {
 /**
  * Inline decision-support disclaimer. Rendered on the Risk page banner
  * (variant="banner", an `.alert.warn`) and on every RiskCard (variant="inline",
- * a muted footnote). `onViewModelCard` wires the "View model card" affordance.
+ * a muted footnote).
  */
 export function RiskDisclaimer({
   variant = "inline",
-  onViewModelCard,
   text = RISK_DISCLAIMER,
 }: {
   variant?: "banner" | "inline";
-  onViewModelCard?: () => void;
   text?: string;
 }) {
-  const link = onViewModelCard && (
-    <button
-      type="button"
-      className="linklike"
-      onClick={onViewModelCard}
-      style={{ marginLeft: 4 }}
-    >
-      View model card
-    </button>
-  );
-
   if (variant === "banner") {
     return (
       <div className="alert warn" role="note">
         <Info size={16} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
-        <div>
-          {text} {link}
-        </div>
+        <div>{text}</div>
       </div>
     );
   }
 
   return (
     <p className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
-      {RISK_DISCLAIMER} {link}
+      {RISK_DISCLAIMER}
     </p>
   );
 }
@@ -58,8 +43,6 @@ type RiskCardProps = {
   sectionNumber?: string;
   /** "Open risk detail →" — deep-link to the full Risk page. */
   onOpenFull?: () => void;
-  /** Wires "How this is scored →" / the disclaimer's model-card link. */
-  onViewModelCard?: () => void;
 } & (
   | { result: RiskResult; applicantId?: undefined }
   | { applicantId: string; result?: undefined }
@@ -70,7 +53,7 @@ type RiskCardProps = {
  * Either takes a `result` directly or self-fetches from an `applicantId`.
  */
 export function RiskCard(props: RiskCardProps) {
-  const { sectionNumber, onOpenFull, onViewModelCard } = props;
+  const { sectionNumber, onOpenFull } = props;
   const [fetched, setFetched] = useState<RiskResult | null>(null);
   const [error, setError] = useState("");
   const [showHow, setShowHow] = useState(false);
@@ -197,9 +180,7 @@ export function RiskCard(props: RiskCardProps) {
         <button
           type="button"
           className="linklike"
-          onClick={() =>
-            onViewModelCard ? onViewModelCard() : setShowHow((s) => !s)
-          }
+          onClick={() => setShowHow((s) => !s)}
         >
           How this is scored →
         </button>
@@ -210,7 +191,7 @@ export function RiskCard(props: RiskCardProps) {
         )}
       </div>
 
-      {showHow && !onViewModelCard && (
+      {showHow && (
         <p className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.55 }}>
           A gradient-boosted model estimates the calibrated probability of a late
           payment from legitimate financial and payment factors only. Bands:{" "}

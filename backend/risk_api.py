@@ -153,6 +153,11 @@ def chat_stream(req: RiskChatRequest) -> StreamingResponse:
                 elif etype == "done":
                     source = event.get("source", "rules")
                 yield f"data: {json.dumps(event)}\n\n"
+        except GeneratorExit:
+            # Client disconnected mid-stream (navigated away, closed the tab).
+            # Don't log latency here — time-to-teardown is not backend latency
+            # and can be arbitrarily (and misleadingly) large.
+            raise
         except Exception as exc:  # noqa: BLE001 — last-ditch guard
             print(f"risk_api: stream failed ({type(exc).__name__}: {exc}).")
             fallback = {
@@ -161,19 +166,18 @@ def chat_stream(req: RiskChatRequest) -> StreamingResponse:
             }
             yield f"data: {json.dumps(fallback)}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'source': 'rules'})}\n\n"
-        finally:
-            store.log_event(
-                endpoint="risk_chat_stream",
-                applicant_id=req.applicant_id or None,
-                latency_ms=(time.perf_counter() - t0) * 1000,
-                source=source,
-                meta={
-                    "intent": intent,
-                    "scope": "applicant" if req.applicant_id else "portfolio",
-                    "applicant_id": req.applicant_id or "",
-                    "artifact": artifact_kind,
-                },
-            )
+        store.log_event(
+            endpoint="risk_chat_stream",
+            applicant_id=req.applicant_id or None,
+            latency_ms=(time.perf_counter() - t0) * 1000,
+            source=source,
+            meta={
+                "intent": intent,
+                "scope": "applicant" if req.applicant_id else "portfolio",
+                "applicant_id": req.applicant_id or "",
+                "artifact": artifact_kind,
+            },
+        )
 
     return StreamingResponse(
         _event_stream(),

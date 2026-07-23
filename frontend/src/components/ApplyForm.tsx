@@ -1,16 +1,33 @@
-import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Wand2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Upload, Wand2 } from "lucide-react";
 import type {
+  AskResponse,
   ApplicantProfile,
   EligibilityResult,
   RecommendResponse,
   UploadResponse,
 } from "../types";
+import {
+  applyForm,
+  ask,
+  getEligibility,
+  getRecommendations,
+  loadSample,
+  uploadPdf,
+} from "../api";
 import { ApplicationPdf } from "./ApplicationPdf";
-import { StrengthCard } from "./StrengthCard";
+import { Badge } from "./Badge";
+import { Chat } from "./Chat";
 import { EligibilityCard } from "./EligibilityCard";
+import { FinancialHealth } from "./FinancialHealth";
+import { GraphAsk } from "./GraphAsk";
+import { Stepper, SkeletonCard, type Phase } from "./Loading";
+import { ProfileCard } from "./ProfileCard";
 import { Recommendations } from "./Recommendations";
-import { applyForm, getEligibility, getRecommendations } from "../api";
+import { RiskCard } from "./risk/RiskCard";
+import { SampleApplicants } from "./SampleApplicants";
+import { StrengthCard } from "./StrengthCard";
+import { WhatIfSimulator } from "./WhatIfSimulator";
 
 /** Amenities offered by the sample inventory — one-tap add to the field. */
 const COMMON_AMENITIES = [
@@ -213,17 +230,110 @@ function numberOr(value: string, fallback: number): number {
   return value.trim() === "" ? fallback : Number(value);
 }
 
-export function ApplyForm() {
+function errText(e: unknown): string {
+  return e instanceof TypeError
+    ? "Could not reach the server. Is the backend running?"
+    : e instanceof Error && e.message
+      ? e.message
+      : "Something went wrong. Please try again.";
+}
+
+/**
+ * Apply — the single entry point for a rental application: upload an
+ * existing PDF (or load a sample), or fill in the details manually. Either
+ * path feeds the SAME downstream result cards (profile, eligibility,
+ * financial health, strength, risk, what-if, recommendations, chat).
+ */
+export function ApplyForm({
+  health,
+  initialSampleSlug,
+  onOpenRisk,
+  onViewListing,
+}: {
+  health: Record<string, unknown> | null;
+  initialSampleSlug?: string;
+  onOpenRisk: (applicantId: string) => void;
+  onViewListing: (propertyId: string) => void;
+}) {
+  // --- shared applicant state: populated by upload, sample, OR the form ---
+  const [upload, setUpload] = useState<UploadResponse | null>(null);
+  const [eligibility, setEligibility] = useState<EligibilityResult | null>(null);
+  const [recs, setRecs] = useState<RecommendResponse | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [error, setError] = useState("");
+  const runIdRef = useRef(0);
+  const loading = phase === "extracting" || phase === "screening";
+  const fileRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  async function runFlow(getUpload: () => Promise<UploadResponse>) {
+    const myRun = ++runIdRef.current;
+    const alive = () => myRun === runIdRef.current;
+    setError("");
+    setPhase("extracting");
+    setUpload(null);
+    setEligibility(null);
+    setRecs(null);
+    try {
+      const res = await getUpload();
+      if (!alive()) return;
+      setUpload(res);
+      setPhase("screening");
+      // Eligibility and recommendations run concurrently but reveal
+      // independently, so each card replaces its skeleton as it resolves.
+      const eligP = getEligibility(res.applicant_id).then((e) => {
+        if (alive()) setEligibility(e);
+      });
+      const recP = getRecommendations(res.applicant_id).then((r) => {
+        if (alive()) setRecs(r);
+      });
+      await Promise.all([eligP, recP]);
+      if (alive()) setPhase("done");
+    } catch (e) {
+      if (alive()) {
+        setError(errText(e));
+        setPhase("error");
+      }
+    }
+  }
+
+  const handleFile = (file: File) => runFlow(() => uploadPdf(file));
+  const handleSample = (slug: string) => runFlow(() => loadSample(slug));
+
+  async function handleAsk(question: string): Promise<AskResponse> {
+    return ask(upload!.applicant_id, question);
+  }
+
+  // Command-palette deep link: "#/apply/<slug>" auto-loads that sample.
+  useEffect(() => {
+    if (initialSampleSlug) handleSample(initialSampleSlug);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSampleSlug]);
+
+  // Results land far below the (now much taller) upload+form section, so
+  // bring them into view as soon as there's something to see.
+  useEffect(() => {
+    if (upload) {
+      requestAnimationFrame(() =>
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }, [upload]);
+
+  function startOver() {
+    setForm(INITIAL);
+    setErrors({});
+    setUpload(null);
+    setEligibility(null);
+    setRecs(null);
+    setError("");
+    setPhase("idle");
+  }
+
+
+  // --- manual-entry form state ---
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Errors>({});
-  const [serverError, setServerError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [upload, setUpload] = useState<UploadResponse | null>(null);
-  const [eligibility, setEligibility] = useState<EligibilityResult | null>(
-    null,
-  );
-  const [recs, setRecs] = useState<RecommendResponse | null>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
 
   const selectedAmenities = useMemo(
     () => form.amenities.split(",").map((s) => s.trim()).filter(Boolean),
@@ -261,15 +371,6 @@ export function ApplyForm() {
       }
     }
     return next;
-  }
-
-  function startOver() {
-    setForm(INITIAL);
-    setErrors({});
-    setServerError("");
-    setUpload(null);
-    setEligibility(null);
-    setRecs(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -335,45 +436,58 @@ export function ApplyForm() {
       references_count: numberOr(form.references_count, 0),
     };
 
-    setServerError("");
-    setLoading(true);
-    setUpload(null);
-    setEligibility(null);
-    setRecs(null);
-    try {
-      const created: UploadResponse = await applyForm(profile);
-      const [elig, rec] = await Promise.all([
-        getEligibility(created.applicant_id),
-        getRecommendations(created.applicant_id),
-      ]);
-      setUpload(created);
-      setEligibility(elig);
-      setRecs(rec);
-      // Let the results paint, then bring them into view.
-      requestAnimationFrame(() =>
-        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      );
-    } catch (e) {
-      // fetch throws TypeError when the server is unreachable; anything
-      // else carries the server's plain-English detail message.
-      setServerError(
-        e instanceof TypeError
-          ? "Could not reach the server. Is the backend running?"
-          : e instanceof Error && e.message
-            ? e.message
-            : "Something went wrong. Please try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    runFlow(() => applyForm(profile));
   }
 
   return (
     <div className="app">
       <header>
-        <h1>Apply as a renter</h1>
-        <p>Fill in your details — no PDF needed.</p>
+        <h1>Apply</h1>
+        <p>
+          Upload a rental application PDF, or fill in your details manually —
+          either way we'll check eligibility and match you to properties.
+        </p>
+        <div className="badges">
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
+          <Badge on={!!health?.langsmith} label="LangSmith" tone="teal" />
+          <Badge on={!!health?.phoenix} label="Phoenix" tone="magenta" />
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
+        </div>
       </header>
+
+      <div>
+        <div className="card">
+          <h2>1. Upload application</h2>
+          <div
+            className="dropzone"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <Upload size={22} aria-hidden />
+            <span className="dz-title">
+              {loading ? "Processing…" : "Drop a rental application PDF"}
+            </span>
+            {!loading && <span className="dz-sub">or click to browse</span>}
+          </div>
+          <SampleApplicants onPick={handleSample} disabled={loading} />
+        </div>
+      </div>
+
+      <div className="section-divider">or fill in your details manually</div>
 
       <div className="card">
         <div className="rec-head" style={{ marginBottom: 8 }}>
@@ -897,7 +1011,6 @@ export function ApplyForm() {
           </details>
 
           <div className="form-footer">
-            {serverError && <div className="error">{serverError}</div>}
             <button type="submit" disabled={loading}>
               {loading ? "Checking…" : "Check my eligibility"}
             </button>
@@ -905,34 +1018,62 @@ export function ApplyForm() {
         </form>
       </div>
 
-      {upload && eligibility && recs && (
-        <div ref={resultsRef}>
-          <div
-            className="rec-head"
-            style={{ marginTop: 18, marginBottom: 4 }}
-          >
-            <span className="badge tone-good icon-line">
-              <CheckCircle2 size={13} /> Application submitted
-            </span>
-            <button
-              type="button"
-              className="btn-small btn-ghost"
-              style={{ marginLeft: "auto" }}
-              onClick={startOver}
-            >
+      {error && <div className="error" style={{ marginTop: 18 }}>{error}</div>}
+
+      <div ref={resultsRef}>
+        {upload && (
+          <div className="rec-head" style={{ marginTop: 18 }}>
+            <button type="button" className="btn-small btn-ghost" onClick={startOver}>
               Start over
             </button>
           </div>
-          <EligibilityCard result={eligibility} applicantId={upload.applicant_id} />
-          <StrengthCard applicantId={upload.applicant_id} />
-          {upload.has_pdf && <ApplicationPdf applicantId={upload.applicant_id} />}
+        )}
+
+        <Stepper
+          phase={phase}
+          ready={{ profile: !!upload, eligibility: !!eligibility, recs: !!recs }}
+        />
+
+        {upload ? (
+          <ProfileCard profile={upload.profile} chunks={upload.chunks_indexed} />
+        ) : (
+          phase === "extracting" && <SkeletonCard title="2. Extracted profile" lines={5} />
+        )}
+        {upload?.has_pdf && (
+          <ApplicationPdf applicantId={upload.applicant_id} sectionNumber="2b." />
+        )}
+        {eligibility ? (
+          <EligibilityCard result={eligibility} applicantId={upload?.applicant_id} />
+        ) : (
+          phase === "screening" && <SkeletonCard title="3. Eligibility" lines={2} block={80} />
+        )}
+        {upload && <FinancialHealth profile={upload.profile} />}
+        {upload && <StrengthCard applicantId={upload.applicant_id} sectionNumber="3c." />}
+        {upload && (
+          <RiskCard
+            applicantId={upload.applicant_id}
+            sectionNumber="3d."
+            onOpenFull={() => onOpenRisk(upload.applicant_id)}
+          />
+        )}
+        {upload && (
+          <WhatIfSimulator profile={upload.profile} applicantId={upload.applicant_id} />
+        )}
+        {recs ? (
           <Recommendations
             data={recs}
-            applicantId={upload.applicant_id}
-            monthlyIncome={upload.profile.monthly_income}
+            applicantId={upload?.applicant_id}
+            monthlyIncome={upload?.profile.monthly_income}
+            onViewListing={onViewListing}
           />
-        </div>
-      )}
+        ) : (
+          phase === "screening" && (
+            <SkeletonCard title="4. Recommended properties" lines={2} block={200} />
+          )
+        )}
+        {upload && <Chat onAsk={handleAsk} applicantId={upload?.applicant_id} />}
+        {upload && <GraphAsk neo4jAvailable={!!health?.neo4j_available} />}
+      </div>
     </div>
   );
 }

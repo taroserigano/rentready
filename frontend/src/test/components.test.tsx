@@ -105,7 +105,11 @@ describe("ProfileCard", () => {
       lease_term_wanted: 12,
     };
     render(<ProfileCard profile={profile} chunks={3} />);
-    expect(screen.getByText("Jordan Rivera")).toBeInTheDocument();
+    // The name renders twice: once in the profile header and once in the
+    // "Name" field row of the grid — so scope/count rather than getByText.
+    const names = screen.getAllByText("Jordan Rivera");
+    expect(names).toHaveLength(2);
+    expect(names[0]).toBeInTheDocument();
     expect(screen.getByText(/Indexed 3 chunk/)).toBeInTheDocument();
   });
 });

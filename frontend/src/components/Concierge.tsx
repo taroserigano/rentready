@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   Building2,
   Check,
@@ -6,7 +6,6 @@ import {
   DollarSign,
   FileText,
   GitCompare,
-  Home,
   MapPin,
   MessageSquare,
   RotateCcw,
@@ -18,7 +17,9 @@ import {
 } from "lucide-react";
 import type { CompareItem, ConciergeAnswer, Property } from "../types";
 import { conciergeAsk, conciergeAskStream, getProperties } from "../api";
+import { Markdown } from "./Markdown";
 import { LeaseViewer } from "./LeaseViewer";
+import { useEvent } from "../useEvent";
 
 /** What lease to show in the viewer, which tab, and where to scroll. */
 interface LeaseTarget {
@@ -225,7 +226,10 @@ function CompareResults({
   );
 }
 
-function BotAnswer({
+/* memo()'d: patchMsg keeps unchanged messages at the same object reference,
+ * so this skips re-rendering (and re-parsing Markdown for) every prior
+ * transcript row on each streamed token of the message currently answering. */
+const BotAnswer = memo(function BotAnswer({
   msg,
   onFollowUp,
   onOpenLease,
@@ -271,7 +275,7 @@ function BotAnswer({
 
   return (
     <div className="chat-msg bot">
-      {msg.text}
+      <Markdown text={msg.text} />
       {res && (
         <>
           <div className="chat-actions">
@@ -376,7 +380,7 @@ function BotAnswer({
       )}
     </div>
   );
-}
+});
 
 export function Concierge({
   initialPropertyId,
@@ -407,9 +411,11 @@ export function Concierge({
   }, [initialPropertyId]);
 
   // Keep the transcript pinned to the latest message, including mid-stream.
+  // Skip while empty so the starter tiles land scrolled to the top, not
+  // yanked to the bottom of their own content on first render.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && messages.length > 0) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   /** Update a single message in place by id. */
@@ -417,10 +423,13 @@ export function Concierge({
     setMessages((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
   }
 
-  async function send(q: string, scopeOverride?: string) {
+  // useEvent: a permanently-stable identity so it can be passed to the
+  // memo()'d BotAnswer rows without defeating their memoization, while still
+  // always seeing the latest messages/propertyId/busy on every call.
+  const send = useEvent(async (q: string, scopeOverride?: string) => {
     q = q.trim();
-    if (!q || busy) return;
     const scope = scopeOverride ?? propertyId;
+    if (!q || busy || !scope) return;
     // History is the conversation so far (before this turn), oldest first.
     const history = messages.map((m) => ({
       role: m.who === "user" ? "user" : "assistant",
@@ -494,13 +503,13 @@ export function Concierge({
     } finally {
       setBusy(false);
     }
-  }
+  });
 
   /** Scope to a compared home and ask about it in one tap. */
-  function askAbout(item: CompareItem) {
+  const askAbout = useEvent((item: CompareItem) => {
     setPropertyId(item.id);
     send(`Tell me more about ${item.name}.`, item.id);
-  }
+  });
 
   /** Start over: clear the transcript but keep the current property scope. */
   function clearChat() {
@@ -510,71 +519,65 @@ export function Concierge({
   const scopeName = properties.find((p) => p.id === propertyId)?.name;
 
   return (
-    <div className="app">
-      <header>
-        <h1>Ask</h1>
-        <p>
-          Ask anything about a lease or a property — pet policy, deposits,
-          amenities, rent. Compare homes across the portfolio, too. Answers are
-          grounded and cited.
-        </p>
-      </header>
-
-      <div className="ask-toolbar">
-        <div className="ask-scope">
-          <MapPin size={14} className="icon-muted" aria-hidden />
-          <select
-            className="ask-scope-select"
-            value={propertyId}
-            onChange={(e) => setPropertyId(e.target.value)}
-            aria-label="Scope to a property"
-          >
-            <option value="">All properties</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {p.area}
-              </option>
-            ))}
-          </select>
-        </div>
-        {scopeName && (
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setLease({ propertyId, tab: "document" })}
-            title="View lease PDF"
-            aria-label="View lease PDF"
-          >
-            <FileText size={16} />
-          </button>
-        )}
-        {messages.length > 0 && (
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={clearChat}
-            title="Clear conversation"
-            aria-label="Clear conversation"
-            style={{ marginLeft: "auto" }}
-          >
-            <RotateCcw size={16} />
-          </button>
-        )}
-      </div>
-      {!scopeName && (
-        <div className="ask-toolbar-hint">
-          <Home size={12} /> Asking across all properties — try "which
-          pet-friendly homes are under $2,000?"
-        </div>
-      )}
-
+    <div className="app app-ask">
       <div className="card ask-chat-card">
+        <div className="ask-chat-topbar">
+          <div className="ask-scope">
+            <MapPin size={13} className="icon-muted" aria-hidden />
+            <select
+              className="ask-scope-select"
+              value={propertyId}
+              onChange={(e) => setPropertyId(e.target.value)}
+              aria-label="Scope to a property"
+            >
+              <option value="" disabled>
+                Select a property…
+              </option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.area}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            {scopeName && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setLease({ propertyId, tab: "document" })}
+                title="View lease PDF"
+                aria-label="View lease PDF"
+              >
+                <FileText size={16} />
+              </button>
+            )}
+            {messages.length > 0 && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={clearChat}
+                title="Clear conversation"
+                aria-label="Clear conversation"
+              >
+                <RotateCcw size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+        {!scopeName && (
+          <p className="ask-scope-hint muted">
+            Select a property above to ask questions about it.
+          </p>
+        )}
         <div className="ask-chat-scroll" ref={scrollRef} aria-live="polite">
           {messages.length === 0 ? (
             <>
-              <p className="muted" style={{ marginTop: 0 }}>
-                Pick a question to get started, or type your own below.
-              </p>
+              {scopeName && (
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Pick a question to get started, or type your own below.
+                </p>
+              )}
               <div className="ask-starters">
                 {STARTER_GROUPS.map((group) => (
                   <div key={group.label} className="ask-starter-group">
@@ -586,9 +589,9 @@ export function Concierge({
                           type="button"
                           className="ask-starter-tile"
                           onClick={() => send(q)}
-                          disabled={busy}
+                          disabled={busy || !scopeName}
                         >
-                          <group.icon size={15} />
+                          <group.icon size={13} />
                           <span>{q}</span>
                         </button>
                       ))}
@@ -634,9 +637,12 @@ export function Concierge({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. What's the pet policy?"
+            placeholder={
+              scopeName ? "e.g. What's the pet policy?" : "Select a property to ask…"
+            }
+            disabled={!scopeName}
           />
-          <button type="submit" disabled={busy}>
+          <button type="submit" disabled={busy || !scopeName}>
             Ask
           </button>
         </form>

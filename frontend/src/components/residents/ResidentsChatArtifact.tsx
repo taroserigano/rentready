@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type {
   PropertyHealth,
   ReasonCode,
@@ -115,7 +116,11 @@ function ScalarArtifact({ d }: { d: Dict }) {
   );
 }
 
-export function ResidentsChatArtifact({
+/* memo()'d: the artifact reference stays stable while a message's prose keeps
+ * streaming token-by-token, so this — including the RadialBarChart gauges in
+ * ResidentFamilies — skips re-rendering on every token instead of only when
+ * the artifact itself changes. */
+export const ResidentsChatArtifact = memo(function ResidentsChatArtifact({
   artifact,
   onSelectProperty,
 }: {
@@ -163,4 +168,4 @@ export function ResidentsChatArtifact({
 
   // 4) Nothing renderable — prose alone carries the answer.
   return null;
-}
+});

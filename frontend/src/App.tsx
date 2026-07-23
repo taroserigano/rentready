@@ -1,43 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Upload,
-  Sun,
-  Moon,
-  FileText,
-  ShieldCheck,
-  Building2,
-  MessagesSquare,
-  ArrowRight,
-} from "lucide-react";
-import {
-  ask,
-  getEligibility,
-  getHealth,
-  getRecommendations,
-  getSamples,
-  loadSample,
-  uploadPdf,
-  type Sample,
-} from "./api";
-import type {
-  AskResponse,
-  EligibilityResult,
-  RecommendResponse,
-  UploadResponse,
-} from "./types";
-import { ProfileCard } from "./components/ProfileCard";
-import { Stepper, SkeletonCard, type Phase } from "./components/Loading";
+import { useEffect, useMemo, useState } from "react";
+import { Sun, Moon, KeyRound } from "lucide-react";
+import { getHealth, getSamples, type Sample } from "./api";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Toaster } from "./components/Toaster";
-import { ApplicationPdf } from "./components/ApplicationPdf";
-import { EligibilityCard } from "./components/EligibilityCard";
-import { FinancialHealth } from "./components/FinancialHealth";
-import { StrengthCard } from "./components/StrengthCard";
-import { WhatIfSimulator } from "./components/WhatIfSimulator";
-import { Recommendations } from "./components/Recommendations";
-import { Chat } from "./components/Chat";
-import { GraphAsk } from "./components/GraphAsk";
-import { SampleApplicants } from "./components/SampleApplicants";
 import { Evaluations } from "./components/Evaluations";
 import { Monitoring } from "./components/Monitoring";
 import { ABLab } from "./components/ABLab";
@@ -50,11 +15,9 @@ import { PropertyPage } from "./components/PropertyPage";
 import { Tours } from "./components/Tours";
 import { Concierge } from "./components/Concierge";
 import { Risk } from "./components/risk/Risk";
-import { RiskCard } from "./components/risk/RiskCard";
 import { Residents } from "./components/residents/Residents";
 
 type View =
-  | "workspace"
   | "apply"
   | "applicants"
   | "properties"
@@ -70,7 +33,7 @@ type View =
   | "learn";
 
 const VIEWS: View[] = [
-  "workspace", "apply", "applicants", "properties", "property", "tours", "ask",
+  "apply", "applicants", "properties", "property", "tours", "ask",
   "dashboard", "risk", "residents", "evaluations", "monitoring", "ab", "learn",
 ];
 const VIEW_SET = new Set<string>(VIEWS);
@@ -80,31 +43,25 @@ const VIEW_SET = new Set<string>(VIEWS);
  *   "#/residents/PROP-041/RES-0018" -> {view:"residents", ids:["PROP-041","RES-0018"]}
  *   "#/property/PROP-007"           -> {view:"property",  ids:["PROP-007"]}
  *   "#/risk/APP-123"                -> {view:"risk",      ids:["APP-123"]}
- *   ""                              -> {view:"workspace", ids:[]}
+ *   "#/apply/jordan-rivera"         -> {view:"apply",      ids:["jordan-rivera"]} (sample slug)
+ *   ""                              -> {view:"apply", ids:[]}
  */
 function parseHash(): { view: View; ids: string[] } {
   const parts = window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-  const slug = parts[0] || "workspace";
-  if (!VIEW_SET.has(slug)) return { view: "workspace", ids: [] };
+  const slug = parts[0] || "apply";
+  if (!VIEW_SET.has(slug)) return { view: "apply", ids: [] };
   return { view: slug as View, ids: parts.slice(1) };
 }
 
-/** Build the hash for a view (+ optional deep-link ids). workspace -> "#/". */
+/** Build the hash for a view (+ optional deep-link ids). apply (no ids) -> "#/". */
 function routeToHash(view: View, ids: (string | null | undefined)[] = []): string {
   const clean = ids.filter(Boolean) as string[];
-  if (view === "workspace" && clean.length === 0) return "#/";
+  if (view === "apply" && clean.length === 0) return "#/";
   return "#/" + [view, ...clean].join("/");
 }
 
 export default function App() {
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
-  const [upload, setUpload] = useState<UploadResponse | null>(null);
-  const [eligibility, setEligibility] = useState<EligibilityResult | null>(null);
-  const [recs, setRecs] = useState<RecommendResponse | null>(null);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [error, setError] = useState("");
-  const runIdRef = useRef(0);
-  const loading = phase === "extracting" || phase === "screening";
   // Initial view + any deep-link ids come from the URL hash (see parseHash).
   const r0 = parseHash();
   const idAt = (v: View, i: number) => (r0.view === v ? (r0.ids[i] ?? null) : null);
@@ -114,8 +71,9 @@ export default function App() {
   const [riskApplicantId, setRiskApplicantId] = useState<string | null>(() => idAt("risk", 0));
   const [residentPropertyId, setResidentPropertyId] = useState<string | null>(() => idAt("residents", 0));
   const [residentId, setResidentId] = useState<string | null>(() => idAt("residents", 1));
+  // Sample-slug deep link for Apply, e.g. "#/apply/jordan-rivera" (command palette).
+  const [applySampleSlug, setApplySampleSlug] = useState<string | null>(() => idAt("apply", 0));
   const [view, setView] = useState<View>(r0.view);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null));
@@ -132,6 +90,7 @@ export default function App() {
       setRiskApplicantId(r.view === "risk" ? (r.ids[0] ?? null) : null);
       setResidentPropertyId(r.view === "residents" ? (r.ids[0] ?? null) : null);
       setResidentId(r.view === "residents" ? (r.ids[1] ?? null) : null);
+      setApplySampleSlug(r.view === "apply" ? (r.ids[0] ?? null) : null);
       setView(r.view);
     };
     window.addEventListener("hashchange", onHash);
@@ -165,44 +124,6 @@ export default function App() {
     window.location.hash = routeToHash(v);
   }
 
-  async function runFlow(getUpload: () => Promise<UploadResponse>) {
-    const myRun = ++runIdRef.current;
-    const alive = () => myRun === runIdRef.current;
-    setError("");
-    setPhase("extracting");
-    setUpload(null);
-    setEligibility(null);
-    setRecs(null);
-    try {
-      const res = await getUpload();
-      if (!alive()) return;
-      setUpload(res);
-      setPhase("screening");
-      // Eligibility and recommendations run concurrently but reveal
-      // independently, so each card replaces its skeleton as it resolves.
-      const eligP = getEligibility(res.applicant_id).then((e) => {
-        if (alive()) setEligibility(e);
-      });
-      const recP = getRecommendations(res.applicant_id).then((r) => {
-        if (alive()) setRecs(r);
-      });
-      await Promise.all([eligP, recP]);
-      if (alive()) setPhase("done");
-    } catch (e) {
-      if (alive()) {
-        setError(String(e));
-        setPhase("error");
-      }
-    }
-  }
-
-  const handleFile = (file: File) => runFlow(() => uploadPdf(file));
-  const handleSample = (slug: string) => runFlow(() => loadSample(slug));
-
-  async function handleAsk(question: string): Promise<AskResponse> {
-    return ask(upload!.applicant_id, question);
-  }
-
   // Samples power the command palette's "Load sample" commands.
   const [samples, setSamples] = useState<Sample[]>([]);
   useEffect(() => {
@@ -211,7 +132,6 @@ export default function App() {
 
   const commands = useMemo<Command[]>(() => {
     const views: Array<[View, string]> = [
-      ["workspace", "Workspace"],
       ["apply", "Apply"],
       ["applicants", "Applicants"],
       ["properties", "Properties"],
@@ -237,8 +157,7 @@ export default function App() {
         label: `Load sample: ${s.name}`,
         group: "Sample",
         run: () => {
-          navigate("workspace");
-          handleSample(s.slug);
+          window.location.hash = routeToHash("apply", [s.slug]);
         },
       });
     }
@@ -266,15 +185,6 @@ export default function App() {
     return cmds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [samples]);
-
-  if (view === "apply") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <ApplyForm />
-      </>
-    );
-  }
 
   if (view === "applicants") {
     return (
@@ -396,166 +306,18 @@ export default function App() {
     );
   }
 
-  const applicantsLoaded = health?.applicants_loaded;
-  const reviewedCount =
-    typeof applicantsLoaded === "number" ? applicantsLoaded : null;
-
+  // Default / fallback (unmatched hash, or `property` with no id yet): Apply —
+  // upload a PDF or fill in details manually; every downstream result card
+  // (eligibility, risk, recommendations, chat) lives on this one page.
   return (
     <>
       <Nav view={view} setView={navigate} commands={commands} />
-      <div className="app">
-      <header>
-        <h1>Workspace</h1>
-        <p>
-          Upload a rental application PDF to check eligibility and get matched
-          to properties.
-        </p>
-        <div className="badges">
-          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
-          <Badge on={!!health?.langsmith} label="LangSmith" tone="teal" />
-          <Badge on={!!health?.phoenix} label="Phoenix" tone="magenta" />
-          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
-        </div>
-      </header>
-
-      <div className={upload ? undefined : "ws-grid"}>
-      <div className="card">
-        <h2>1. Upload application</h2>
-        <div
-          className="dropzone"
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            const f = e.dataTransfer.files?.[0];
-            if (f) handleFile(f);
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-            }}
-          />
-          <Upload size={22} aria-hidden />
-          <span className="dz-title">
-            {loading ? "Processing…" : "Drop a rental application PDF"}
-          </span>
-          {!loading && <span className="dz-sub">or click to browse</span>}
-        </div>
-        <SampleApplicants onPick={handleSample} disabled={loading} />
-        {error && <div className="error">{error}</div>}
-      </div>
-
-      {!upload && (
-        <aside className="card ws-aside">
-          <div className="eyebrow">How it works</div>
-          <ol className="how-steps">
-            <li className="how-step">
-              <span className="how-icon" data-tone="violet"><FileText size={16} aria-hidden /></span>
-              <div className="how-body">
-                <div className="how-title">Extract the profile</div>
-                <div className="how-desc">
-                  Claude reads the application PDF into clean, structured fields.
-                </div>
-              </div>
-            </li>
-            <li className="how-step">
-              <span className="how-icon" data-tone="teal"><ShieldCheck size={16} aria-hidden /></span>
-              <div className="how-body">
-                <div className="how-title">Check eligibility</div>
-                <div className="how-desc">
-                  Transparent rules produce a verdict and the reasons behind it.
-                </div>
-              </div>
-            </li>
-            <li className="how-step">
-              <span className="how-icon" data-tone="magenta"><Building2 size={16} aria-hidden /></span>
-              <div className="how-body">
-                <div className="how-title">Match properties</div>
-                <div className="how-desc">
-                  Rank homes that fit the budget, must-haves, and location.
-                </div>
-              </div>
-            </li>
-            <li className="how-step">
-              <span className="how-icon" data-tone="warm"><MessagesSquare size={16} aria-hidden /></span>
-              <div className="how-body">
-                <div className="how-title">Ask anything</div>
-                <div className="how-desc">
-                  Chat over the applicant and query the property graph.
-                </div>
-              </div>
-            </li>
-          </ol>
-          <div className="ws-aside-foot">
-            {reviewedCount !== null ? (
-              <span className="badge tone-warm">
-                <span className="dot" aria-hidden />
-                {reviewedCount} applicants reviewed
-              </span>
-            ) : (
-              <span>New here? Start with a sample.</span>
-            )}
-            <button
-              className="btn-small btn-ghost"
-              onClick={() => navigate("learn")}
-            >
-              Take the tour <ArrowRight size={13} aria-hidden />
-            </button>
-          </div>
-        </aside>
-      )}
-      </div>
-
-      <Stepper
-        phase={phase}
-        ready={{ profile: !!upload, eligibility: !!eligibility, recs: !!recs }}
+      <ApplyForm
+        health={health}
+        initialSampleSlug={applySampleSlug ?? undefined}
+        onOpenRisk={goToRisk}
+        onViewListing={goToProperty}
       />
-
-      {upload ? (
-        <ProfileCard profile={upload.profile} chunks={upload.chunks_indexed} />
-      ) : (
-        phase === "extracting" && <SkeletonCard title="2. Extracted profile" lines={5} />
-      )}
-      {upload?.has_pdf && (
-        <ApplicationPdf applicantId={upload.applicant_id} sectionNumber="2b." />
-      )}
-      {eligibility ? (
-        <EligibilityCard result={eligibility} applicantId={upload?.applicant_id} />
-      ) : (
-        phase === "screening" && <SkeletonCard title="3. Eligibility" lines={2} block={80} />
-      )}
-      {upload && <FinancialHealth profile={upload.profile} />}
-      {upload && <StrengthCard applicantId={upload.applicant_id} sectionNumber="3c." />}
-      {upload && (
-        <RiskCard
-          applicantId={upload.applicant_id}
-          sectionNumber="3d."
-          onOpenFull={() => goToRisk(upload.applicant_id)}
-        />
-      )}
-      {upload && (
-        <WhatIfSimulator profile={upload.profile} applicantId={upload.applicant_id} />
-      )}
-      {recs ? (
-        <Recommendations
-          data={recs}
-          applicantId={upload?.applicant_id}
-          monthlyIncome={upload?.profile.monthly_income}
-          onViewListing={goToProperty}
-        />
-      ) : (
-        phase === "screening" && (
-          <SkeletonCard title="4. Recommended properties" lines={2} block={200} />
-        )
-      )}
-      {upload && <Chat onAsk={handleAsk} applicantId={upload?.applicant_id} />}
-      {upload && <GraphAsk neo4jAvailable={!!health?.neo4j_available} />}
-      </div>
     </>
   );
 }
@@ -583,8 +345,18 @@ function Nav({
   );
   return (
     <nav className="nav">
-      <span className="brand">RentReady</span>
-      {tab("workspace", "Workspace")}
+      <button
+        type="button"
+        className="brand"
+        onClick={() => setView("apply")}
+        aria-label="RentReady home"
+        title="Go to home"
+      >
+        <span className="brand-mark" aria-hidden>
+          <KeyRound size={15} strokeWidth={2.4} />
+        </span>
+        RentReady
+      </button>
       {tab("apply", "Apply")}
       {tab("applicants", "Applicants")}
       {tab("properties", "Properties")}
@@ -632,25 +404,3 @@ function ThemeToggle() {
   );
 }
 
-/** Quiet service-health chip: neutral outline, colored status dot. */
-function Badge({
-  on,
-  label,
-  tone,
-}: {
-  on: boolean;
-  label: string;
-  tone?: "violet" | "teal" | "magenta" | "blue";
-}) {
-  return (
-    <span
-      className="badge tone-info"
-      data-tone={tone}
-      title={`${label} is ${on ? "connected" : "not connected"}`}
-    >
-      <span className={`dot ${on ? "good" : "bad"}`} aria-hidden />
-      {label}
-      <span className="sr-only">{on ? "connected" : "not connected"}</span>
-    </span>
-  );
-}

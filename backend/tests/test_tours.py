@@ -193,10 +193,10 @@ def db(tmp_path, monkeypatch):
 
 
 def test_seed_tours_idempotent(db):
-    assert len(store.list_agents()) == 4
+    assert len(store.list_agents()) == len(tours._SEED_AGENTS)
     again = tours.seed_tours()
     assert again["seeded"] is False
-    assert len(store.list_agents()) == 4
+    assert len(store.list_agents()) == len(tours._SEED_AGENTS)
     # 4+4+... windows exist
     assert len(store.list_windows()) >= 4
 
@@ -308,6 +308,24 @@ def test_extract_name():
     assert tours_chat.extract_name("tomorrow afternoon") == ""
 
 
+def test_extract_phone():
+    assert tours_chat.extract_phone("555-123-4567") == "555-123-4567"
+    assert tours_chat.extract_phone("(555) 123-4567") == "(555) 123-4567"
+    assert tours_chat.extract_phone("call me at 5551234567") == "5551234567"
+    assert tours_chat.extract_phone("1-555-123-4567") == "1-555-123-4567"
+    assert tours_chat.extract_phone("no phone here") == ""
+    assert tours_chat.extract_phone("12345") == ""
+
+
+def test_extract_email():
+    assert tours_chat.extract_email("alex.kim@example.com") == "alex.kim@example.com"
+    assert (
+        tours_chat.extract_email("reach me at alex+tours@sub.example.co")
+        == "alex+tours@sub.example.co"
+    )
+    assert tours_chat.extract_email("no email here") == ""
+
+
 # ---------------------------------------------------------------------------
 # Chat state machine (end to end against the DB)
 # ---------------------------------------------------------------------------
@@ -336,7 +354,7 @@ def test_chat_propose_then_book(db):
     assert r2.state.phase == "awaiting_name"
     assert r2.state.pending_slot_id == slot_id
 
-    # Give a name -> booked.
+    # Give a name -> asked for a phone number.
     r3 = tours_chat.handle(
         TourChatRequest(
             messages=[ChatMessage(role="user", content="Alex Kim")],
@@ -344,9 +362,35 @@ def test_chat_propose_then_book(db):
         ),
         now=MON,
     )
-    assert r3.state.phase == "booked"
-    assert r3.booking is not None
-    assert r3.booking.prospect_name == "Alex Kim"
+    assert r3.state.phase == "awaiting_phone"
+    assert r3.state.prospect_name == "Alex Kim"
+    assert r3.booking is None
+
+    # Give a phone number -> asked for an email.
+    r4 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="555-123-4567")],
+            property_id="PROP-002", state=r3.state,
+        ),
+        now=MON,
+    )
+    assert r4.state.phase == "awaiting_email"
+    assert r4.state.prospect_phone == "555-123-4567"
+    assert r4.booking is None
+
+    # Give an email -> booked.
+    r5 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="alex.kim@example.com")],
+            property_id="PROP-002", state=r4.state,
+        ),
+        now=MON,
+    )
+    assert r5.state.phase == "booked"
+    assert r5.booking is not None
+    assert r5.booking.prospect_name == "Alex Kim"
+    assert r5.booking.prospect_phone == "555-123-4567"
+    assert r5.booking.prospect_email == "alex.kim@example.com"
 
 
 def test_chat_slot_taken_reproposes(db):
@@ -364,7 +408,11 @@ def test_chat_slot_taken_reproposes(db):
         end=(start + timedelta(minutes=30)).isoformat(timespec="seconds"),
         prospect_name="Someone Else",
     )
-    state = r1.state.model_copy(update={"prospect_name": "Alex Kim"})
+    state = r1.state.model_copy(update={
+        "prospect_name": "Alex Kim",
+        "prospect_phone": "555-123-4567",
+        "prospect_email": "alex.kim@example.com",
+    })
     r2 = tours_chat.handle(
         TourChatRequest(
             messages=[ChatMessage(role="user", content="book it")],
@@ -375,6 +423,73 @@ def test_chat_slot_taken_reproposes(db):
     assert r2.booking is None
     assert r2.state.phase == "proposing"
     assert "just booked" in r2.reply.lower()
+
+
+def test_chat_cancel_existing_booking(db):
+    booking = store.book_tour(
+        property_id="PROP-002", property_name="Riverside Lofts",
+        agent_id="AGENT-01", agent_name="Maria Lopez",
+        start="2026-07-27T09:00:00", end="2026-07-27T09:30:00",
+        prospect_name="Alex Kim", prospect_email="alex.kim@example.com",
+    )
+    r1 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="cancel my tour booking")],
+            property_id="PROP-002",
+        ),
+        now=MON,
+    )
+    # Must NOT fall through to proposing new slots (the original bug).
+    assert r1.state.phase == "awaiting_cancel_email"
+    assert not r1.proposed_slots
+    assert "email" in r1.reply.lower()
+
+    r2 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="alex.kim@example.com")],
+            property_id="PROP-002", state=r1.state,
+        ),
+        now=MON,
+    )
+    assert r2.state.phase == "greeting"
+    assert "cancelled" in r2.reply.lower()
+    assert store.get_booking(booking["id"])["status"] == "cancelled"
+
+
+def test_chat_cancel_with_email_in_same_message(db):
+    booking = store.book_tour(
+        property_id="PROP-002", property_name="Riverside Lofts",
+        agent_id="AGENT-01", agent_name="Maria Lopez",
+        start="2026-07-27T09:00:00", end="2026-07-27T09:30:00",
+        prospect_name="Alex Kim", prospect_email="alex.kim@example.com",
+    )
+    r = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(
+                role="user",
+                content="please cancel my reservation, my email is alex.kim@example.com",
+            )],
+            property_id="PROP-002",
+        ),
+        now=MON,
+    )
+    assert r.state.phase == "greeting"
+    assert "cancelled" in r.reply.lower()
+    assert store.get_booking(booking["id"])["status"] == "cancelled"
+
+
+def test_chat_cancel_no_matching_booking(db):
+    r = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(
+                role="user", content="cancel my tour, email nobody@nowhere.com",
+            )],
+            property_id="PROP-002",
+        ),
+        now=MON,
+    )
+    assert r.state.phase == "greeting"
+    assert "couldn't find" in r.reply.lower()
 
 
 def test_chat_never_raises_on_bad_input(db):

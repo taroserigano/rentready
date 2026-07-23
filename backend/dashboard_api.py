@@ -52,28 +52,44 @@ def _applicant_stats() -> tuple[int, dict, list]:
 def _property_stats() -> dict:
     props = graph.load_properties()
     rents = [p.get("monthly_rent") or 0 for p in props]
-    areas = {
-        (p.get("neighborhood") or {}).get("name")
-        for p in props
-        if (p.get("neighborhood") or {}).get("name")
-    }
+    by_area: dict = {}
+    for p in props:
+        name = (p.get("neighborhood") or {}).get("name")
+        if name:
+            by_area[name] = by_area.get(name, 0) + 1
     return {
         "total": len(props),
         "rent_min": min(rents) if rents else 0,
         "rent_max": max(rents) if rents else 0,
         "pets_allowed": sum(1 for p in props if p.get("pets_allowed")),
-        "areas": len(areas),
+        "areas": len(by_area),
+        "by_area": dict(sorted(by_area.items(), key=lambda kv: -kv[1])),
     }
+
+
+
+# A streamed SSE response's true "latency" is measured to its natural
+# completion — a request genuinely stuck this long isn't realistic, so a
+# reading past this ceiling is teardown/idle time (e.g. an abandoned
+# connection), not backend work. Excluded from the average, never from
+# events_total, so one bad row can't silently corrupt the whole chart.
+_MAX_SANE_LATENCY_MS = 60_000  # 60s
 
 
 def _traffic_stats() -> dict:
     events = store.recent_events(500)
     by_endpoint: dict = {}
+    requests_by_endpoint: dict = {}
     violations = 0
+    outliers_excluded = 0
     for e in events:
         violations += int(e.get("faithfulness_violations") or 0)
+        requests_by_endpoint[e["endpoint"]] = requests_by_endpoint.get(e["endpoint"], 0) + 1
         latency = e.get("latency_ms")
         if latency is None:
+            continue
+        if float(latency) > _MAX_SANE_LATENCY_MS:
+            outliers_excluded += 1
             continue
         bucket = by_endpoint.setdefault(e["endpoint"], [0.0, 0])
         bucket[0] += float(latency)
@@ -83,6 +99,10 @@ def _traffic_stats() -> dict:
         "avg_latency_ms_by_endpoint": {
             ep: round(total / count) for ep, (total, count) in by_endpoint.items()
         },
+        "requests_by_endpoint": dict(
+            sorted(requests_by_endpoint.items(), key=lambda kv: -kv[1])
+        ),
+        "outliers_excluded": outliers_excluded,
         "faithfulness_violations": violations,
     }
 

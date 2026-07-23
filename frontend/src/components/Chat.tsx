@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Database, FileText, Sparkles } from "lucide-react";
 import type { AskResponse } from "../types";
 import { Feedback } from "./Feedback";
+import { Markdown } from "./Markdown";
 
 interface Msg {
   who: "user" | "bot";
@@ -41,7 +42,7 @@ function BotAnswer({
   const sources = res?.sources ?? [];
   return (
     <div className="chat-msg bot">
-      {msg.text}
+      <Markdown text={msg.text} />
       {res && (
         <>
           <div className="chat-actions">

@@ -41,15 +41,24 @@ import risk_agent
 # Governance / feature-policy intent: "what do you use", "what's excluded",
 # "is X used", fairness / bias / protected-class questions. Checked FIRST so a
 # question naming a feature is treated as governance, not scored explanation.
+# Two subgroups. STEMS are matched with a leading \b + a trailing \w* so an
+# inflected form ("exclud**ed**", "disab**ility**", "discriminat**ion**") is
+# caught — the old trailing \b right after a truncated stem blocked every
+# inflection (it required a word boundary between, e.g., "exclud" and "ed",
+# which never exists). WORD/phrase alternatives keep a trailing \b so short
+# tokens (race, sex, age, …) don't match mid-word.
 _EXCLUSIONS_RE = re.compile(
-    r"\b("
-    r"exclud|not used|don'?t use|do(?:es)? (?:it|the model|you) use|is .* used|"
+    r"\b(?:exclu[ds]|disab|discriminat|redlin|complian|ethnic|bias|fair)\w*"
+    r"|"
+    r"\b(?:"
+    r"not used|don'?t use|do(?:es)? (?:it|the model|you) use|is .* used|"
     r"which features|what features|what factors|feature[s]? (?:used|considered)|"
     r"allowed features|inputs?|variables?|"
-    r"fair|fairness|bias|biased|discriminat|protected|proxy|redlin|"
-    r"model card|governance|compliant|complian|legal|lawful|"
-    r"race|ethnic|national origin|gender|\bsex\b|disab|religion|"
-    r"familial|marital|dependents?|children|\bage\b|\bstudent\b|criminal|"
+    r"protected|proxy|"
+    r"model card|governance|legal|lawful|"
+    r"race|national origin|gender|\bsex\b|religion|"
+    r"familial|marital|dependents?|children|kids?|minors?|"
+    r"\bage\b|\bstudent\b|criminal|"
     r"\bpets?\b|smoker|location|neighborhood"
     r")\b",
     re.IGNORECASE,
@@ -61,7 +70,13 @@ _COUNTERFACTUAL_RE = re.compile(
     r"what would it take|what needs to change|what (?:can|could|should) .* (?:do|change) to|"
     r"how (?:can|could|do|would) .* (?:lower|reduce|improve|decrease|bring down)|"
     r"(?:get|move|drop|bring) .* (?:to|into|out of|below) .* (?:low|medium|high|band)|"
-    r"reach .* band|counterfactual|what would (?:lower|reduce|improve)"
+    r"reach .* band|counterfactual|what would (?:lower|reduce|improve)|"
+    # "what would make this a low(er)-risk applicant", "what would make them
+    # less risky", "what would lower/reduce the risk".
+    r"what would make .*(?:low|lower|less|medium|moderate|reduc)|"
+    r"what would (?:lower|reduce|drop|bring down) .* risk|"
+    # "how do I get them approved / qualified" — a risk-lowering ask.
+    r"how (?:do|can|could|would) .* (?:approved|qualif\w*)"
     r")",
     re.IGNORECASE,
 )
@@ -87,6 +102,42 @@ _COMPARE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Portfolio-wide applicant ranking WITHOUT the word "compare"/"portfolio":
+# "which applicants are riskiest", "who is the riskiest applicant", "show me
+# high risk applicants". Reuses _plan_compare's existing no-applicant branch
+# (risk_agent.portfolio_summary()) -- without this, these phrasings fell
+# through to "explain" (no applicant -> empty result -> deflection) or
+# "general" (generic blurb about the assistant), never surfacing the
+# portfolio distribution that already exists for the "compare" intent.
+_PORTFOLIO_RANK_RE = re.compile(
+    r"("
+    r"(?:which|what|who|show me|list)\b.{0,20}applicants?\b.{0,20}"
+    r"(?:risk|riskiest|highest|lowest)|"
+    r"(?:which|what|who|show me|list)\b.{0,20}"
+    r"(?:high|highest|top|most|least|lowest)[\s-]*risk\b.{0,20}applicants?|"
+    r"riskiest applicant|highest[\s-]risk applicant|lowest[\s-]risk applicant|"
+    r"who\s+(?:is|are|has)\s+(?:the\s+)?(?:most|highest|riskiest)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Portfolio-wide DISTRIBUTION / count questions ("how many applicants are high
+# risk", "how many are elevated risk", "what's the risk distribution"). These
+# name a band ("high") that trips _EXPLAIN_RE, so without an explicit portfolio
+# route they degraded to explain -> deflection at portfolio scope. Routes to
+# "compare", whose no-applicant branch (portfolio_summary) already computes the
+# band counts / high-risk share the answer needs.
+_PORTFOLIO_DIST_RE = re.compile(
+    r"("
+    r"how many\b.{0,40}(?:high|elevated|low|moderate|medium)[\s-]*risk|"
+    r"how many\b.{0,20}applicants?\b|"
+    r"(?:risk|band)\s+distribution|distribution\s+of\s+(?:risk|applicants)|"
+    r"what'?s the (?:risk )?(?:distribution|breakdown|split)|"
+    r"how are .* (?:distributed|split) .* (?:risk|band)"
+    r")",
+    re.IGNORECASE,
+)
+
 # Explain intent: why is this score what it is / drivers / band.
 _EXPLAIN_RE = re.compile(
     r"\b("
@@ -102,8 +153,10 @@ def route(question: str, applicant_id: str | None = None) -> str:
     """Classify the question into an intent.
 
     Precedence (per the contract): governance/exclusions first, then
-    counterfactual, what-if, compare, and finally explain — which is the
-    default when an applicant is scoped, else ``general``.
+    counterfactual, what-if, compare (including portfolio-ranking phrasings
+    that don't say "compare"/"portfolio" but have no applicant scoped), and
+    finally explain — which is the default when an applicant is scoped, else
+    ``general``.
     """
     q = question or ""
     if _EXCLUSIONS_RE.search(q):
@@ -113,6 +166,8 @@ def route(question: str, applicant_id: str | None = None) -> str:
     if _WHATIF_RE.search(q):
         return "whatif"
     if _COMPARE_RE.search(q):
+        return "compare"
+    if not applicant_id and (_PORTFOLIO_RANK_RE.search(q) or _PORTFOLIO_DIST_RE.search(q)):
         return "compare"
     if _EXPLAIN_RE.search(q):
         return "explain"

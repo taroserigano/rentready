@@ -171,7 +171,7 @@ export function ApplicantsDirectory({
 
         {applicants && !listError && applicants.length === 0 && (
           <p className="muted">
-            No applicants yet. Upload a PDF in Workspace or use the Apply tab.
+            No applicants yet. Use the Apply tab to upload a PDF or fill in details.
           </p>
         )}
 

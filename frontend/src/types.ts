@@ -385,6 +385,7 @@ export interface TourBooking {
   agent_name: string;
   prospect_name: string;
   prospect_email: string;
+  prospect_phone: string;
   status: "booked" | "cancelled";
   /** UTC ISO. */
   created_at: string;
@@ -403,9 +404,13 @@ export interface ChatState {
     | "proposing"
     | "confirming"
     | "awaiting_name"
+    | "awaiting_phone"
+    | "awaiting_email"
     | "booked"
     | "no_availability";
   prospect_name: string;
+  prospect_phone: string;
+  prospect_email: string;
   last_proposed: Slot[];
   pending_slot_id: string;
 }
@@ -478,27 +483,6 @@ export interface RiskBandRange {
   band: RiskBand;
   min: number;
   max: number;
-}
-
-export interface RiskModelCard {
-  name: string;
-  version: string;
-  trained_at: string;
-  description: string;
-  intended_use: string;
-  features: string[];
-  excluded: RiskExcludedField[];
-  metrics: {
-    auc: number;
-    pr_auc: number;
-    brier: number;
-    ece: number;
-    n_test: number;
-    [k: string]: number;
-  };
-  bands: RiskBandRange[];
-  limitations: string[];
-  source: string;
 }
 
 /** 2x2 confusion at the operating threshold (rows = actual, cols = predicted). */
@@ -655,10 +639,18 @@ export interface DashboardStats {
     rent_max: number;
     pets_allowed: number;
     areas: number;
+    /** Property count per neighborhood, sorted descending. */
+    by_area?: Record<string, number>;
   };
   traffic: {
     events_total: number;
     avg_latency_ms_by_endpoint: Record<string, number>;
+    /** Request count per endpoint (last 500 events), sorted descending. */
+    requests_by_endpoint?: Record<string, number>;
+    /** Latency readings excluded from the averages above (past a sane ceiling
+     * — e.g. an abandoned streaming connection's teardown time, not real
+     * backend work). */
+    outliers_excluded?: number;
     faithfulness_violations: number;
   };
   feedback: { up: number; down: number };

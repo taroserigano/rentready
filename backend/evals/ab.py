@@ -30,6 +30,7 @@ import pdf_ingest  # noqa: E402
 import rag_llamaindex  # noqa: E402
 import signals  # noqa: E402
 from evals import judges  # noqa: E402
+from llm import anthropic_chat_kwargs  # noqa: E402
 from settings import settings  # noqa: E402
 
 APPLICATIONS_DIR = BACKEND.parent / "data" / "applications"
@@ -38,7 +39,7 @@ DEFAULT_SLUGS = ["jordan-rivera", "alex-chen"]
 # Approximate Anthropic list prices (USD per 1M tokens) -- for the cost lesson,
 # not billing. Update freely; the point is to make cost a first-class metric.
 _PRICES = {
-    "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
+    "claude-sonnet-5": {"in": 3.0, "out": 15.0},
     "claude-haiku-4-5-20251001": {"in": 0.80, "out": 4.0},
     "_default": {"in": 3.0, "out": 15.0},
 }
@@ -93,8 +94,7 @@ def _build_llm(model: str):
     return ChatAnthropic(
         model=model,
         api_key=settings.anthropic_api_key,
-        temperature=0.0,
-        max_tokens=1024,
+        **anthropic_chat_kwargs(model),
     )
 
 

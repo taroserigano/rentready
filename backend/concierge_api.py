@@ -117,6 +117,11 @@ def ask_stream(req: ConciergeAskRequest) -> StreamingResponse:
                 elif etype == "done":
                     source = event.get("source", "rules")
                 yield f"data: {json.dumps(event)}\n\n"
+        except GeneratorExit:
+            # Client disconnected mid-stream (navigated away, closed the tab).
+            # Don't log latency here — time-to-teardown is not backend latency
+            # and can be arbitrarily (and misleadingly) large.
+            raise
         except Exception as exc:  # noqa: BLE001 — last-ditch guard
             print(f"concierge_api: stream failed ({type(exc).__name__}: {exc}).")
             fallback = {
@@ -125,17 +130,16 @@ def ask_stream(req: ConciergeAskRequest) -> StreamingResponse:
             }
             yield f"data: {json.dumps(fallback)}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'source': 'rules'})}\n\n"
-        finally:
-            store.log_event(
-                endpoint="concierge_ask_stream",
-                latency_ms=(time.perf_counter() - t0) * 1000,
-                source=source,
-                meta={
-                    "route": route_,
-                    "property_id": req.property_id or "",
-                    "sources": n_sources,
-                },
-            )
+        store.log_event(
+            endpoint="concierge_ask_stream",
+            latency_ms=(time.perf_counter() - t0) * 1000,
+            source=source,
+            meta={
+                "route": route_,
+                "property_id": req.property_id or "",
+                "sources": n_sources,
+            },
+        )
 
     return StreamingResponse(
         _event_stream(),

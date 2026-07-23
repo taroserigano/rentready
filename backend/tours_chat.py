@@ -61,6 +61,17 @@ _REJECT = re.compile(
     re.IGNORECASE,
 )
 
+# Distinct from _REJECT (which rejects a *proposed* slot mid-flow): this
+# detects a request to cancel an EXISTING booking, so it doesn't get silently
+# treated as "propose new slots" -- the deterministic router falls through to
+# _do_propose for anything it doesn't recognize, which used to misfire here.
+_CANCEL = re.compile(
+    r"\bcancel\b.{0,20}\b(tour|booking|reservation|appointment)\b|"
+    r"\b(tour|booking|reservation|appointment)\b.{0,20}\bcancel\b|"
+    r"\bcall off\b|\bi (?:want|need) to cancel\b",
+    re.IGNORECASE,
+)
+
 # Words that signal the user is (re)stating a time preference, not giving a name.
 _TIMING_WORDS = re.compile(
     r"\b(today|tomorrow|weekend|week|morning|afternoon|evening|night|"
@@ -205,6 +216,10 @@ def is_rejection(text: str) -> bool:
     return bool(_REJECT.search(text or ""))
 
 
+def is_cancel_request(text: str) -> bool:
+    return bool(_CANCEL.search(text or ""))
+
+
 def detect_selection(text: str, proposed: list) -> str | None:
     """Return the slot_id the user is selecting from ``proposed`` (list of
     Slot or dict), via ordinal ("first"/"last"), or a time echo ("2pm"). None
@@ -262,6 +277,30 @@ def extract_name(text: str) -> str:
 
 def _titlecase(s: str) -> str:
     return " ".join(w[:1].upper() + w[1:] for w in s.split())
+
+
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def extract_email(text: str) -> str:
+    """Pull an email address out of a message, or "" if none found."""
+    m = _EMAIL_RE.search(text or "")
+    return m.group(0) if m else ""
+
+
+_PHONE_CANDIDATE = re.compile(r"[\d()+.\-\s]{7,}")
+
+
+def extract_phone(text: str) -> str:
+    """Pull a US-style phone number out of a message, or "" if none found.
+    Accepts 10 digits, or 11 with a leading country code 1."""
+    for m in _PHONE_CANDIDATE.finditer(text or ""):
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) == 11 and digits.startswith("1"):
+            digits = digits[1:]
+        if len(digits) == 10:
+            return m.group(0).strip()
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +463,17 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
     area = (prop.get("neighborhood") or {}).get("name", "")
     property_name = prop.get("name", property_id)
 
+    # ---- Cancelling an existing booking ---------------------------------
+    # Distinct from is_rejection() (which rejects a proposed slot mid-flow):
+    # without this, "cancel my tour booking" fell through to _do_propose and
+    # confusingly offered NEW open slots instead of cancelling anything.
+    if state.phase == "awaiting_cancel_email":
+        return _do_cancel(property_id, property_name, last_user, state)
+    if state.phase in (
+        "greeting", "proposing", "no_availability", "booked", "confirming",
+    ) and is_cancel_request(last_user):
+        return _do_cancel(property_id, property_name, last_user, state)
+
     # ---- Resolve any slot the user is selecting -------------------------
     selected_slot_id = req.selected_slot_id or None
     if not selected_slot_id and state.last_proposed:
@@ -441,8 +491,18 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
             return _do_propose(property_id, area, property_name, last_user, now, state)
         name = extract_name(last_user)
         if name and state.pending_slot_id:
-            return _do_book(
-                state.pending_slot_id, property_id, property_name, name, area, now, state
+            return TourChatResponse(
+                reply=f"Thanks, {name}! What's the best phone number to reach "
+                "you at for the tour?",
+                proposed_slots=list(state.last_proposed),
+                booking=None,
+                state=ChatState(
+                    phase="awaiting_phone",
+                    prospect_name=name,
+                    last_proposed=list(state.last_proposed),
+                    pending_slot_id=state.pending_slot_id,
+                ),
+                source="rules",
             )
         return TourChatResponse(
             reply="Almost there — what name should I put the tour under?",
@@ -457,7 +517,65 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
             source="rules",
         )
 
-    # ---- A slot was selected -> book it (or ask for a name) -------------
+    # ---- awaiting_phone phase --------------------------------------------
+    if state.phase == "awaiting_phone" and not selected_slot_id:
+        if is_rejection(last_user) or has_timing(last_user):
+            return _do_propose(property_id, area, property_name, last_user, now, state)
+        phone = extract_phone(last_user)
+        if phone and state.pending_slot_id:
+            return TourChatResponse(
+                reply="Got it — and what email should I send the confirmation to?",
+                proposed_slots=list(state.last_proposed),
+                booking=None,
+                state=ChatState(
+                    phase="awaiting_email",
+                    prospect_name=state.prospect_name,
+                    prospect_phone=phone,
+                    last_proposed=list(state.last_proposed),
+                    pending_slot_id=state.pending_slot_id,
+                ),
+                source="rules",
+            )
+        return TourChatResponse(
+            reply="I didn't catch a valid phone number — what's the best number "
+            "to reach you at?",
+            proposed_slots=list(state.last_proposed),
+            booking=None,
+            state=ChatState(
+                phase="awaiting_phone",
+                prospect_name=state.prospect_name,
+                last_proposed=list(state.last_proposed),
+                pending_slot_id=state.pending_slot_id,
+            ),
+            source="rules",
+        )
+
+    # ---- awaiting_email phase --------------------------------------------
+    if state.phase == "awaiting_email" and not selected_slot_id:
+        if is_rejection(last_user) or has_timing(last_user):
+            return _do_propose(property_id, area, property_name, last_user, now, state)
+        email = extract_email(last_user)
+        if email and state.pending_slot_id:
+            return _do_book(
+                state.pending_slot_id, property_id, property_name,
+                state.prospect_name, state.prospect_phone, email, area, now, state,
+            )
+        return TourChatResponse(
+            reply="That doesn't look like a valid email — what's the best "
+            "email for your tour confirmation?",
+            proposed_slots=list(state.last_proposed),
+            booking=None,
+            state=ChatState(
+                phase="awaiting_email",
+                prospect_name=state.prospect_name,
+                prospect_phone=state.prospect_phone,
+                last_proposed=list(state.last_proposed),
+                pending_slot_id=state.pending_slot_id,
+            ),
+            source="rules",
+        )
+
+    # ---- A slot was selected -> collect name/phone/email, then book -----
     if selected_slot_id:
         name = state.prospect_name or extract_name(last_user)
         if not name:
@@ -475,7 +593,40 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
                 ),
                 source="rules",
             )
-        return _do_book(selected_slot_id, property_id, property_name, name, area, now, state)
+        phone = state.prospect_phone
+        if not phone:
+            return TourChatResponse(
+                reply=f"Thanks, {name}! What's the best phone number to reach "
+                "you at for the tour?",
+                proposed_slots=list(state.last_proposed),
+                booking=None,
+                state=ChatState(
+                    phase="awaiting_phone",
+                    prospect_name=name,
+                    last_proposed=list(state.last_proposed),
+                    pending_slot_id=selected_slot_id,
+                ),
+                source="rules",
+            )
+        email = state.prospect_email
+        if not email:
+            return TourChatResponse(
+                reply="Got it — and what email should I send the confirmation to?",
+                proposed_slots=list(state.last_proposed),
+                booking=None,
+                state=ChatState(
+                    phase="awaiting_email",
+                    prospect_name=name,
+                    prospect_phone=phone,
+                    last_proposed=list(state.last_proposed),
+                    pending_slot_id=selected_slot_id,
+                ),
+                source="rules",
+            )
+        return _do_book(
+            selected_slot_id, property_id, property_name, name, phone, email,
+            area, now, state,
+        )
 
     # ---- Otherwise: (re)propose slots for the parsed timing -------------
     return _do_propose(property_id, area, property_name, last_user, now, state)
@@ -493,6 +644,8 @@ def _do_book(
     property_id: str,
     property_name: str,
     name: str,
+    phone: str,
+    email: str,
     area: str,
     now: datetime,
     state: ChatState,
@@ -520,6 +673,8 @@ def _do_book(
             end=end.isoformat(timespec="seconds"),
             prospect_name=name,
             duration_minutes=tours.DEFAULT_DURATION_MIN,
+            prospect_phone=phone,
+            prospect_email=email,
         )
     except store.SlotConflict:
         # SlotTaken -> re-propose fresh slots.
@@ -533,10 +688,71 @@ def _do_book(
     booking = TourBooking(**row)
     return TourChatResponse(
         reply=f"You're all set, {name}! I booked your tour of {property_name} "
-        f"on {tours.label(start)} with {agent['name']}. See you then!",
+        f"on {tours.label(start)} with {agent['name']}. A confirmation will "
+        f"go to {email}. See you then!",
         proposed_slots=[],
         booking=booking,
-        state=ChatState(phase="booked", prospect_name=name),
+        state=ChatState(
+            phase="booked", prospect_name=name, prospect_phone=phone,
+            prospect_email=email,
+        ),
+        source="rules",
+    )
+
+
+def _do_cancel(
+    property_id: str,
+    property_name: str,
+    last_user: str,
+    state: ChatState,
+) -> TourChatResponse:
+    """Cancel an existing booking. Needs the booking email to look it up (the
+    chat has no login/session identity); asks for it once, then cancels the
+    soonest match if found. Never invents a booking_id -- always goes through
+    store.list_bookings so it can only cancel a REAL booked tour."""
+    email = extract_email(last_user) or state.prospect_email
+    if not email:
+        return TourChatResponse(
+            reply="I can help with that — what's the email address the tour "
+            "was booked under?",
+            proposed_slots=[],
+            booking=None,
+            state=ChatState(
+                phase="awaiting_cancel_email", prospect_name=state.prospect_name
+            ),
+            source="rules",
+        )
+
+    matches = store.list_bookings(
+        status="booked", property_id=property_id, email=email
+    )
+    if not matches:
+        return TourChatResponse(
+            reply=f"I couldn't find a booked tour for {email} at {property_name}. "
+            "Double-check the email, or let me know if you'd like to schedule a "
+            "new tour instead.",
+            proposed_slots=[],
+            booking=None,
+            state=ChatState(phase="greeting"),
+            source="rules",
+        )
+
+    soonest = matches[0]  # list_bookings orders soonest-first
+    store.cancel_booking(soonest["id"])
+    start = datetime.fromisoformat(soonest["start"])
+    extra = (
+        f" You still have {len(matches) - 1} other upcoming tour"
+        f"{'s' if len(matches) - 1 != 1 else ''} booked here — let me know if "
+        "you'd like to cancel those too."
+        if len(matches) > 1
+        else ""
+    )
+    return TourChatResponse(
+        reply=f"Done — I've cancelled your tour of {property_name} on "
+        f"{tours.label(start)}.{extra}",
+        proposed_slots=[],
+        booking=None,
+        state=ChatState(phase="greeting"),
         source="rules",
     )
 

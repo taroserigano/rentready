@@ -15,6 +15,11 @@ export function ApplicationPdf({
 }) {
   const [open, setOpen] = useState(true);
   const url = pdfUrl(applicantId);
+  // Chrome's built-in PDF viewer renders its own toolbar + thumbnail sidebar
+  // inside the <object>; these fragment params (a long-standing convention it
+  // honors) suppress that chrome so only the page itself shows — our own
+  // header above already provides download/hide.
+  const viewerUrl = `${url}#toolbar=0&navpanes=0&scrollbar=0`;
 
   return (
     <div className="card">
@@ -43,7 +48,7 @@ export function ApplicationPdf({
       </div>
       {open && (
         <object
-          data={url}
+          data={viewerUrl}
           type="application/pdf"
           aria-label="Application PDF"
           style={{

@@ -8,6 +8,7 @@ import type {
 import { askResidentChat, askResidentChatStream } from "../../api";
 import { ResidentsChatMessage, type ResidentsChatMsg } from "./ResidentsChatMessage";
 import { residentStarters } from "./residentsChatStarters";
+import { useEvent } from "../../useEvent";
 
 /** A leading TypeError from fetch means the backend is unreachable. */
 function errText(e: unknown): string {
@@ -108,7 +109,9 @@ export function ResidentsChat({
     setMessages((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
   }
 
-  async function send(q: string) {
+  // useEvent: a permanently-stable identity so it can be passed to the
+  // memo()'d ResidentsChatMessage rows without defeating their memoization.
+  const send = useEvent(async (q: string) => {
     q = q.trim();
     if (!q || busy) return;
     const history = messages
@@ -185,7 +188,7 @@ export function ResidentsChat({
     } finally {
       setBusy(false);
     }
-  }
+  });
 
   const scopeChip = (
     key: ResidentChatScope,

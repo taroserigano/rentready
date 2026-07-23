@@ -5,6 +5,7 @@ import { askRiskChat, askRiskChatStream } from "../../api";
 import { BAND_LABEL, BAND_TONE } from "./riskTone";
 import { RiskChatMessage, type RiskChatMsg } from "./RiskChatMessage";
 import { riskStarters } from "./riskChatStarters";
+import { useEvent } from "../../useEvent";
 
 type Scope = "applicant" | "portfolio";
 
@@ -83,7 +84,9 @@ export function RiskChat({
     setMessages((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
   }
 
-  async function send(q: string) {
+  // useEvent: a permanently-stable identity so it can be passed to the
+  // memo()'d RiskChatMessage rows without defeating their memoization.
+  const send = useEvent(async (q: string) => {
     q = q.trim();
     if (!q || busy) return;
     // History is the conversation so far (before this turn), oldest first.
@@ -167,7 +170,7 @@ export function RiskChat({
     } finally {
       setBusy(false);
     }
-  }
+  });
 
   const scopeTone = band ? BAND_TONE[band] : "info";
 

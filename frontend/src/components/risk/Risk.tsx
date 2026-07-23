@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
-import { getRiskModelCard, listRisk } from "../../api";
-import type { RiskBand, RiskListResponse, RiskModelCard, RiskRow } from "../../types";
+import { listRisk } from "../../api";
+import type { RiskBand, RiskListResponse, RiskRow } from "../../types";
 import { RiskCard } from "./RiskCard";
 import { RiskDistribution } from "./RiskDistribution";
-import { ModelCard } from "./ModelCard";
 import { RiskWhatIf } from "./RiskWhatIf";
 import { RiskChat } from "./RiskChat";
 import { BAND_LABEL, BAND_TONE } from "./riskTone";
@@ -30,20 +29,54 @@ function errText(e: unknown): string {
   return "Could not reach the server. Is the backend running?";
 }
 
+/** Module-level (not redefined per render) so React can reconcile instead of
+ * remounting the header cells on every keystroke/filter/sort change. */
+const SortHeader = memo(function SortHeader({
+  label,
+  keyName,
+  sortKey,
+  sortAsc,
+  onToggle,
+}: {
+  label: string;
+  keyName: SortKey;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onToggle: (key: SortKey) => void;
+}) {
+  const active = sortKey === keyName;
+  return (
+    <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        className="linklike icon-line"
+        style={{ color: active ? "var(--text)" : "inherit", fontWeight: "inherit" }}
+        onClick={() => onToggle(keyName)}
+      >
+        {label}
+        {active &&
+          (sortAsc ? (
+            <ArrowUp size={12} aria-hidden />
+          ) : (
+            <ArrowDown size={12} aria-hidden />
+          ))}
+      </button>
+    </th>
+  );
+});
+
 /**
  * Resident Late-Payment Risk page. Ranked, decision-support view over every
  * saved applicant — a mandatory disclaimer banner, portfolio tiles, a band
- * distribution, a clickable ranked table, a detail RiskCard, and the model card.
+ * distribution, a clickable ranked table, and a detail RiskCard.
  */
 export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
   const [list, setList] = useState<RiskListResponse | null>(null);
-  const [card, setCard] = useState<RiskModelCard | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialApplicantId ?? null,
   );
-  const modelCardRef = useRef<HTMLDivElement>(null);
 
   // Client-side table controls (no backend change).
   const [query, setQuery] = useState("");
@@ -62,10 +95,6 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
       })
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));
-    // Model card is best-effort; the page works without it.
-    getRiskModelCard()
-      .then(setCard)
-      .catch(() => {});
   }, []);
 
   useEffect(load, [load]);
@@ -74,9 +103,6 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
   useEffect(() => {
     if (initialApplicantId) setSelectedId(initialApplicantId);
   }, [initialApplicantId]);
-
-  const scrollToModelCard = () =>
-    modelCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // Filter (search + band) then sort. Fully client-side over the loaded rows.
   const filtered = useMemo<RiskRow[]>(() => {
@@ -105,37 +131,21 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
   );
 
   // Toggle a column's sort; Risk defaults to desc, Name to asc on first click.
-  function toggleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortAsc((v) => !v);
-    } else {
-      setSortKey(key);
-      setSortAsc(key === "name");
-    }
-    setShowAll(false);
-  }
-
-  const SortHeader = ({ label, keyName }: { label: string; keyName: SortKey }) => {
-    const active = sortKey === keyName;
-    return (
-      <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"}>
-        <button
-          type="button"
-          className="linklike icon-line"
-          style={{ color: active ? "var(--text)" : "inherit", fontWeight: "inherit" }}
-          onClick={() => toggleSort(keyName)}
-        >
-          {label}
-          {active &&
-            (sortAsc ? (
-              <ArrowUp size={12} aria-hidden />
-            ) : (
-              <ArrowDown size={12} aria-hidden />
-            ))}
-        </button>
-      </th>
-    );
-  };
+  // useCallback (keyed only on sortKey) so its identity is stable across
+  // unrelated re-renders (typing in search, toggling a band chip), which lets
+  // SortHeader's memo actually skip work instead of re-rendering every time.
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (key === sortKey) {
+        setSortAsc((v) => !v);
+      } else {
+        setSortKey(key);
+        setSortAsc(key === "name");
+      }
+      setShowAll(false);
+    },
+    [sortKey],
+  );
 
   return (
     <div className="app">
@@ -171,8 +181,8 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
       {!loading && !error && list && list.rows.length === 0 && (
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>
-            No applicants to score yet. Upload a PDF in Workspace or use the Apply
-            tab.
+            No applicants to score yet. Use the Apply tab to upload a PDF or fill
+            in details.
           </p>
         </div>
       )}
@@ -298,8 +308,20 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
                 <table className="table rows-clickable">
                   <thead>
                     <tr>
-                      <SortHeader label="Applicant" keyName="name" />
-                      <SortHeader label="Risk" keyName="risk" />
+                      <SortHeader
+                        label="Applicant"
+                        keyName="name"
+                        sortKey={sortKey}
+                        sortAsc={sortAsc}
+                        onToggle={toggleSort}
+                      />
+                      <SortHeader
+                        label="Risk"
+                        keyName="risk"
+                        sortKey={sortKey}
+                        sortAsc={sortAsc}
+                        onToggle={toggleSort}
+                      />
                       <th>Band</th>
                       <th>Top driver</th>
                     </tr>
@@ -372,11 +394,7 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
               }}
             >
               <div style={{ display: "grid", gap: 0 }}>
-                <RiskCard
-                  key={selectedId}
-                  applicantId={selectedId}
-                  onViewModelCard={card ? scrollToModelCard : undefined}
-                />
+                <RiskCard key={selectedId} applicantId={selectedId} />
                 <RiskWhatIf
                   key={`whatif-${selectedId}`}
                   applicantId={selectedId}
@@ -400,12 +418,6 @@ export function Risk({ initialApplicantId }: { initialApplicantId?: string }) {
             </div>
           )}
         </>
-      )}
-
-      {card && (
-        <div ref={modelCardRef}>
-          <ModelCard card={card} />
-        </div>
       )}
     </div>
   );

@@ -356,13 +356,48 @@ _SEED_AGENTS = [
         "id": "AGENT-04",
         "name": "Deshawn Brown",
         "role": "Tour Specialist",
-        "areas": [],  # covers all areas
+        # Pairs with the Downtown/North Austin corridor (Maria + James's turf).
+        "areas": ["Downtown", "South Congress", "North Austin", "Mueller"],
         # Mon/Wed/Fri 12:00-20:00 + Sat 10:00-14:00
         "windows": [
             (MON, "12:00", "20:00"),
             (WED, "12:00", "20:00"),
             (FRI, "12:00", "20:00"),
             (SAT, "10:00", "14:00"),
+        ],
+    },
+    {
+        "id": "AGENT-05",
+        "name": "Sofia Ramirez",
+        "role": "Tour Specialist",
+        # Pairs with the Zilker/East Austin corridor (Priya's turf) plus the
+        # adjacent Pearl District/Deep Ellum properties.
+        "areas": ["Zilker", "East Austin", "Pearl District", "Deep Ellum"],
+        "windows": [
+            (TUE, "12:00", "20:00"),
+            (THU, "12:00", "20:00"),
+            (SAT, "10:00", "18:00"),
+        ],
+    },
+    {
+        "id": "AGENT-06",
+        "name": "Marcus Webb",
+        "role": "Tour Specialist",
+        # Covers the remaining neighborhoods with no dedicated leasing
+        # consultant, so every property still gets a tour specialist.
+        "areas": [
+            "Hyde Park",
+            "Crestview",
+            "Bouldin Creek",
+            "Uptown",
+            "Alamo Heights",
+            "Montrose",
+        ],
+        "windows": [
+            (MON, "10:00", "18:00"),
+            (WED, "10:00", "18:00"),
+            (FRI, "10:00", "18:00"),
+            (SUN, "10:00", "14:00"),
         ],
     },
 ]
