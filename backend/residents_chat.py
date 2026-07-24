@@ -289,6 +289,16 @@ _EXPLAIN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Meta-question about the model's own CERTAINTY ("how confident is this",
+# "which predictions can I trust") -- distinct from governance (what features
+# are used) and from explain (why THIS estimate is elevated). Checked early,
+# right after governance, so it isn't swallowed by property_health/explain.
+_CONFIDENCE_RE = re.compile(
+    r"\b(confiden(?:t|ce)|how sure|how certain|reliab\w*|trustworthy|"
+    r"can (?:i|you|we) trust|margin of error|how accurate)\b",
+    re.IGNORECASE,
+)
+
 # Explicit late-payment-LIKELIHOOD cue — "likely/chance/odds ... to pay late",
 # "chance of paying late", "late next <period>". Used ONLY to break the
 # multi-part tie where a "renew" token would otherwise let retention win: when a
@@ -349,13 +359,15 @@ def _fix_typos(q: str) -> str:
 def route(question: str, resident_id: str | None = None, property_id: str | None = None) -> str:
     """Classify the question into an intent.
 
-    Precedence: governance, property_health, at_risk_residents, compare, cure,
-    retention, arrears, frequency, severity, horizon, explain — then a scope
-    default (``explain`` when a resident is selected, ``property_health`` when
-    only a property is selected, else ``general``)."""
+    Precedence: governance, confidence, property_health, at_risk_residents,
+    compare, cure, retention, arrears, frequency, severity, horizon, explain —
+    then a scope default (``explain`` when a resident is selected,
+    ``property_health`` when only a property is selected, else ``general``)."""
     q = _fix_typos(question or "")
     if _GOVERNANCE_RE.search(q):
         return "governance"
+    if _CONFIDENCE_RE.search(q):
+        return "confidence"
     if _PROPERTY_HEALTH_RE.search(q):
         return "property_health"
     if not resident_id and _AT_RISK_RESIDENTS_RE.search(q):
@@ -757,6 +769,11 @@ _FOLLOWUPS = {
         "Is location or age ever used?",
         "How is the risk measured?",
     ],
+    "confidence": [
+        "Why is confidence lower here?",
+        "How likely are they to pay late next year?",
+        "What does the model use to measure this?",
+    ],
     "general": [
         "Which properties are healthiest?",
         "What does the model use to measure risk?",
@@ -942,6 +959,8 @@ class _ResidentPlan:
 
         if self.intent == "governance":
             self._plan_governance(q)
+        elif self.intent == "confidence":
+            self._plan_confidence(resident_id)
         elif self.intent == "property_health":
             self._plan_property_health()
         elif self.intent == "at_risk_residents":
@@ -960,6 +979,21 @@ class _ResidentPlan:
                     # DOES have a genuine aggregate answer (sum of everyone's own
                     # late-count estimate) for a property or the whole portfolio.
                     self._plan_late_forecast(q)
+                elif self.intent == "horizon":
+                    # Likewise, a likelihood question ("late-payment risk next
+                    # quarter/next year") has a genuine aggregate: each resident's
+                    # own probability, AVERAGED across the property or portfolio —
+                    # not a proration, and not a substitution of the unrelated
+                    # health-score answer.
+                    self._plan_property_horizon(q)
+                elif self.intent == "severity":
+                    self._plan_property_severity()
+                elif self.intent == "arrears":
+                    self._plan_property_arrears(q)
+                elif self.intent == "cure":
+                    self._plan_property_cure()
+                elif self.intent == "retention":
+                    self._plan_property_retention()
                 elif property_id:
                     self._plan_property_health()
                 else:
@@ -1265,6 +1299,218 @@ class _ResidentPlan:
             **fc,
         }
 
+    def _plan_property_horizon(self, q: str = "") -> None:
+        """A likelihood question ('late-payment risk next quarter and next
+        year') with no resident selected: the honest aggregate is each
+        resident's own probability AVERAGED across the property or portfolio
+        (every horizon, not just the asked one) plus the band spread — not a
+        substitution of the unrelated property-health composite score."""
+        self.intent = "horizon"
+        self.follow_ups = _follow_ups("horizon")
+        asked = _parse_horizon(q)
+        labels = {"late_1m": "next month", "late_3m": "next quarter",
+                  "late_6m": "next 6 months", "late_12m": "next year"}
+        if self.property_id:
+            fc = residents_risk.property_horizon_forecast(self.property_id)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_horizon_forecast()
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        horizons = fc.get("horizons") or {}
+        parts = []
+        for hn in ("late_1m", "late_3m", "late_6m", "late_12m"):
+            h = horizons.get(hn) or {}
+            parts.append(f"{labels[hn]} {_pct(h.get('avg_probability'))} average")
+        asked_h = horizons.get(asked) or {}
+        bands = asked_h.get("bands") or {}
+        band_txt = ", ".join(f"{v} {k}" for k, v in bands.items() if v) or "n/a"
+        line = (
+            f"Average late-payment probability {scope_txt} (across {n} residents; "
+            f"each resident's own estimate averaged, not summed). "
+            + "; ".join(parts) + ". "
+            f"For the asked horizon ({labels[asked]}), band spread: {band_txt}."
+        )
+        self.context_blocks = [f"Property-level late-payment likelihood:\n{line}"]
+        self.sources = [{"type": "horizon_forecast", "label": "Average late-payment likelihood",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "horizon_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": "Average late-payment likelihood",
+            **fc,
+        }
+
+    def _plan_property_severity(self) -> None:
+        """A severity question ('how bad could it get') with no resident
+        selected: average expected worst-days-late, average 30/60/90-day
+        risk, and the delinquency-bucket spread across the property/portfolio."""
+        self.intent = "severity"
+        self.follow_ups = _follow_ups("severity")
+        if self.property_id:
+            fc = residents_risk.property_severity_forecast(self.property_id)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_severity_forecast()
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        probs = fc.get("probabilities") or {}
+        buckets = fc.get("bucket_counts") or {}
+        bucket_txt = ", ".join(f"{v} {k}" for k, v in buckets.items() if v) or "n/a"
+        line = (
+            f"Late-payment severity {scope_txt} (across {n} residents; each resident's own "
+            f"estimate averaged, not summed). Average expected worst days late over the next "
+            f"year: {_num(fc.get('avg_max_days_late'))} days. Average risk of reaching 30+ days "
+            f"late {_pct(probs.get('p_30d_12m'))}; 60+ days {_pct(probs.get('p_60d_12m'))} "
+            f"(low-power, directional); 90+ days {_pct(probs.get('p_90d_12m'))} (low-power, "
+            f"directional). Worst-delinquency-bucket spread: {bucket_txt}."
+        )
+        self.context_blocks = [f"Property-level late-payment severity:\n{line}"]
+        self.sources = [{"type": "severity_forecast", "label": "Average late-payment severity",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "severity_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": "Average late-payment severity",
+            **fc,
+        }
+
+    def _plan_property_arrears(self, q: str = "") -> None:
+        """An arrears-$ question with no resident selected: the SUM of every
+        resident's own expected balance across the property/portfolio, for
+        the asked-about window (quarter, year, or peak)."""
+        self.intent = "arrears"
+        self.follow_ups = _follow_ups("arrears")
+        ql = (q or "").lower()
+        if "peak" in ql:
+            head, window_txt = "peak_balance_12m", "peak balance over the next year"
+        elif re.search(r"\bquarter\b|3 month|next 3", ql):
+            head, window_txt = "arrears_3m", "balance at the end of next quarter"
+        else:
+            head, window_txt = "arrears_12m", "balance at the end of next year"
+        if self.property_id:
+            fc = residents_risk.property_arrears_forecast(self.property_id, head=head)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_arrears_forecast(head=head)
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        lo, hi = (fc.get("interval") or [0.0, 0.0])
+        top = fc.get("top_contributors") or []
+        top_txt = "; ".join(f"{t['name']} (~{_money(t['expected'])})" for t in top[:3])
+        line = (
+            f"Expected total arrears {scope_txt} (summed across {n} residents): "
+            f"{_money(fc.get('expected'))} {window_txt} (range {_money(lo)}–{_money(hi)}), "
+            f"summing each resident's own estimate. Highest expected contributors: "
+            f"{top_txt or 'none notable'}."
+        )
+        self.context_blocks = [f"Property-level expected arrears:\n{line}"]
+        self.sources = [{"type": "arrears_forecast", "label": "Expected total arrears",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "arrears_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": f"Expected total arrears ({window_txt})",
+            **fc,
+        }
+
+    def _plan_property_cure(self) -> None:
+        """A cure question ('will they clear their balance') with no resident
+        selected: among residents CURRENTLY in arrears at the property/
+        portfolio, average chance of clearing within 6 months."""
+        self.intent = "cure"
+        self.follow_ups = _follow_ups("cure")
+        if self.property_id:
+            fc = residents_risk.property_cure_forecast(self.property_id)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_cure_forecast()
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        eligible = fc.get("eligible_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        if eligible == 0:
+            line = (
+                f"Balance cure {scope_txt}: none of the {n} residents currently carry an "
+                f"outstanding balance, so there is nothing to cure right now."
+            )
+        else:
+            line = (
+                f"Balance cure {scope_txt}: {eligible} of {n} residents currently carry a "
+                f"balance. Among those, average chance of clearing it within 6 months is "
+                f"{_pct(fc.get('avg_probability'))}, typically in about "
+                f"{_num(fc.get('avg_months_to_cure'))} month(s)."
+            )
+        self.context_blocks = [f"Property-level balance cure:\n{line}"]
+        self.sources = [{"type": "cure_forecast", "label": "Average balance-cure outlook",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "cure_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": "Average balance-cure outlook",
+            **fc,
+        }
+
+    def _plan_property_retention(self) -> None:
+        """A retention question ('will they renew') with no resident
+        selected: among residents whose lease ends within the renewal-risk
+        horizon, average non-renewal probability."""
+        self.intent = "retention"
+        self.follow_ups = _follow_ups("retention")
+        if self.property_id:
+            fc = residents_risk.property_retention_forecast(self.property_id)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_retention_forecast()
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        eligible = fc.get("eligible_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        if eligible == 0:
+            line = (
+                f"Renewal risk {scope_txt}: none of the {n} residents have a lease ending "
+                f"within the renewal-risk horizon yet, so there is no estimate to report."
+            )
+        else:
+            line = (
+                f"Renewal risk {scope_txt}: {eligible} of {n} residents have a lease ending "
+                f"within the renewal-risk horizon. Among those, average chance of "
+                f"non-renewal is {_pct(fc.get('avg_probability'))}, with "
+                f"{fc.get('high_risk_count', 0)} flagged high risk."
+            )
+        self.context_blocks = [f"Property-level renewal risk:\n{line}"]
+        self.sources = [{"type": "retention_forecast", "label": "Average renewal-risk outlook",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "retention_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": "Average renewal-risk outlook",
+            **fc,
+        }
+
     def _plan_compare(self, resident_id) -> None:
         self.follow_ups = _follow_ups("compare")
         self.pred = score_resident(resident_id)
@@ -1411,6 +1657,89 @@ class _ResidentPlan:
         self.artifact = _none_artifact()
         self.follow_ups = _follow_ups("at_risk_residents")
 
+    def _plan_confidence(self, resident_id: str | None) -> None:
+        """A meta-question about the model's own CERTAINTY ('how confident is
+        this', 'which predictions can I trust') -- distinct from governance
+        (what features are used) and explain (why THIS estimate is elevated).
+        Resident scope states that resident's own confidence flag plainly
+        (never silently omitted just because it's high); property/portfolio
+        scope surfaces the highest-confidence, highest-risk residents -- the
+        ones a reviewer can act on with the least doubt."""
+        self.intent = "confidence"
+        self.follow_ups = _follow_ups("confidence")
+        pred = score_resident(resident_id) if resident_id else None
+        if pred is not None:
+            self.pred = pred
+            name = self._name()
+            heads = self._heads()
+            checked = [heads.get(h, {}) for h in ("late_12m", "late_3m", "serious")]
+            if any(_low_conf(h) for h in checked if h):
+                line = (
+                    f"Prediction confidence — {name}: LOWER confidence — the model flags "
+                    f"this one (thin ledger history, short tenure, or a rare 60+/90+ day "
+                    f"event) — treat the numbers as directional, not precise."
+                )
+            else:
+                line = (
+                    f"Prediction confidence — {name}: HIGH confidence — {name} has enough "
+                    f"ledger history on file that this isn't one of the thin-history or "
+                    f"rare-event cases the model flags as low confidence."
+                )
+            self.context_blocks = [f"Prediction confidence — {name}:\n{line}"]
+            self.sources = [self._src(f"Prediction confidence — {name}", line)]
+            self.artifact = _resident_artifact(pred, ["late_12m", "late_3m", "serious"], "confidence")
+            return
+
+        scored: list = []
+        try:
+            residents = residents_risk.load_residents()
+            if self.property_id:
+                residents = [r for r in residents if r.get("property_id") == self.property_id]
+            preds = residents_risk.predict_bulk(residents, heads=residents_risk.BULK_HEADS)
+            for r, p in zip(residents, preds or []):
+                late = (p or {}).get("late") or {}
+                if late.get("band") == "not_applicable":
+                    continue
+                scored.append({
+                    "resident_id": r.get("resident_id", ""), "name": r.get("name", ""),
+                    "property_name": _property_name(r.get("property_id", "")),
+                    "probability": float(late.get("probability") or 0.0),
+                    "confidence": late.get("confidence", "high"),
+                })
+        except Exception as exc:  # noqa: BLE001
+            print(f"residents_chat: confidence scan failed ({type(exc).__name__}: {exc}).")
+
+        if not scored:
+            self.context_blocks = ["No resident risk data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+
+        scope_txt = f"at {_property_name(self.property_id)}" if self.property_id else "across the portfolio"
+        high_conf = [s for s in scored if s["confidence"] == "high"]
+        high_conf.sort(key=lambda x: -x["probability"])
+        top = high_conf[:5]
+        lines = [
+            f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance of "
+            f"paying late in the next year, high-confidence estimate."
+            for i, t in enumerate(top)
+        ]
+        line = (
+            f"Prediction confidence {scope_txt}: {len(high_conf)} of {len(scored)} scored "
+            f"residents have a high-confidence estimate (enough ledger history on file); "
+            f"{len(scored) - len(high_conf)} are flagged lower-confidence (thin history, "
+            f"short tenure, or a rare event) — treat those as directional."
+        )
+        if top:
+            line += " Highest-confidence, highest-risk:\n" + "\n".join(lines)
+        self.context_blocks = [f"Prediction confidence {scope_txt}:\n{line}"]
+        self.sources = [
+            {"type": "resident", "label": f"{t['name']} — {t['property_name']}",
+             "snippet": _snippet(lines[i]), "resident_id": t["resident_id"]}
+            for i, t in enumerate(top)
+        ]
+        self.artifact = _none_artifact()
+
     def _plan_general(self) -> None:
         self.intent = "general"
         try:
@@ -1450,6 +1779,11 @@ class _ResidentPlan:
         if intent == "general":
             return _GENERAL
         if self.pred is None:
+            # A property/portfolio-level aggregate (e.g. the horizon likelihood
+            # average) already built real context without a scored resident --
+            # format it generically rather than assuming a deflection.
+            if self.context_blocks:
+                return _deterministic_resident(self)
             return _DEFLECTION
         if intent == "compare":
             return _deterministic_compare(self)

@@ -212,6 +212,10 @@ for rid in SPOTLIGHT:
     add(f"res-compare-{rid}", f"How does {who} compare to the rest of the portfolio?",
         rid, None, "compare", must_include=[rc._pct(late12.get("probability"))])
 
+    low_flagged = any(rc._low_conf(heads.get(h, {})) for h in ("late_12m", "late_3m", "serious"))
+    add(f"res-confidence-{rid}", f"How confident is this prediction for {who}?",
+        rid, None, "confidence", must_include=(["LOWER confidence"] if low_flagged else ["HIGH confidence"]))
+
 
 # =============================================================================
 # B. PROPERTY-SCOPED items — property_health + at_risk_residents for all 10
@@ -225,6 +229,53 @@ for pid in rr.RESIDENT_PROPERTY_IDS:
         must_include=[f"{rc._num(health['score'])}/100", health["grade"]])
     add(f"prop-atrisk-{pid}", f"Which residents at {health['name']} are most at risk of paying late?",
         None, pid, "at_risk_residents", must_include=[])
+
+# Property-level AGGREGATE forecasts (no resident selected) — a genuine
+# average/sum across every resident at the property, not a fallback to the
+# unrelated health-score answer. must_include drawn from the real aggregate
+# functions so it can't silently regress to the old fallback behavior.
+for pid in rr.RESIDENT_PROPERTY_IDS[:4]:
+    name = rc._property_name(pid)
+    hfc = rr.property_horizon_forecast(pid)
+    q3 = hfc["horizons"]["late_3m"]["avg_probability"]
+    add(f"prop-horizon-{pid}", f"What's the late-payment risk next quarter at {name}?",
+        None, pid, "horizon", must_include=[rc._pct(q3)])
+
+    lfc = rr.property_late_forecast(pid, head="late_count_12m")
+    add(f"prop-frequency-{pid}", f"How many late payments should we expect at {name} next 12 months?",
+        None, pid, "late_forecast", must_include=[f"{lfc['expected']:.1f}"])
+
+# Property-level SEVERITY/ARREARS/CURE/RETENTION aggregates — all 10
+# properties, must_include drawn from the real aggregate functions.
+for pid in rr.RESIDENT_PROPERTY_IDS:
+    name = rc._property_name(pid)
+
+    sfc = rr.property_severity_forecast(pid)
+    add(f"prop-severity-{pid}", f"How severe could late payments get at {name}?",
+        None, pid, "severity", must_include=[rc._num(sfc["avg_max_days_late"])])
+
+    afc = rr.property_arrears_forecast(pid, head="arrears_12m")
+    add(f"prop-arrears-{pid}", f"What arrears balance should we expect at {name} next year?",
+        None, pid, "arrears", must_include=[rc._money(afc["expected"])])
+
+    cfc = rr.property_cure_forecast(pid)
+    if cfc["eligible_count"] == 0:
+        add(f"prop-cure-{pid}", f"Will residents at {name} clear their balances?",
+            None, pid, "cure", must_include=["nothing to cure"])
+    else:
+        add(f"prop-cure-{pid}", f"Will residents at {name} clear their balances?",
+            None, pid, "cure", must_include=[rc._pct(cfc["avg_probability"])])
+
+    rfc = rr.property_retention_forecast(pid)
+    if rfc["eligible_count"] == 0:
+        add(f"prop-retention-{pid}", f"Will residents at {name} renew their leases?",
+            None, pid, "retention", must_include=["no estimate to report"])
+    else:
+        add(f"prop-retention-{pid}", f"Will residents at {name} renew their leases?",
+            None, pid, "retention", must_include=[rc._pct(rfc["avg_probability"])])
+
+    add(f"prop-confidence-{pid}", f"Which predictions at {name} are most confident?",
+        None, pid, "confidence", must_include=["high-confidence"])
 
 
 # =============================================================================
@@ -246,6 +297,33 @@ _at_risk_qs = [
 ]
 for i, q in enumerate(_at_risk_qs):
     add(f"portfolio-atrisk-{i}", q, None, None, "at_risk_residents", must_include=[])
+
+_portfolio_hfc = rr.portfolio_horizon_forecast()
+add("portfolio-horizon-0", "What's the late-payment risk next year across the portfolio?",
+    None, None, "horizon", must_include=[rc._pct(_portfolio_hfc["horizons"]["late_12m"]["avg_probability"])])
+
+_portfolio_lfc = rr.portfolio_late_forecast(head="late_count_3m")
+add("portfolio-frequency-0", "How many late payments should we expect next quarter across the portfolio?",
+    None, None, "late_forecast", must_include=[f"{_portfolio_lfc['expected']:.1f}"])
+
+_portfolio_sfc = rr.portfolio_severity_forecast()
+add("portfolio-severity-0", "How severe could late payments get across the portfolio?",
+    None, None, "severity", must_include=[rc._num(_portfolio_sfc["avg_max_days_late"])])
+
+_portfolio_afc = rr.portfolio_arrears_forecast(head="arrears_12m")
+add("portfolio-arrears-0", "What arrears balance should we expect across the portfolio next year?",
+    None, None, "arrears", must_include=[rc._money(_portfolio_afc["expected"])])
+
+_portfolio_cfc = rr.portfolio_cure_forecast()
+add("portfolio-cure-0", "Will residents across the portfolio clear their balances?",
+    None, None, "cure", must_include=[rc._pct(_portfolio_cfc["avg_probability"])])
+
+_portfolio_rfc = rr.portfolio_retention_forecast()
+add("portfolio-retention-0", "Will residents across the portfolio renew their leases?",
+    None, None, "retention", must_include=[rc._pct(_portfolio_rfc["avg_probability"])])
+
+add("portfolio-confidence-0", "Which predictions can we trust the most across the portfolio?",
+    None, None, "confidence", must_include=["high-confidence"])
 
 _general_qs = [
     "What can you help me with?",
@@ -310,10 +388,11 @@ add("edge-unknown-property-1", "How healthy is this property?",
 _p0, _p1 = rr.RESIDENT_PROPERTY_IDS[0], rr.RESIDENT_PROPERTY_IDS[1]
 _h1 = rc.property_health(_p1)
 add("edge-cross-scope-property", f"For {_h1['name']}, tell me late payment risk next quarter and next year",
-    None, _p0, "property_health", must_include=[],
-    notes="scoped to _p0 but asks about _p1 by name; property-level horizon has no "
-          "dedicated planner so it correctly falls back to property_health rather "
-          "than silently answering about the wrong property")
+    None, _p0, "horizon", must_include=[],
+    notes="scoped to _p0 but asks about _p1 by name; the property-level horizon "
+          "aggregate answers for the SCOPED property (_p0), not the one named in "
+          "the question -- it doesn't silently answer about the wrong property, "
+          "it just doesn't (yet) parse a property name out of free text")
 
 # Typo-fix regression ("quater"/"moth" must still route on the horizon word).
 _typo_rid = SPOTLIGHT[0]

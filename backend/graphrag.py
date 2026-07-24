@@ -291,7 +291,7 @@ _WANT_FURNISHED_RE = re.compile(r"\bfurnished\b", re.IGNORECASE)
 _WANT_BALCONY_RE = re.compile(r"\bbalcon", re.IGNORECASE)
 
 _SEARCH_RETURN = (
-    "RETURN p.name AS name, p.property_type AS property_type, "
+    "RETURN p.id AS id, p.name AS name, p.property_type AS property_type, "
     "p.monthly_rent AS monthly_rent, p.bedrooms AS bedrooms, "
     "p.bathrooms AS bathrooms ORDER BY p.monthly_rent ASC LIMIT 10"
 )
@@ -307,14 +307,17 @@ def _build_template(question: str):
     q = question or ""
     amenities = _match_amenities(q)
 
-    # Shape 1: "which areas have a gym?" -- amenity -> neighborhoods.
+    # Shape 1: "which areas have a gym?" -- amenity -> neighborhoods. Returns
+    # one row per matching PROPERTY (not just distinct neighborhoods) so the
+    # graph visualization has property ids to draw -- _template_answer dedups
+    # the neighborhood names itself.
     if amenities and _AREA_AMENITY_RE.search(q):
         label, _phrase = amenities[0]
         cypher = (
             "MATCH (p:Property)-[:OFFERS]->(a:Amenity) "
             "MATCH (p)-[:IN_NEIGHBORHOOD]->(n:Neighborhood) "
             "WHERE toLower(a.name) = toLower($amenity) "
-            "RETURN DISTINCT n.name AS neighborhood ORDER BY n.name"
+            "RETURN p.id AS id, p.name AS name, n.name AS neighborhood ORDER BY n.name"
         )
         return cypher, {"amenity": label}, "areas_with_amenity", {"amenity": label}
 
@@ -397,9 +400,61 @@ def _display_cypher(cypher: str, params: dict) -> str:
     return text
 
 
+def _fetch_subgraph(property_ids: list[str], amenity_filter: list[str] | None = None) -> dict:
+    """A small, SAFE subgraph (hand-authored here, never LLM-generated) for the
+    matched properties: each property's neighborhood, and its amenities --
+    scoped to just the amenities that were part of the search filter when one
+    is given (so the diagram stays focused on "why these matched", not every
+    amenity every property happens to have). Capped at 12 properties for a
+    readable diagram. {} if Neo4j is unavailable or nothing matched."""
+    property_ids = [p for p in dict.fromkeys(property_ids) if p][:12]  # dedupe, cap
+    if not property_ids:
+        return {"nodes": [], "edges": []}
+    cypher = (
+        "MATCH (p:Property)-[:IN_NEIGHBORHOOD]->(n:Neighborhood) "
+        "WHERE p.id IN $ids "
+        "OPTIONAL MATCH (p)-[:OFFERS]->(a:Amenity) "
+        "RETURN p.id AS pid, p.name AS pname, n.name AS nname, collect(a.name) AS amenities"
+    )
+    try:
+        rows = graph.run_read_only_cypher(cypher, {"ids": property_ids})
+    except Exception as exc:  # noqa: BLE001 -- the graph viz is a nice-to-have, never fatal
+        print(f"graphrag: subgraph fetch failed ({type(exc).__name__}: {exc}).")
+        return {"nodes": [], "edges": []}
+
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+    seen_edges: set[tuple[str, str]] = set()
+    for r in rows:
+        pid, pname, nname = r.get("pid"), r.get("pname"), r.get("nname")
+        if not pid:
+            continue
+        nodes[f"p:{pid}"] = {"id": f"p:{pid}", "label": pname or pid, "type": "Property"}
+        if nname:
+            nkey = f"n:{nname}"
+            nodes[nkey] = {"id": nkey, "label": nname, "type": "Neighborhood"}
+            ekey = (f"p:{pid}", nkey)
+            if ekey not in seen_edges:
+                seen_edges.add(ekey)
+                edges.append({"source": f"p:{pid}", "target": nkey, "type": "IN_NEIGHBORHOOD"})
+        row_amenities = [a for a in (r.get("amenities") or []) if a]
+        if amenity_filter:
+            row_amenities = [a for a in row_amenities if a in amenity_filter]
+        for a in row_amenities:
+            akey = f"a:{a}"
+            nodes[akey] = {"id": akey, "label": a, "type": "Amenity"}
+            ekey = (f"p:{pid}", akey)
+            if ekey not in seen_edges:
+                seen_edges.add(ekey)
+                edges.append({"source": f"p:{pid}", "target": akey, "type": "OFFERS"})
+    return {"nodes": list(nodes.values()), "edges": edges}
+
+
 def _template_answer(kind: str, rows: list, meta: dict) -> str:
     if kind == "areas_with_amenity":
-        names = [r.get("neighborhood") for r in rows if r.get("neighborhood")]
+        # Rows are now per-PROPERTY (for the graph viz), so dedupe neighborhood
+        # names here instead of relying on Cypher's DISTINCT.
+        names = sorted({r.get("neighborhood") for r in rows if r.get("neighborhood")})
         amenity = meta.get("amenity", "that amenity")
         if not names:
             return f"No neighborhood currently has a property with {amenity}."
@@ -433,7 +488,7 @@ def graph_ask(question: str) -> dict:
     if template is not None:
         cypher, params, kind, meta = template
         if not graph.is_available():
-            return {"answer": "Neo4j is not available.", "cypher": "", "source": "rules"}
+            return {"answer": "Neo4j is not available.", "cypher": "", "source": "rules", "graph": None}
         try:
             rows = graph.run_read_only_cypher(cypher, params)
         except Exception as exc:  # noqa: BLE001
@@ -441,19 +496,24 @@ def graph_ask(question: str) -> dict:
                 "answer": f"Couldn't run that query: {exc}",
                 "cypher": _display_cypher(cypher, params),
                 "source": "rules",
+                "graph": None,
             }
+        property_ids = [r.get("id") for r in rows if r.get("id")]
+        amenity_filter = [meta["amenity"]] if kind == "areas_with_amenity" else (meta.get("amenities") or None)
+        subgraph = _fetch_subgraph(property_ids, amenity_filter=amenity_filter)
         return {
             "answer": _template_answer(kind, rows, meta),
             "cypher": _display_cypher(cypher, params),
             "source": "template",
+            "graph": subgraph if subgraph["nodes"] else None,
         }
 
     llm = get_langchain_llm()
     lc_graph = graph.get_langchain_graph()
     if llm is None:
-        return {"answer": "Set ANTHROPIC_API_KEY to ask the graph.", "cypher": "", "source": "rules"}
+        return {"answer": "Set ANTHROPIC_API_KEY to ask the graph.", "cypher": "", "source": "rules", "graph": None}
     if lc_graph is None:
-        return {"answer": "Neo4j is not available.", "cypher": "", "source": "rules"}
+        return {"answer": "Neo4j is not available.", "cypher": "", "source": "rules", "graph": None}
 
     try:
         cypher_raw = llm.invoke(
@@ -468,6 +528,7 @@ def graph_ask(question: str) -> dict:
             f"couldn't write a query. ({exc})",
             "cypher": "",
             "source": "rules",
+            "graph": None,
         }
     cypher = _clean_cypher(_coalesce(cypher_raw))
 
@@ -479,6 +540,7 @@ def graph_ask(question: str) -> dict:
             "which isn't allowed here. Try a read-only question.",
             "cypher": cypher,
             "source": "rules",
+            "graph": None,
         }
 
     # Safety, layer 2 (the real enforcement): run it under a Neo4j read-mode
@@ -490,7 +552,7 @@ def graph_ask(question: str) -> dict:
     try:
         rows = graph.run_read_only_cypher(cypher)
     except Exception as exc:  # noqa: BLE001
-        return {"answer": f"Couldn't run that query: {exc}", "cypher": cypher, "source": "rules"}
+        return {"answer": f"Couldn't run that query: {exc}", "cypher": cypher, "source": "rules", "graph": None}
 
     try:
         answer = llm.invoke(
@@ -517,9 +579,13 @@ def graph_ask(question: str) -> dict:
             f"model is unavailable to summarize them right now. ({exc})",
             "cypher": cypher,
             "source": "rules",
+            "graph": None,
         }
     answer = _coalesce(answer)
-    return {"answer": answer, "cypher": cypher, "source": "anthropic"}
+    # No subgraph for the free-form path: an arbitrary LLM-written Cypher's
+    # result shape isn't predictable enough to reliably pull property ids from
+    # (unlike the templates, where we control the RETURN clause exactly).
+    return {"answer": answer, "cypher": cypher, "source": "anthropic", "graph": None}
 
 
 def _parse_json_array(s: str) -> list:

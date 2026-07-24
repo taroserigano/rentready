@@ -807,22 +807,91 @@ def test_late_count_3m_included_in_bulk_and_matches_single():
 
 
 # ===========================================================================
+# 10b. late_count_6m / late_count_9m HEADS (mid-year quarterly checkpoints)
+# ===========================================================================
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_registered_in_head_catalog(head):
+    spec = rr.HEADS_BY_NAME[head]
+    assert spec["family"] == "frequency"
+    assert spec["kind"] == "count"
+    assert spec["feature_order"] == rr.FEATURE_ORDER_BASE
+    assert spec["band_edges"] is None  # served as expected+interval, not a band
+    assert head in rr.HEAD_NAMES
+
+
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_valid_on_representative_residents(head):
+    for res in (CLEAN, BAD, rr.load_residents()[0]):
+        pred = rr.predict_resident(res)
+        _assert_head_valid(head, pred["heads"][head])
+
+
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_valid_on_heuristic_path(head, force_heuristic):
+    for res in (CLEAN, BAD):
+        pred = rr.predict_resident(res)
+        _assert_head_valid(head, pred["heads"][head])
+
+
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_worse_resident_scores_higher(head, force_heuristic):
+    """A resident who is missing every recent payment must never get a LOWER
+    expected count than a spotless one (direction, not an exact value)."""
+    clean = rr.predict_resident(CLEAN)["heads"][head]["expected"]
+    bad = rr.predict_resident(BAD)["heads"][head]["expected"]
+    assert bad > clean
+
+
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_never_raises_on_degenerate_heuristic(head, force_heuristic):
+    pred = rr.predict_resident(make_resident([]))
+    h = pred["heads"][head]
+    assert h["expected"] >= 0.0
+    assert len(h["interval"]) == 2
+
+
+@pytest.mark.parametrize("head", ["late_count_6m", "late_count_9m"])
+def test_late_count_mid_year_included_in_bulk_and_matches_single(head):
+    residents = rr.load_residents()[:12]
+    bulk = rr.predict_bulk(residents, heads=[head])
+    for r, b in zip(residents, bulk):
+        single = rr.predict_resident(r, with_reasons=False, heads=[head])
+        assert b["heads"][head]["expected"] == single["heads"][head]["expected"]
+
+
+@pytest.mark.parametrize("heads", [
+    ("late_count_3m", "late_count_6m"),
+    ("late_count_6m", "late_count_9m"),
+    ("late_count_9m", "late_count_12m"),
+])
+def test_late_count_quarterly_checkpoints_trend_upward(heads):
+    """The 4 quarterly checkpoints are a genuine cumulative-count timeline —
+    a resident's expected count at a longer horizon should never be lower
+    than at a shorter one (same property of the ground truth as arrears)."""
+    shorter, longer = heads
+    for res in (CLEAN, BAD, rr.load_residents()[0]):
+        pred = rr.predict_resident(res)
+        assert pred["heads"][longer]["expected"] >= pred["heads"][shorter]["expected"] - 1e-6
+
+
+# ===========================================================================
 # 11. QUARTERLY LATE-PAYMENT FORECAST (property/portfolio aggregate)
 # ===========================================================================
-def test_property_late_forecast_matches_sum_of_bulk_predictions():
+@pytest.mark.parametrize("head", ["late_count_3m", "late_count_6m", "late_count_9m", "late_count_12m"])
+def test_property_late_forecast_matches_sum_of_bulk_predictions(head):
     pid = rr.RESIDENT_PROPERTY_IDS[0]
     residents = [r for r in rr.load_residents() if r.get("property_id") == pid]
     assert residents, "fixture property should have residents"
-    fc = rr.property_late_forecast(pid)
+    fc = rr.property_late_forecast(pid, head=head)
     assert fc["property_id"] == pid
     assert fc["resident_count"] == len(residents)
 
     # The aggregate must be the exact SUM of each resident's own prediction —
     # not a re-derived or approximated number.
-    preds = rr.predict_bulk(residents, heads=["late_count_3m"])
-    expected_sum = sum(p["heads"]["late_count_3m"]["expected"] for p in preds)
-    lo_sum = sum(p["heads"]["late_count_3m"]["interval"][0] for p in preds)
-    hi_sum = sum(p["heads"]["late_count_3m"]["interval"][1] for p in preds)
+    preds = rr.predict_bulk(residents, heads=[head])
+    expected_sum = sum(p["heads"][head]["expected"] for p in preds)
+    lo_sum = sum(p["heads"][head]["interval"][0] for p in preds)
+    hi_sum = sum(p["heads"][head]["interval"][1] for p in preds)
     assert fc["expected"] == pytest.approx(round(expected_sum, 1), abs=0.15)
     assert fc["interval"][0] == pytest.approx(round(lo_sum, 1), abs=0.15)
     assert fc["interval"][1] == pytest.approx(round(hi_sum, 1), abs=0.15)
@@ -846,6 +915,11 @@ def test_portfolio_late_forecast_matches_sum_of_bulk_predictions():
     expected_sum = sum(p["heads"]["late_count_3m"]["expected"] for p in preds)
     assert fc["expected"] == pytest.approx(round(expected_sum, 1), abs=1.0)
     assert fc["interval"][0] <= fc["expected"] <= fc["interval"][1]
+
+
+def test_late_forecast_rejects_unsupported_head():
+    with pytest.raises(ValueError):
+        rr.property_late_forecast(rr.RESIDENT_PROPERTY_IDS[0], head="not_a_real_head")
 
 
 def test_property_late_forecast_unknown_property_is_empty():
@@ -994,3 +1068,103 @@ def test_live_llm_late_forecast_grounds_the_real_number(monkeypatch):
     assert "recommend eviction" not in lowered
     assert "should evict" not in lowered
     assert "you should deny" not in lowered
+
+
+@pytest.mark.skipif(
+    not app_settings.anthropic_api_key,
+    reason="no ANTHROPIC_API_KEY configured (.env); live-LLM test skipped",
+)
+def test_live_llm_late_forecast_portfolio_scope_grounds_the_real_number(monkeypatch):
+    """Same grounding contract as the property-scoped test above, but with NO
+    property_id — the portfolio-wide aggregate path (``portfolio_late_forecast``),
+    which the property-scoped test never exercises."""
+    monkeypatch.setattr(rc, "get_langchain_llm", llm_module.get_langchain_llm)
+
+    fc = rr.portfolio_late_forecast()
+    a = rc.answer("How many late payments can we expect across the whole portfolio next quarter?")
+
+    assert a["intent"] == "late_forecast"
+    assert a["scope"] == "portfolio"
+    if a["source"] != "anthropic":
+        pytest.skip("LLM call did not succeed (network/proxy); rules fallback took over")
+
+    assert re.search(rf"\b{re.escape(rc._num(fc['expected']))}\b", a["answer"])
+    assert "[1]" in a["answer"]
+    lowered = a["answer"].lower()
+    assert "recommend eviction" not in lowered
+    assert "should evict" not in lowered
+
+
+@pytest.mark.skipif(
+    not app_settings.anthropic_api_key,
+    reason="no ANTHROPIC_API_KEY configured (.env); live-LLM test skipped",
+)
+def test_live_llm_late_forecast_multiturn_switches_horizon(monkeypatch):
+    """A follow-up question in the SAME conversation switches the window from
+    quarterly to 12-month — this is also the exact regression scenario a user
+    hit live (asking a 12-month question got the quarterly number silently, or
+    a fabricated one, before the horizon-aware fix). The two grounded numbers
+    must differ (proving the second turn actually recomputed on the new
+    window, rather than repeating the first answer) and each must match its
+    own head's real aggregate.
+
+    NOTE: the follow-up restates "late payments" rather than just saying "what
+    about 12 months instead?" — routing is a per-turn regex classifier with no
+    memory of the PRIOR intent, so a bare horizon-only follow-up with no
+    frequency keyword of its own currently falls through to property_health
+    instead of continuing the late-forecast thread. That's a real, separate
+    conversational-continuity gap (worth its own fix), not something this test
+    should paper over by asserting on it as if it worked."""
+    monkeypatch.setattr(rc, "get_langchain_llm", llm_module.get_langchain_llm)
+
+    pid = rr.RESIDENT_PROPERTY_IDS[0]
+    fc_q = rr.property_late_forecast(pid, head="late_count_3m")
+    fc_y = rr.property_late_forecast(pid, head="late_count_12m")
+    assert rc._num(fc_q["expected"]) != rc._num(fc_y["expected"]), (
+        "test fixture needs a property where the two windows print differently"
+    )
+
+    a1 = rc.answer("How many late payments could we anticipate next quarter?", property_id=pid)
+    assert a1["intent"] == "late_forecast"
+    if a1["source"] != "anthropic":
+        pytest.skip("LLM call did not succeed (network/proxy); rules fallback took over")
+
+    history = [
+        {"role": "user", "content": "How many late payments could we anticipate next quarter?"},
+        {"role": "assistant", "content": a1["answer"]},
+    ]
+    a2 = rc.answer(
+        "How many late payments could we anticipate over the next 12 months instead?",
+        property_id=pid, history=history,
+    )
+    assert a2["intent"] == "late_forecast"
+    if a2["source"] != "anthropic":
+        pytest.skip("LLM call did not succeed (network/proxy); rules fallback took over")
+
+    assert re.search(rf"\b{re.escape(rc._num(fc_q['expected']))}\b", a1["answer"])
+    assert re.search(rf"\b{re.escape(rc._num(fc_y['expected']))}\b", a2["answer"])
+
+
+@pytest.mark.skipif(
+    not app_settings.anthropic_api_key,
+    reason="no ANTHROPIC_API_KEY configured (.env); live-LLM test skipped",
+)
+def test_live_llm_late_forecast_grounds_at_the_low_end_too(monkeypatch):
+    """Grounding must hold at the low end of the distribution too, not just the
+    typical case the first live-LLM test happens to cover: picks whichever real
+    property currently has the SMALLEST expected quarterly count and confirms
+    the model still states that (small) number accurately rather than rounding
+    it away or dramatizing it."""
+    monkeypatch.setattr(rc, "get_langchain_llm", llm_module.get_langchain_llm)
+
+    forecasts = {pid: rr.property_late_forecast(pid) for pid in rr.RESIDENT_PROPERTY_IDS}
+    pid = min(forecasts, key=lambda k: forecasts[k]["expected"])
+    fc = forecasts[pid]
+
+    a = rc.answer("How many late payments could we anticipate next quarter?", property_id=pid)
+    assert a["intent"] == "late_forecast"
+    if a["source"] != "anthropic":
+        pytest.skip("LLM call did not succeed (network/proxy); rules fallback took over")
+
+    assert re.search(rf"\b{re.escape(rc._num(fc['expected']))}\b", a["answer"])
+    assert "[1]" in a["answer"]

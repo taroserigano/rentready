@@ -26,9 +26,12 @@ import residents_chat
 import residents_risk
 import store
 from models import (
+    ArrearsBreakdownPoint,
     ArrearsPrediction,
     BandDistribution,
     ChurnPrediction,
+    HorizonPoint,
+    LateCountBreakdownPoint,
     LatePrediction,
     LedgerStats,
     PortfolioHealthResponse,
@@ -48,6 +51,7 @@ from models import (
     ResidentRow,
     ResidentRollup,
     SeriousPrediction,
+    SeverityBucket,
 )
 
 router = APIRouter(tags=["residents"])
@@ -56,6 +60,96 @@ router = APIRouter(tags=["residents"])
 # ---------------------------------------------------------------------------
 # Internal helpers — score one resident into a table row + an aggregate record.
 # ---------------------------------------------------------------------------
+_HORIZON_LABELS = [
+    ("late_1m", "Next month"),
+    ("late_3m", "Next quarter"),
+    ("late_6m", "Next 6 months"),
+    ("late_12m", "Next year"),
+]
+
+
+def _horizon_points(fc: dict) -> list[HorizonPoint]:
+    """residents_risk.property_horizon_forecast()'s dict -> the 4 ordered
+    HorizonPoints the UI trend renders. [] if no residents (nothing to plot).
+
+    Each head is a CUMULATIVE "at least one late payment by month T"
+    probability, so consecutive values only ever rise -- that's a property of
+    the math, not a real trend. ``incremental_probability`` subtracts the
+    prior horizon's cumulative value (floored at 0) to get the marginal risk
+    added in THIS window specifically, which is what a per-period chart
+    should show."""
+    horizons = fc.get("horizons") or {}
+    if not horizons:
+        return []
+    points = []
+    prev_cum: float | None = None
+    for head, label in _HORIZON_LABELS:
+        h = horizons.get(head) or {}
+        cum = h.get("avg_probability")
+        if cum is None:
+            incremental = None
+        elif prev_cum is None:
+            incremental = cum  # the first horizon has no prior baseline to subtract
+        else:
+            incremental = round(max(0.0, cum - prev_cum), 4)
+        points.append(HorizonPoint(
+            horizon=head, label=label,
+            avg_probability=cum,
+            incremental_probability=incremental,
+            bands=BandDistribution(**(h.get("bands") or {})),
+        ))
+        if cum is not None:
+            prev_cum = cum
+    return points
+
+
+_ARREARS_WINDOWS = [
+    ("arrears_3m", "q1", "Q1"),
+    ("arrears_6m", "q2", "Q2"),
+    ("arrears_9m", "q3", "Q3"),
+    ("arrears_12m", "q4", "Q4"),
+]
+
+_SEVERITY_BUCKET_ORDER = ["none", "1-29", "30-59", "60-89", "90+"]
+
+
+def _arrears_breakdown(property_id: str) -> list[ArrearsBreakdownPoint]:
+    """Expected total arrears at each of the next 4 quarterly checkpoints — a
+    genuine cumulative-balance timeline (each quarter's own trained head, not
+    a proration of the annual figure)."""
+    points = []
+    for head, key, label in _ARREARS_WINDOWS:
+        fc = residents_risk.property_arrears_forecast(property_id, head=head)
+        points.append(ArrearsBreakdownPoint(key=key, label=label, expected=fc.get("expected", 0.0)))
+    return points
+
+
+_LATE_COUNT_WINDOWS = [
+    ("late_count_3m", "q1", "Q1"),
+    ("late_count_6m", "q2", "Q2"),
+    ("late_count_9m", "q3", "Q3"),
+    ("late_count_12m", "q4", "Q4"),
+]
+
+
+def _late_count_breakdown(property_id: str) -> list[LateCountBreakdownPoint]:
+    """Expected total late-payment COUNT at each of the next 4 quarterly
+    checkpoints — a genuine cumulative-count timeline (each quarter's own
+    trained head, not a proration of the annual figure)."""
+    points = []
+    for head, key, label in _LATE_COUNT_WINDOWS:
+        fc = residents_risk.property_late_forecast(property_id, head=head)
+        points.append(LateCountBreakdownPoint(key=key, label=label, expected=fc.get("expected", 0.0)))
+    return points
+
+
+def _severity_buckets(property_id: str) -> list[SeverityBucket]:
+    """Worst-delinquency-bucket distribution, in severity order."""
+    sfc = residents_risk.property_severity_forecast(property_id)
+    counts = sfc.get("bucket_counts") or {}
+    return [SeverityBucket(bucket=b, count=counts.get(b, 0)) for b in _SEVERITY_BUCKET_ORDER]
+
+
 def _resident_or_404(resident_id: str) -> dict:
     r = residents_risk.get_resident(resident_id)
     if r is None:
@@ -365,7 +459,19 @@ def property_residents(property_id: str) -> PropertyResidentsResponse:
     ]
     rows, aggs, source = _score_many(residents)
     rows.sort(key=lambda r: r.late_probability, reverse=True)
-    rollup = PropertyResidentRollup(property_id=property_id, **_rollup(aggs))
+    hfc = residents_risk.property_horizon_forecast(property_id)
+    lfc = residents_risk.property_late_forecast(property_id, head="late_count_12m")
+    cfc = residents_risk.property_cure_forecast(property_id)
+    rollup = PropertyResidentRollup(
+        property_id=property_id,
+        horizon_forecast=_horizon_points(hfc),
+        expected_late_count_12m=lfc.get("expected", 0.0),
+        residents_in_arrears_count=cfc.get("eligible_count", 0),
+        arrears_breakdown=_arrears_breakdown(property_id),
+        late_count_breakdown=_late_count_breakdown(property_id),
+        severity_buckets=_severity_buckets(property_id),
+        **_rollup(aggs),
+    )
     store.log_event(
         endpoint="residents_by_property",
         latency_ms=(time.perf_counter() - t0) * 1000,

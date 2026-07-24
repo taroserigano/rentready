@@ -251,6 +251,13 @@ HEADS = [
        "Expected number of late months over the next 3 months / quarter (0-3)",
        "reliable point estimate; short horizon keeps the interval tighter than "
        "the 12mo count", calibration="empirical_pi"),
+    _H("late_count_6m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected number of late months over the next 6 months (0-6)",
+       "reliable point estimate", calibration="empirical_pi"),
+    _H("late_count_9m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected number of late months over the next 9 months (0-9)",
+       "reliable point estimate; interval widened for streak overdispersion",
+       calibration="empirical_pi"),
     _H("late_count_12m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
        "Expected number of late months over the next 12 months (0-12)",
        "reliable point estimate; interval widened for streak overdispersion",
@@ -285,6 +292,12 @@ HEADS = [
     _H("arrears_3m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
        "Expected $ balance at the end of the next 3 months (quarter)", "reliable",
        calibration="empirical_pi", legacy_alias="arrears"),
+    _H("arrears_6m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
+       "Expected $ balance at the end of the next 6 months", "reliable",
+       calibration="empirical_pi"),
+    _H("arrears_9m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
+       "Expected $ balance at the end of the next 9 months", "moderate (longer horizon)",
+       calibration="empirical_pi"),
     _H("arrears_12m", "arrears", "regression", "reg:tweedie", FEATURE_ORDER_ARREARS,
        "Expected $ balance at the end of the next 12 months", "moderate (longer horizon)",
        calibration="empirical_pi"),
@@ -800,6 +813,18 @@ def _heuristic_head(head: str, features: dict):
         recent = float(features.get("late_count_3mo", 0.0))
         expected = max(0.0, 0.6 * rate * 3.0 + 0.4 * recent)
         return expected, {"trouble_month_rate": rate * 1.8, "late_count_3mo": recent * 0.4}
+    if head == "late_count_6m":
+        rate = float(features.get("trouble_month_rate", 0.0))
+        recent = float(features.get("late_count_6mo", 0.0))
+        expected = max(0.0, 0.6 * rate * 6.0 + 0.4 * recent)
+        return expected, {"trouble_month_rate": rate * 3.6, "late_count_6mo": recent * 0.4}
+    if head == "late_count_9m":
+        rate = float(features.get("trouble_month_rate", 0.0))
+        # No late_count_9mo feature exists (the ledger contract only has
+        # 3/6/12/24mo windows) -- the 6mo window is the closest real feature.
+        recent = float(features.get("late_count_6mo", 0.0))
+        expected = max(0.0, 0.6 * rate * 9.0 + 0.4 * recent)
+        return expected, {"trouble_month_rate": rate * 5.4, "late_count_6mo": recent * 0.4}
     if head == "late_count_12m":
         rate = float(features.get("trouble_month_rate", 0.0))
         recent = float(features.get("late_count_12mo", 0.0))
@@ -816,8 +841,13 @@ def _heuristic_head(head: str, features: dict):
         expected = max(0.0, 0.7 * mdl + 20.0 * rate)
         return expected, {"max_days_late_12mo": mdl * 0.7, "trouble_month_rate": rate * 20.0}
     if fam == "arrears":
-        horizon = 12 if head != "arrears_3m" else LABEL_HORIZON_MONTHS
-        scale = 1.0 if head == "arrears_3m" else (1.35 if head == "arrears_12m" else 1.5)
+        # (horizon_months, scale) per checkpoint — scale interpolates between
+        # arrears_3m's 1.0 and arrears_12m's 1.35 for the 6/9-month points;
+        # peak gets its own higher scale since it's a max, not an endpoint.
+        horizon, scale = {
+            "arrears_3m": (3, 1.0), "arrears_6m": (6, 1.12), "arrears_9m": (9, 1.23),
+            "arrears_12m": (12, 1.35), "peak_balance_12m": (12, 1.5),
+        }.get(head, (12, 1.35))
         expected, contribs = _heuristic_arrears(features, horizon, scale)
         if head == "peak_balance_12m":
             expected = max(expected, float(features.get("max_balance_12mo", 0.0)),
@@ -1587,10 +1617,11 @@ def portfolio_health(snapshot: date = RESIDENT_SNAPSHOT) -> list:
 
 # --------------------------------------------------------------------------
 # Late-payment count forecast — sums a genuine frequency head (``late_count_3m``
-# for the quarterly view, ``late_count_12m`` for the annual one; never a
-# proration of one from the other) across a scope's residents.
+# for the quarterly view, ``late_count_6m``/``late_count_9m`` for the mid-year
+# checkpoints, ``late_count_12m`` for the annual one; never a proration of one
+# from the other) across a scope's residents.
 # --------------------------------------------------------------------------
-_LATE_FORECAST_HEADS = {"late_count_3m", "late_count_12m"}
+_LATE_FORECAST_HEADS = {"late_count_3m", "late_count_6m", "late_count_9m", "late_count_12m"}
 
 
 def _late_forecast_from_residents(residents: list, snapshot: date, head: str = "late_count_3m") -> dict:
@@ -1644,6 +1675,272 @@ def portfolio_late_forecast(snapshot: date = RESIDENT_SNAPSHOT, head: str = "lat
     except Exception as exc:  # noqa: BLE001
         print(f"residents_risk.portfolio_late_forecast failed ({type(exc).__name__}: {exc}).")
         return {"resident_count": 0, "expected": 0.0, "interval": [0.0, 0.0], "top_contributors": []}
+
+
+# --------------------------------------------------------------------------
+# Property/portfolio-level late-payment LIKELIHOOD aggregate -- averages each
+# resident's own probability (not a proration) across every horizon, for a
+# "how likely, next quarter / next year" question with no resident selected.
+# --------------------------------------------------------------------------
+_HORIZON_FORECAST_HEADS = ("late_1m", "late_3m", "late_6m", "late_12m")
+
+
+def _horizon_forecast_from_residents(residents: list, snapshot: date) -> dict:
+    if not residents:
+        return {"resident_count": 0, "horizons": {}}
+    preds = predict_bulk(residents, snapshot, heads=list(_HORIZON_FORECAST_HEADS))
+    horizons: dict = {}
+    for head in _HORIZON_FORECAST_HEADS:
+        probs = []
+        bands = {"low": 0, "medium": 0, "high": 0, "not_applicable": 0}
+        for pred in preds:
+            h = (pred.get("heads") or {}).get(head) or {}
+            band = h.get("band", "not_applicable")
+            bands[band] = bands.get(band, 0) + 1
+            p = h.get("probability")
+            if p is not None:
+                probs.append(float(p))
+        avg = round(sum(probs) / len(probs), 4) if probs else None
+        horizons[head] = {"avg_probability": avg, "bands": bands}
+    return {"resident_count": len(residents), "horizons": horizons}
+
+
+def property_horizon_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Average late-payment probability for one property, every horizon —
+    each resident's own estimate averaged, not summed. Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _horizon_forecast_from_residents(residents, snapshot)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_horizon_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "horizons": {}}
+
+
+def portfolio_horizon_forecast(snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Same aggregate, across every resident in the portfolio."""
+    try:
+        return _horizon_forecast_from_residents(load_residents(), snapshot)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_horizon_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "horizons": {}}
+
+
+# --------------------------------------------------------------------------
+# Property/portfolio-level SEVERITY aggregate -- avg expected worst-days-late,
+# avg 30/60/90-day probabilities, and the delinquency-bucket distribution.
+# --------------------------------------------------------------------------
+_SEVERITY_PROB_HEADS = ("p_30d_12m", "p_60d_12m", "p_90d_12m")
+
+
+def _severity_forecast_from_residents(residents: list, snapshot: date) -> dict:
+    if not residents:
+        return {"resident_count": 0, "avg_max_days_late": None, "probabilities": {}, "bucket_counts": {}}
+    heads = ["max_days_late_12m", "delinquency_bucket_12m", *_SEVERITY_PROB_HEADS]
+    preds = predict_bulk(residents, snapshot, heads=heads)
+    days_vals = []
+    bucket_counts = {"none": 0, "1-29": 0, "30-59": 0, "60-89": 0, "90+": 0}
+    prob_sums: dict = {h: [] for h in _SEVERITY_PROB_HEADS}
+    for pred in preds:
+        hh = pred.get("heads") or {}
+        md = (hh.get("max_days_late_12m") or {}).get("expected")
+        if md is not None:
+            days_vals.append(float(md))
+        bucket = (hh.get("delinquency_bucket_12m") or {}).get("predicted_bucket")
+        if bucket in bucket_counts:
+            bucket_counts[bucket] += 1
+        for h in _SEVERITY_PROB_HEADS:
+            p = (hh.get(h) or {}).get("probability")
+            if p is not None:
+                prob_sums[h].append(float(p))
+    probabilities = {h: (round(sum(vals) / len(vals), 4) if vals else None) for h, vals in prob_sums.items()}
+    avg_days = round(sum(days_vals) / len(days_vals), 1) if days_vals else None
+    return {"resident_count": len(residents), "avg_max_days_late": avg_days,
+            "probabilities": probabilities, "bucket_counts": bucket_counts}
+
+
+def property_severity_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Average expected worst-days-late, 30/60/90-day risk, and delinquency-
+    bucket distribution for one property. Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _severity_forecast_from_residents(residents, snapshot)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_severity_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "avg_max_days_late": None,
+                "probabilities": {}, "bucket_counts": {}}
+
+
+def portfolio_severity_forecast(snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Same aggregate, across every resident in the portfolio."""
+    try:
+        return _severity_forecast_from_residents(load_residents(), snapshot)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_severity_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "avg_max_days_late": None, "probabilities": {}, "bucket_counts": {}}
+
+
+# --------------------------------------------------------------------------
+# Property/portfolio-level ARREARS aggregate -- SUM of expected balances
+# across residents (a genuine total dollar exposure), for each quarterly
+# checkpoint (3/6/9/12mo) plus the 12mo peak.
+# --------------------------------------------------------------------------
+_ARREARS_FORECAST_HEADS = ("arrears_3m", "arrears_6m", "arrears_9m", "arrears_12m", "peak_balance_12m")
+
+
+def _arrears_forecast_from_residents(residents: list, snapshot: date, head: str = "arrears_12m") -> dict:
+    if head not in _ARREARS_FORECAST_HEADS:
+        raise ValueError(f"unsupported arrears-forecast head: {head!r}")
+    if not residents:
+        return {"resident_count": 0, "expected": 0.0, "interval": [0.0, 0.0], "top_contributors": []}
+    preds = predict_bulk(residents, snapshot, heads=[head])
+    total_expected = total_lo = total_hi = 0.0
+    rows = []
+    for r, pred in zip(residents, preds):
+        h = (pred.get("heads") or {}).get(head) or {}
+        exp = float(h.get("expected") or 0.0)
+        iv = h.get("interval") or [exp, exp]
+        lo, hi = (float(iv[0]), float(iv[1])) if len(iv) == 2 else (exp, exp)
+        total_expected += exp
+        total_lo += lo
+        total_hi += hi
+        rows.append({"resident_id": r.get("resident_id", ""), "name": r.get("name", ""),
+                     "expected": round(exp, 2)})
+    rows.sort(key=lambda x: -x["expected"])
+    return {"resident_count": len(residents), "expected": round(total_expected, 2),
+            "interval": [round(total_lo, 2), round(total_hi, 2)], "top_contributors": rows[:5]}
+
+
+def property_arrears_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT,
+                              head: str = "arrears_12m") -> dict:
+    """Expected total arrears balance for one property (SUM of every
+    resident's own estimate). Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _arrears_forecast_from_residents(residents, snapshot, head=head)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_arrears_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "expected": 0.0,
+                "interval": [0.0, 0.0], "top_contributors": []}
+
+
+def portfolio_arrears_forecast(snapshot: date = RESIDENT_SNAPSHOT, head: str = "arrears_12m") -> dict:
+    """Same aggregate, across every resident in the portfolio."""
+    try:
+        return _arrears_forecast_from_residents(load_residents(), snapshot, head=head)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_arrears_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "expected": 0.0, "interval": [0.0, 0.0], "top_contributors": []}
+
+
+# --------------------------------------------------------------------------
+# Property/portfolio-level CURE aggregate -- among residents CURRENTLY in
+# arrears (cure is not_applicable otherwise), avg chance of clearing + timing.
+# --------------------------------------------------------------------------
+def _cure_forecast_from_residents(residents: list, snapshot: date) -> dict:
+    if not residents:
+        return {"resident_count": 0, "eligible_count": 0, "avg_probability": None, "avg_months_to_cure": None}
+    # months_to_cure is a survival-kind head with no vectorized bulk path (its
+    # batched value is a per-period hazard array, not a scalar) -- requesting
+    # it via predict_bulk fails the WHOLE batch and silently falls back to
+    # scoring every resident one at a time. Request only the bulk-safe binary
+    # head here, then resolve months-to-cure per resident but ONLY for the
+    # (typically few) residents actually in arrears.
+    preds = predict_bulk(residents, snapshot, heads=["p_cure_6m"])
+    probs, months = [], []
+    for r, pred in zip(residents, preds):
+        hh = pred.get("heads") or {}
+        cure = hh.get("p_cure_6m") or {}
+        if cure.get("band") == "not_applicable":
+            continue
+        p = cure.get("probability")
+        if p is not None:
+            probs.append(float(p))
+        full = predict_resident(r, snapshot, with_reasons=False, heads=["months_to_cure"])
+        mtc = (full.get("heads") or {}).get("months_to_cure", {}).get("median_months")
+        if mtc is not None:
+            months.append(float(mtc))
+    avg = round(sum(probs) / len(probs), 4) if probs else None
+    med = round(sum(months) / len(months), 1) if months else None
+    return {"resident_count": len(residents), "eligible_count": len(probs),
+            "avg_probability": avg, "avg_months_to_cure": med}
+
+
+def property_cure_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Among residents currently carrying a balance at one property, average
+    chance of clearing it within 6 months + typical time to clear. Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _cure_forecast_from_residents(residents, snapshot)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_cure_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "eligible_count": 0,
+                "avg_probability": None, "avg_months_to_cure": None}
+
+
+def portfolio_cure_forecast(snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Same aggregate, across every resident in the portfolio."""
+    try:
+        return _cure_forecast_from_residents(load_residents(), snapshot)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_cure_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "eligible_count": 0, "avg_probability": None, "avg_months_to_cure": None}
+
+
+# --------------------------------------------------------------------------
+# Property/portfolio-level RETENTION aggregate -- among residents whose lease
+# ends within the renewal-risk horizon (churn is not_applicable otherwise),
+# avg non-renewal probability + how many are flagged high risk.
+# --------------------------------------------------------------------------
+def _retention_forecast_from_residents(residents: list, snapshot: date) -> dict:
+    if not residents:
+        return {"resident_count": 0, "eligible_count": 0, "avg_probability": None, "high_risk_count": 0}
+    preds = predict_bulk(residents, snapshot, heads=["churn", "churn_12m"])
+    probs, high = [], 0
+    for pred in preds:
+        hh = pred.get("heads") or {}
+        c12 = hh.get("churn_12m") or {}
+        if c12.get("band") == "not_applicable":
+            continue
+        p = c12.get("probability")
+        if p is not None:
+            probs.append(float(p))
+        if c12.get("band") == "high":
+            high += 1
+    avg = round(sum(probs) / len(probs), 4) if probs else None
+    return {"resident_count": len(residents), "eligible_count": len(probs),
+            "avg_probability": avg, "high_risk_count": high}
+
+
+def property_retention_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Among residents at one property whose lease ends within the renewal-
+    risk horizon, average non-renewal probability + count flagged high risk.
+    Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _retention_forecast_from_residents(residents, snapshot)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_retention_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "eligible_count": 0,
+                "avg_probability": None, "high_risk_count": 0}
+
+
+def portfolio_retention_forecast(snapshot: date = RESIDENT_SNAPSHOT) -> dict:
+    """Same aggregate, across every resident in the portfolio."""
+    try:
+        return _retention_forecast_from_residents(load_residents(), snapshot)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_retention_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "eligible_count": 0, "avg_probability": None, "high_risk_count": 0}
 
 
 # --------------------------------------------------------------------------

@@ -32,6 +32,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 os.environ.setdefault("EMBEDDING_BACKEND", "hash")
+# This script isolates itself onto a throwaway store.DB_PATH (see
+# _run_stateful below); without also forcing DATABASE_URL off, that override
+# would be silently ignored once a real DATABASE_URL is configured for the
+# deployed instance (store.py prefers Postgres over DB_PATH when set), and
+# every "isolated" run here would actually hit the shared production DB.
+os.environ["DATABASE_URL"] = ""
 
 BACKEND = Path(__file__).resolve().parent.parent
 if str(BACKEND) not in sys.path:

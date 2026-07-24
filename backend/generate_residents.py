@@ -551,6 +551,8 @@ def _emit_labels(sim: dict, meta: dict, c_churn: float) -> dict:
         "late_6m": any_late(6),
         "late_12m": any_late(12),
         "late_count_3m": int(sum(1 for f in fut[:3] if f["status"] != "paid")),
+        "late_count_6m": int(sum(1 for f in fut[:6] if f["status"] != "paid")),
+        "late_count_9m": int(sum(1 for f in fut[:9] if f["status"] != "paid")),
         "late_count_12m": int(sum(1 for f in w12 if f["status"] != "paid")),
         "missed_count_12m": int(sum(1 for f in w12 if f["status"] == "missed")),
         "max_days_late_12m": float(max_days),
@@ -560,6 +562,8 @@ def _emit_labels(sim: dict, meta: dict, c_churn: float) -> dict:
         "delinquency_bucket_12m": rr._delinq_bucket(max_days),
         "serious": int(any(f["days_late"] >= 30 or f["balance_after"] >= base_rent for f in fut[:3])),
         "arrears_3m": round(float(fut[2]["balance_after"]) if len(fut) >= 3 else 0.0, 2),
+        "arrears_6m": round(float(fut[5]["balance_after"]) if len(fut) >= 6 else 0.0, 2),
+        "arrears_9m": round(float(fut[8]["balance_after"]) if len(fut) >= 9 else 0.0, 2),
         "arrears_12m": round(float(fut[11]["balance_after"]) if len(fut) >= 12 else 0.0, 2),
         "peak_balance_12m": round(float(max(bal12)) if bal12 else 0.0, 2),
     }

@@ -18,6 +18,7 @@ export function residentStarters(
       "How severe could it get?",
       "Will they renew?",
       "Why are they flagged?",
+      "How confident is this prediction?",
     ];
   }
 
@@ -28,6 +29,7 @@ export function residentStarters(
       "Which residents need outreach first?",
       "What's driving arrears here?",
       "Which apartments are healthiest?",
+      "Which predictions here are most confident?",
     ];
   }
 
@@ -36,5 +38,6 @@ export function residentStarters(
     "Which property needs attention?",
     "How is late-payment risk spread across the portfolio?",
     "What does the model measure, and what does it exclude?",
+    "Which predictions can I trust the most?",
   ];
 }

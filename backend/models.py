@@ -586,8 +586,73 @@ class ResidentRollup(BaseModel):
     churn_bands: BandDistribution = Field(default_factory=BandDistribution)
 
 
+class HorizonPoint(BaseModel):
+    """One future horizon's averaged late-payment probability across a
+    property's residents, plus the risk-band spread behind that average.
+
+    ``avg_probability`` is the model's native CUMULATIVE figure ("at least one
+    late payment by the end of this horizon") -- monotonically non-decreasing
+    by construction, so a trend of these always rises regardless of the real
+    risk shape. ``incremental_probability`` is the MARGINAL risk added since
+    the prior horizon (this horizon's cumulative minus the previous one's,
+    floored at 0) -- the "individual period" view: can rise, fall, or plateau,
+    and is what a per-period trend chart should plot."""
+
+    horizon: str  # "late_1m" | "late_3m" | "late_6m" | "late_12m"
+    label: str  # "Next month" | "Next quarter" | "Next 6 months" | "Next year"
+    avg_probability: Optional[float] = None
+    incremental_probability: Optional[float] = None
+    bands: BandDistribution = Field(default_factory=BandDistribution)
+
+
+class ArrearsBreakdownPoint(BaseModel):
+    """Expected total arrears (summed across residents) at one quarterly
+    checkpoint."""
+
+    key: str  # "q1" | "q2" | "q3" | "q4"
+    label: str  # "Q1" | "Q2" | "Q3" | "Q4"
+    expected: float = 0.0
+
+
+class LateCountBreakdownPoint(BaseModel):
+    """Expected total late-payment COUNT (summed across residents) at one
+    quarterly checkpoint."""
+
+    key: str  # "q1" | "q2" | "q3" | "q4"
+    label: str  # "Q1" | "Q2" | "Q3" | "Q4"
+    expected: float = 0.0
+
+
+class SeverityBucket(BaseModel):
+    """How many residents fall in one worst-delinquency bucket (ordinal:
+    none < 1-29 < 30-59 < 60-89 < 90+ days)."""
+
+    bucket: str  # "none" | "1-29" | "30-59" | "60-89" | "90+"
+    count: int = 0
+
+
 class PropertyResidentRollup(ResidentRollup):
     property_id: str
+    # Forward-looking trend: avg late-payment probability at 4 future
+    # horizons, so "prediction for the future" is visible without a chat
+    # question. [] if resident data is unavailable for this property.
+    horizon_forecast: list[HorizonPoint] = Field(default_factory=list)
+    # Expected total late-payment COUNT next 12 months (sum of every
+    # resident's own estimate) -- a different, complementary number from
+    # predicted_late_rate (a probability, not a count).
+    expected_late_count_12m: float = 0.0
+    # How many residents currently carry an outstanding balance right now.
+    residents_in_arrears_count: int = 0
+    # Expected total arrears at 3 windows (quarter/year/peak) -- these are
+    # INDEPENDENT figures, not a timeline (peak can land anywhere in the
+    # window), so they're 3 bars, never a line.
+    arrears_breakdown: list[ArrearsBreakdownPoint] = Field(default_factory=list)
+    # Expected total late-payment COUNT at 4 quarterly checkpoints -- a
+    # genuine timeline (each quarter its own trained head), complementary to
+    # the single expected_late_count_12m scalar above.
+    late_count_breakdown: list[LateCountBreakdownPoint] = Field(default_factory=list)
+    # Worst-delinquency-bucket distribution across residents (ordinal).
+    severity_buckets: list[SeverityBucket] = Field(default_factory=list)
 
 
 class PropertyResidentsResponse(BaseModel):

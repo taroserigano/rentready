@@ -696,6 +696,181 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .stat-tile .value.bad  { color: var(--bad-vibrant); }
 .stat-tile .sub { font-size: var(--fs-xs); color: var(--muted); margin-top: var(--s-1); }
 
+/* Expected-arrears tile: 4 quarter-end figures (Q1–Q4) stacked in place of a
+   single next-quarter total — same tile footprint, one row per quarter. */
+.qtr-arrears { display: flex; flex-direction: column; gap: 3px; margin-top: var(--s-1); }
+.qtr-arrears-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
+}
+.qtr-arrears-q {
+  font-size: var(--fs-micro); font-weight: var(--w-semi);
+  text-transform: uppercase; letter-spacing: var(--ls-wide); color: var(--muted);
+}
+.qtr-arrears-v {
+  font-size: var(--fs-lg); font-weight: var(--w-semi);
+  letter-spacing: var(--ls-tight); font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Horizon forecast trend (Residents) — single-series sparkline of avg
+   late-payment probability across 4 future horizons.
+   ============================================================ */
+
+.horizon-trend {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: var(--s-4) 18px;
+  box-shadow: var(--shadow-card);
+  margin-top: var(--s-4);
+}
+.horizon-trend-head {
+  display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+  margin-bottom: var(--s-2);
+}
+.horizon-trend-plot { position: relative; width: 100%; height: 64px; }
+.horizon-trend-svg {
+  display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;
+}
+.horizon-trend-area { fill: var(--chart-1); opacity: 0.12; stroke: none; }
+.horizon-trend-line {
+  fill: none; stroke: var(--chart-1); stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.horizon-trend-dots { position: absolute; inset: 0; }
+.horizon-trend-dot {
+  position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px;
+  border-radius: 50%; background: var(--panel);
+  border: 1.6px solid var(--chart-1); box-sizing: border-box;
+  cursor: default;
+}
+.horizon-trend-labels {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  margin-top: var(--s-1);
+}
+.horizon-trend-label { text-align: center; }
+.horizon-trend-value {
+  font-size: var(--fs-lg); font-weight: var(--w-semi);
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.horizon-trend-period { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; }
+
+/* ============================================================
+   Arrears breakdown (Residents) — 3 independent-window bars.
+   ============================================================ */
+
+.arrears-bars {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: var(--s-4) 18px;
+  box-shadow: var(--shadow-card);
+  margin-top: var(--s-4);
+}
+.arrears-bars-head {
+  display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+.arrears-bars-plot {
+  display: flex; align-items: flex-end; gap: var(--s-5);
+  height: 96px;
+}
+.arrears-bar-col {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 1 1 0; height: 100%; cursor: default;
+}
+.arrears-bar-value {
+  font-size: var(--fs-sm); font-weight: var(--w-semi);
+  font-variant-numeric: tabular-nums; color: var(--text);
+  margin-bottom: 4px;
+}
+.arrears-bar-track {
+  flex: 1 1 auto; width: 100%; max-width: 56px;
+  display: flex; align-items: flex-end;
+}
+.arrears-bar-fill {
+  width: 100%; min-height: 3px; border-radius: 4px 4px 0 0;
+  background: var(--chart-1);
+}
+.arrears-bar-label {
+  font-size: var(--fs-xs); color: var(--muted); margin-top: var(--s-1);
+  text-align: center;
+}
+
+/* ============================================================
+   Severity / worst-delinquency distribution (Residents) — one
+   stacked bar, sequential single-hue (light -> dark = more severe).
+   ============================================================ */
+
+.severity-bar {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: var(--s-4) 18px;
+  box-shadow: var(--shadow-card);
+  margin-top: var(--s-4);
+}
+.severity-bar-head {
+  display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+.severity-bar-track {
+  display: flex; width: 100%; height: 22px;
+  border-radius: 6px; overflow: hidden;
+  background: var(--field);
+  gap: 2px; /* surface gap between adjacent segments */
+}
+.severity-bar-seg {
+  background: var(--chart-1);
+  min-width: 3px;
+  cursor: default;
+}
+.severity-bar-legend {
+  display: flex; flex-wrap: wrap; gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+.severity-bar-legend-item {
+  display: flex; align-items: center; gap: 6px;
+}
+.severity-bar-swatch {
+  width: 10px; height: 10px; border-radius: 3px;
+  background: var(--chart-1); flex: none;
+}
+
+/* ============================================================
+   Property graph (GraphAsk) — tripartite node-link diagram.
+   ============================================================ */
+
+.property-graph {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: var(--s-4) 18px;
+  box-shadow: var(--shadow-card);
+  margin-top: var(--s-4);
+}
+.property-graph-head {
+  display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+  margin-bottom: var(--s-2);
+}
+.property-graph-plot { position: relative; width: 100%; }
+.property-graph-svg { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.property-graph-edge {
+  fill: none; stroke: var(--line-strong); stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.property-graph-labels { position: absolute; inset: 0; }
+.property-graph-label {
+  position: absolute; transform: translateY(-50%);
+  font-size: 11px; color: var(--text-2); white-space: nowrap;
+  max-width: 108px; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+}
+.property-graph-label.align-Neighborhood { transform: translate(-100%, -50%); padding-right: 10px; text-align: right; }
+.property-graph-label.align-Property { transform: translate(-50%, 12px); text-align: center; color: var(--text); font-weight: var(--w-med); }
+.property-graph-label.align-Amenity { padding-left: 10px; }
+.property-graph-legend {
+  display: flex; flex-wrap: wrap; gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+.property-graph-legend-item { display: flex; align-items: center; gap: 6px; }
+.property-graph-swatch {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+}
+
 /* ============================================================
    Modal
    ============================================================ */

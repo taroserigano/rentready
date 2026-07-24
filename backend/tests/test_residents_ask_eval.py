@@ -57,7 +57,7 @@ def test_dataset_covers_all_intents():
     assert intents == {
         "horizon", "frequency", "severity", "arrears", "cure", "retention",
         "explain", "compare", "property_health", "at_risk_residents",
-        "general", "governance",
+        "late_forecast", "confidence", "general", "governance",
     }
 
 

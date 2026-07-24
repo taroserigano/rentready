@@ -8,6 +8,8 @@ import type {
   EligibilityResult,
   GoalSeekResult,
   PropertiesResponse,
+  PropertyGraphEdge,
+  PropertyGraphNode,
   RecommendResponse,
   ScreenResult,
   SimulateResponse,
@@ -289,7 +291,12 @@ export async function sendFeedback(input: {
 
 export async function graphAsk(
   question: string,
-): Promise<{ answer: string; cypher: string; source: "template" | "anthropic" | "rules" }> {
+): Promise<{
+  answer: string;
+  cypher: string;
+  source: "template" | "anthropic" | "rules";
+  graph: { nodes: PropertyGraphNode[]; edges: PropertyGraphEdge[] } | null;
+}> {
   return json(
     await fetch(`${BASE}/graph-ask`, {
       method: "POST",

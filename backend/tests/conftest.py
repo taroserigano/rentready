@@ -14,6 +14,13 @@ import pytest
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 os.environ["EMBEDDING_BACKEND"] = "hash"
+# Force the local SQLite/Chroma path even though the repo-root .env may carry
+# a real DATABASE_URL/PINECONE_API_KEY for the deployed instance -- tests must
+# never touch that shared, real infrastructure. Real env vars beat .env values
+# in pydantic-settings' precedence, so these two lines are what actually keep
+# `settings.database_url`/`settings.vector_provider` empty/"chroma" here.
+os.environ["DATABASE_URL"] = ""
+os.environ["VECTOR_PROVIDER"] = "chroma"
 
 
 @pytest.fixture(scope="session", autouse=True)

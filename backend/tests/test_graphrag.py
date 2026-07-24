@@ -199,3 +199,92 @@ def test_graph_ask_coalesces_extended_thinking_content_blocks(monkeypatch):
         {"type": "thinking", "thinking": "reasoning...", "signature": "abc"},
         {"type": "text", "text": "final answer"},
     ]) == "final answer"
+
+
+# ---------------------------------------------------------------------------
+# Property-graph visualization — a small, safe (hand-authored, not
+# LLM-generated) subgraph fetched alongside a matched template's answer.
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_subgraph_builds_nodes_and_edges(monkeypatch):
+    def fake_run(cypher, params=None):
+        assert params["ids"] == ["PROP-001", "PROP-002"]
+        return [
+            {"pid": "PROP-001", "pname": "The Heights", "nname": "South Congress",
+             "amenities": ["Gym", "Pool"]},
+            {"pid": "PROP-002", "pname": "Sunset Terrace", "nname": "South Congress",
+             "amenities": ["Pool"]},
+        ]
+
+    monkeypatch.setattr(graph, "run_read_only_cypher", fake_run)
+    result = graphrag._fetch_subgraph(["PROP-001", "PROP-002"])
+    types = {n["type"] for n in result["nodes"]}
+    assert types == {"Property", "Neighborhood", "Amenity"}
+    # The shared neighborhood and shared "Pool" amenity are deduped to ONE
+    # node each, not one per property.
+    assert sum(1 for n in result["nodes"] if n["type"] == "Neighborhood") == 1
+    assert sum(1 for n in result["nodes"] if n["id"] == "a:Pool") == 1
+    edge_pairs = {(e["source"], e["target"]) for e in result["edges"]}
+    assert ("p:PROP-001", "n:South Congress") in edge_pairs
+    assert ("p:PROP-001", "a:Gym") in edge_pairs
+    assert ("p:PROP-002", "a:Pool") in edge_pairs
+    assert ("p:PROP-001", "a:Pool") in edge_pairs
+
+
+def test_fetch_subgraph_filters_to_wanted_amenities(monkeypatch):
+    """When the search filtered on specific amenities, the diagram stays
+    scoped to those -- not every amenity the property happens to have."""
+    monkeypatch.setattr(
+        graph, "run_read_only_cypher",
+        lambda cypher, params=None: [
+            {"pid": "PROP-001", "pname": "The Heights", "nname": "South Congress",
+             "amenities": ["Gym", "Pool", "Concierge"]},
+        ],
+    )
+    result = graphrag._fetch_subgraph(["PROP-001"], amenity_filter=["Pool"])
+    amenity_ids = {n["id"] for n in result["nodes"] if n["type"] == "Amenity"}
+    assert amenity_ids == {"a:Pool"}
+
+
+def test_fetch_subgraph_empty_ids_returns_empty():
+    assert graphrag._fetch_subgraph([]) == {"nodes": [], "edges": []}
+
+
+def test_fetch_subgraph_degrades_on_query_error(monkeypatch):
+    def boom(cypher, params=None):
+        raise RuntimeError("connection lost")
+
+    monkeypatch.setattr(graph, "run_read_only_cypher", boom)
+    assert graphrag._fetch_subgraph(["PROP-001"]) == {"nodes": [], "edges": []}
+
+
+def test_graph_ask_includes_subgraph_when_template_matches(monkeypatch):
+    monkeypatch.setattr(graph, "is_available", lambda: True)
+
+    def fake_run(cypher, params=None):
+        if "IN_NEIGHBORHOOD]->(n:Neighborhood) WHERE p.id IN" in cypher:
+            return [{"pid": "PROP-001", "pname": "The Heights", "nname": "South Congress",
+                     "amenities": []}]
+        return [{"id": "PROP-001", "name": "The Heights", "property_type": "Apartment",
+                 "monthly_rent": 1300, "bedrooms": 1, "bathrooms": 1}]
+
+    monkeypatch.setattr(graph, "run_read_only_cypher", fake_run)
+    result = graphrag.graph_ask("Which properties in South Congress allow pets?")
+    assert result["source"] == "template"
+    assert result["graph"] is not None
+    assert any(n["type"] == "Property" for n in result["graph"]["nodes"])
+
+
+def test_graph_ask_graph_is_none_when_no_properties_matched(monkeypatch):
+    monkeypatch.setattr(graph, "is_available", lambda: True)
+    monkeypatch.setattr(graph, "run_read_only_cypher", lambda cypher, params=None: [])
+    result = graphrag.graph_ask("Which properties in South Congress allow pets?")
+    assert result["graph"] is None
+
+
+def test_graph_ask_free_form_path_has_no_graph(monkeypatch):
+    """The free-form LLM-Cypher path never attempts subgraph extraction --
+    an arbitrary query's result shape isn't predictable enough."""
+    result = graphrag.graph_ask("How many properties are there?")
+    assert result["graph"] is None

@@ -27,6 +27,23 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 
+    # Postgres (e.g. a shared Neon project). Empty -> store.py uses its local
+    # SQLite file instead (the default for local dev and every test).
+    database_url: str = ""
+
+    # Pinecone (applicant RAG vector store). vector_provider="chroma" (default)
+    # keeps rag_llamaindex.py on the local Chroma dir; "pinecone" switches it to
+    # a hosted Pinecone index using pinecone_api_key/pinecone_index.
+    vector_provider: str = "chroma"
+    pinecone_api_key: str = ""
+    pinecone_index: str = "rentready-applications"
+    # Free/Starter Pinecone projects cap out at 5 serverless indexes, so a
+    # shared project (used by other apps too) often has none to spare --
+    # RentReady's vectors then live in their own namespace within an
+    # existing index (see PINECONE_INDEX/PINECONE_NAMESPACE in .env) rather
+    # than a dedicated one.
+    pinecone_namespace: str = "rentready"
+
     # LangSmith
     langsmith_tracing: bool = True
     langsmith_api_key: str = ""

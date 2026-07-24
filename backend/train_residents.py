@@ -50,7 +50,8 @@ _MIN_SURVIVAL_EVENTS = 20  # below this, skip the survival head (serve heuristic
 # plain base feature contract only — do NOT extend to binary heads or to
 # FEATURE_ORDER_ARREARS/CHURN heads without separately re-validating via
 # residents_golden_eval.py first (see the reconciled fix notes).
-_MONOTONE_HEADS = {"late_count_3m", "late_count_12m", "missed_count_12m", "max_days_late_12m"}
+_MONOTONE_HEADS = {"late_count_3m", "late_count_6m", "late_count_9m", "late_count_12m",
+                    "missed_count_12m", "max_days_late_12m"}
 
 
 def _monotone_tuple(feature_order) -> tuple:
@@ -450,9 +451,11 @@ def train(seed: int = SEED, snapshot=rr.RESIDENT_SNAPSHOT) -> dict:
     print("  late horizons base_rate:", {h: m(h).get("base_rate") for h in ("late_1m", "late_3m", "late_6m", "late_12m")})
     print("  severity AUC:", {h: m(h).get("auc") for h in ("p_30d_12m", "p_60d_12m", "p_90d_12m", "serious")})
     print("  severity base_rate:", {h: m(h).get("base_rate") for h in ("p_30d_12m", "p_60d_12m", "p_90d_12m")})
-    print("  frequency:", {h: {"mae": m(h).get("mae"), "r2": m(h).get("r2")} for h in ("late_count_12m", "missed_count_12m")})
+    print("  frequency:", {h: {"mae": m(h).get("mae"), "r2": m(h).get("r2")}
+                            for h in ("late_count_3m", "late_count_6m", "late_count_9m", "late_count_12m", "missed_count_12m")})
     print("  arrears/severity reg:", {h: {"mae": m(h).get("mae"), "r2": m(h).get("r2"), "pi": m(h).get("pi_coverage")}
-                                       for h in ("arrears_3m", "arrears_12m", "peak_balance_12m", "max_days_late_12m")})
+                                       for h in ("arrears_3m", "arrears_6m", "arrears_9m", "arrears_12m",
+                                                 "peak_balance_12m", "max_days_late_12m")})
     print("  bucket:", m("delinquency_bucket_12m"))
     print("  cure:", {"p_cure_6m_auc": m("p_cure_6m").get("auc"), "months_to_cure": m("months_to_cure")})
     print("  retention AUC:", {h: m(h).get("auc") for h in ("churn", "churn_12m")})

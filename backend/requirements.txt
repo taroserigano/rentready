@@ -10,15 +10,22 @@ pydantic-settings==2.7.0
 pymupdf==1.25.1
 unstructured[md]==0.16.11
 
-# RAG (PDF side) - LlamaIndex + Chroma
+# RAG (PDF side) - LlamaIndex + Chroma (local) or Pinecone (VECTOR_PROVIDER=pinecone)
 # Claude reaches LlamaIndex through the LangChain adapter (llms-langchain),
 # which avoids LlamaIndex's hard-coded Anthropic model allow-list.
 llama-index-core==0.12.10
 llama-index-llms-langchain==0.6.1
 llama-index-embeddings-huggingface==0.4.0
 llama-index-vector-stores-chroma==0.4.1
+llama-index-vector-stores-pinecone==0.4.5
 chromadb==0.5.23
 sentence-transformers==3.3.1
+pinecone==5.4.2
+
+# Persistence - SQLite (local/tests, store.py default) or Postgres (DATABASE_URL,
+# e.g. a shared Neon project; tables isolated under the "rentready" schema)
+SQLAlchemy==2.0.51
+psycopg2-binary==2.9.12
 
 # Graph side - Neo4j + GraphRAG + LangChain
 neo4j==5.27.0

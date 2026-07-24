@@ -9,6 +9,9 @@ import type {
   RiskBand,
 } from "../../types";
 import { ResidentDetail } from "./ResidentDetail";
+import { HorizonForecastTrend } from "./HorizonForecastTrend";
+import { ArrearsBreakdownChart } from "./ArrearsBreakdownChart";
+import { SeverityBucketChart } from "./SeverityBucketChart";
 import { ResidentModelCard } from "./ResidentModelCard";
 import { PropertyHealthRanking } from "./PropertyHealthRanking";
 import { ResidentsChat } from "./ResidentsChat";
@@ -319,8 +322,38 @@ export function Residents({
               </div>
               <div className="stat-tile">
                 <div className="label">Expected arrears</div>
-                <div className="value">{usd(kpi.total_expected_arrears)}</div>
-                <div className="sub">total projected next quarter</div>
+                {kpi.arrears_breakdown && kpi.arrears_breakdown.length === 4 ? (
+                  <>
+                    <div className="qtr-arrears">
+                      {kpi.arrears_breakdown.map((q) => (
+                        <div
+                          key={q.key}
+                          className="qtr-arrears-row"
+                          title={`${q.label}: projected total balance at the end of this quarter`}
+                        >
+                          <span className="qtr-arrears-q">{q.label}</span>
+                          <span className="qtr-arrears-v">{usd(q.expected)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="sub">projected end-of-quarter total, next 4 quarters</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="value">{usd(kpi.total_expected_arrears)}</div>
+                    <div className="sub">total projected next quarter</div>
+                  </>
+                )}
+              </div>
+              <div className="stat-tile">
+                <div className="label">Late payments (12mo)</div>
+                <div className="value">{(kpi.expected_late_count_12m ?? 0).toFixed(1)}</div>
+                <div className="sub">expected total, next 12 months</div>
+              </div>
+              <div className="stat-tile">
+                <div className="label">In arrears now</div>
+                <div className="value warn">{kpi.residents_in_arrears_count ?? 0}</div>
+                <div className="sub">residents carrying a balance</div>
               </div>
               <div className="stat-tile">
                 <div className="label">Churn risk</div>
@@ -332,6 +365,25 @@ export function Residents({
                 <div className="value bad">{kpi.serious_flag_count}</div>
                 <div className="sub">routed to human review</div>
               </div>
+            </div>
+          )}
+
+          {/* Forward-looking trend: avg late-payment probability across 4
+              future horizons, so the prediction is visible without asking chat. */}
+          {kpi?.horizon_forecast && kpi.horizon_forecast.length > 0 && (
+            <HorizonForecastTrend points={kpi.horizon_forecast} />
+          )}
+
+          {/* Arrears (3 independent windows) + worst-delinquency severity —
+              the two other prediction families made visible without chat. */}
+          {kpi && ((kpi.arrears_breakdown?.length ?? 0) > 0 || (kpi.severity_buckets?.length ?? 0) > 0) && (
+            <div className="grid-2col">
+              {kpi.arrears_breakdown && kpi.arrears_breakdown.length > 0 && (
+                <ArrearsBreakdownChart points={kpi.arrears_breakdown} />
+              )}
+              {kpi.severity_buckets && kpi.severity_buckets.length > 0 && (
+                <SeverityBucketChart buckets={kpi.severity_buckets} />
+              )}
             </div>
           )}
 

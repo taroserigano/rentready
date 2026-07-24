@@ -1,13 +1,29 @@
-"""PDF RAG with LlamaIndex + ChromaDB.
+"""PDF RAG with LlamaIndex + a vector store (Chroma locally, or a hosted
+Pinecone index when ``settings.vector_provider == "pinecone"``).
 
 Responsibilities:
-  - index an application's text into a shared Chroma collection
+  - index an application's text into a shared collection
   - answer questions about a specific application (RAG, filtered by id)
   - extract a structured ApplicantProfile from the text
 
 When no Anthropic key is set, query() returns the retrieved context
 (retrieve-only) and extract_profile() uses a regex heuristic, so the whole
 flow still works offline.
+
+Chroma (default) is a local, dependency-free directory -- what every test and
+local dev run uses. Pinecone is opt-in via ``VECTOR_PROVIDER=pinecone`` (e.g.
+the deployed instance, so the box itself holds no vector data).
+
+Free/Starter Pinecone projects cap out at 5 serverless indexes, so a shared
+project (used by other apps too) may have none to spare. Rather than create a
+dedicated index, ``PINECONE_INDEX`` names an EXISTING index and RentReady's
+vectors live in their own ``PINECONE_NAMESPACE`` within it -- Pinecone
+namespaces are logically isolated (a query/delete against one namespace never
+touches another), so this is safe to share. The one hard constraint a
+namespace can't relax: every vector in an index has the SAME dimension, so the
+active embedder must match whatever dimension that index was created with --
+checked at first use, failing clearly rather than silently sending
+wrong-shaped vectors.
 """
 
 import json
@@ -19,6 +35,47 @@ from llm import get_llamaindex_llm
 from models import ApplicantProfile
 
 COLLECTION = "applications"
+
+
+def _use_pinecone() -> bool:
+    return settings.vector_provider.lower() == "pinecone"
+
+
+@lru_cache(maxsize=1)
+def _pinecone_client():
+    from pinecone import Pinecone
+
+    return Pinecone(api_key=settings.pinecone_api_key)
+
+
+@lru_cache(maxsize=1)
+def _pinecone_index():
+    """The Pinecone index for applicant RAG -- an EXISTING index (see module
+    docstring re: the 5-index cap), so this only ever fetches it, never
+    creates one. Fails clearly on a dimension mismatch instead of letting a
+    wrong-shaped upsert fail deep inside Pinecone's API."""
+    pc = _pinecone_client()
+    name = settings.pinecone_index
+    try:
+        desc = pc.describe_index(name)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"Pinecone index '{name}' (PINECONE_INDEX) doesn't exist or "
+            f"isn't reachable with this API key: {exc}"
+        ) from exc
+
+    expected_dim = desc["dimension"]
+    actual_dim = len(get_embeddings().get_text_embedding("dimension probe"))
+    if actual_dim != expected_dim:
+        raise RuntimeError(
+            f"Pinecone index '{name}' is {expected_dim}-dim but the active "
+            f"embedder ('{settings.embedding_backend}') produces "
+            f"{actual_dim}-dim vectors. Set EMBEDDING_BACKEND to whichever "
+            "backend matches this index's dimension, or point PINECONE_INDEX "
+            "at a differently-sized index."
+        )
+    return pc.Index(name)
+
 
 # Decision-support guardrail for the applicant Q&A. The other chat agents
 # (risk/residents/concierge) carry an equivalent system prompt; the RAG query
@@ -63,12 +120,21 @@ def _chroma_collection():
 @lru_cache(maxsize=1)
 def _index():
     from llama_index.core import StorageContext, VectorStoreIndex, Settings
-    from llama_index.vector_stores.chroma import ChromaVectorStore
 
     Settings.embed_model = get_embeddings()
     Settings.llm = get_llamaindex_llm()  # may be None -> retrieve-only
 
-    vector_store = ChromaVectorStore(chroma_collection=_chroma_collection())
+    if _use_pinecone():
+        from llama_index.vector_stores.pinecone import PineconeVectorStore
+
+        vector_store = PineconeVectorStore(
+            pinecone_index=_pinecone_index(), namespace=settings.pinecone_namespace
+        )
+    else:
+        from llama_index.vector_stores.chroma import ChromaVectorStore
+
+        vector_store = ChromaVectorStore(chroma_collection=_chroma_collection())
+
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     return VectorStoreIndex.from_vector_store(
         vector_store, storage_context=storage_context
@@ -90,10 +156,16 @@ def ingest(applicant_id: str, text: str) -> int:
 def delete_applicant(applicant_id: str) -> None:
     """Remove every indexed chunk for this applicant — called when the
     applicant record itself is deleted, so their PDF text doesn't linger in
-    the vector store indefinitely. Best-effort: a Chroma hiccup here shouldn't
-    block the applicant delete itself."""
+    the vector store indefinitely. Best-effort: a vector-store hiccup here
+    shouldn't block the applicant delete itself."""
     try:
-        _chroma_collection().delete(where={"applicant_id": applicant_id})
+        if _use_pinecone():
+            _pinecone_index().delete(
+                filter={"applicant_id": {"$eq": applicant_id}},
+                namespace=settings.pinecone_namespace,
+            )
+        else:
+            _chroma_collection().delete(where={"applicant_id": applicant_id})
     except Exception as exc:  # noqa: BLE001
         print(f"rag_llamaindex: delete_applicant({applicant_id}) failed "
               f"({type(exc).__name__}: {exc}); chunks may remain orphaned.")

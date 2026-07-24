@@ -1024,6 +1024,19 @@ export interface ResidentChatRequest {
 }
 
 /** Per-property rollup used by the selector and the property drill-down. */
+/** One future horizon's averaged late-payment probability across a property's
+ * residents, plus the risk-band spread behind that average. */
+export interface HorizonPoint {
+  horizon: "late_1m" | "late_3m" | "late_6m" | "late_12m";
+  label: string;
+  /** Cumulative "at least once by end of this horizon" — always non-decreasing. */
+  avg_probability: number | null;
+  /** Marginal risk added since the prior horizon — can rise, fall, or plateau;
+   * this is what a per-period trend should plot. */
+  incremental_probability: number | null;
+  bands: { low: number; medium: number; high: number; not_applicable: number };
+}
+
 export interface PropertyResidentRollup {
   property_id?: string;
   name?: string;
@@ -1032,7 +1045,30 @@ export interface PropertyResidentRollup {
   total_expected_arrears: number;
   churn_risk_count: number;
   serious_flag_count: number;
+  /** Forward-looking trend: avg late-payment probability at 4 future
+   * horizons (next month/quarter/6mo/year). [] if unavailable. */
+  horizon_forecast?: HorizonPoint[];
+  /** Expected total late-payment COUNT next 12 months (sum across residents). */
+  expected_late_count_12m?: number;
+  /** How many residents currently carry an outstanding balance. */
+  residents_in_arrears_count?: number;
+  /** Expected total arrears at 3 INDEPENDENT windows — never a timeline
+   * (peak can land anywhere in the year, not necessarily at the end). */
+  arrears_breakdown?: ArrearsBreakdownPoint[];
+  /** Worst-delinquency-bucket distribution across residents (ordinal). */
+  severity_buckets?: SeverityBucket[];
   [k: string]: unknown;
+}
+
+export interface ArrearsBreakdownPoint {
+  key: "q1" | "q2" | "q3" | "q4";
+  label: string;
+  expected: number;
+}
+
+export interface SeverityBucket {
+  bucket: "none" | "1-29" | "30-59" | "60-89" | "90+";
+  count: number;
 }
 
 /** GET /properties/{id}/residents. */
@@ -1102,4 +1138,20 @@ export interface ResidentModelCard {
   limitations?: string[];
   source?: string;
   [k: string]: unknown;
+}
+
+// --- GraphAsk property-graph visualization ---------------------------------
+
+/** One node in the small subgraph behind a graph-ask answer. */
+export interface PropertyGraphNode {
+  id: string;
+  label: string;
+  type: "Property" | "Neighborhood" | "Amenity";
+}
+
+/** One relationship in the subgraph (IN_NEIGHBORHOOD | OFFERS). */
+export interface PropertyGraphEdge {
+  source: string;
+  target: string;
+  type: string;
 }

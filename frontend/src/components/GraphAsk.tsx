@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Check, Copy, Sparkles, Zap } from "lucide-react";
 import { graphAsk } from "../api";
+import type { PropertyGraphEdge, PropertyGraphNode } from "../types";
 import { Markdown } from "./Markdown";
+import { PropertyGraphViz } from "./PropertyGraphViz";
 
 /** How the last answer was produced. "template" = a deterministic Cypher
  * template matched (no Cypher-writing LLM call); "anthropic" = Claude wrote
@@ -20,6 +22,7 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
   const [answer, setAnswer] = useState("");
   const [cypher, setCypher] = useState("");
   const [source, setSource] = useState<AskSource | null>(null);
+  const [graphData, setGraphData] = useState<{ nodes: PropertyGraphNode[]; edges: PropertyGraphEdge[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -29,11 +32,13 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
     setAnswer("");
     setCypher("");
     setSource(null);
+    setGraphData(null);
     try {
       const res = await graphAsk(question);
       setAnswer(res.answer);
       setCypher(res.cypher);
       setSource(res.source);
+      setGraphData(res.graph);
     } catch (err) {
       setAnswer(`Error: ${err}`);
     } finally {
@@ -134,6 +139,9 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
             {copied ? <Check size={13} /> : <Copy size={13} />}
           </button>
         </div>
+      )}
+      {graphData && graphData.nodes.length > 0 && (
+        <PropertyGraphViz nodes={graphData.nodes} edges={graphData.edges} />
       )}
     </div>
   );
