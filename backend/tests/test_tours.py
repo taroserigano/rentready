@@ -209,12 +209,62 @@ def _book(agent="AGENT-01", start="2026-07-27T09:00:00"):
     )
 
 
+def test_local_now_is_naive_central_wall_clock_not_server_tz():
+    """Regression: open_slots()/slot_is_structurally_valid() defaulted `now`
+    to bare datetime.now() — the SERVER PROCESS's OS timezone (UTC in most
+    containers) — while every stored slot/booking time is naive Central
+    wall-clock (see tours_api._TZID). _local_now() must return the current
+    time AS IT READS in Central, regardless of what timezone the machine
+    running the tests/server is actually set to."""
+    from zoneinfo import ZoneInfo
+
+    got = tours._local_now()
+    assert got.tzinfo is None  # naive, matching the stored-slot convention
+
+    expected = datetime.now(ZoneInfo("America/Chicago")).replace(tzinfo=None)
+    assert abs((got - expected).total_seconds()) < 5
+
+
 def test_atomic_double_book_rejected(db):
     b1 = _book()
     assert b1["id"].startswith("TOUR-")
     assert b1["status"] == "booked"
     with pytest.raises(store.SlotConflict):
         _book()  # same agent + start
+
+
+def test_delete_applicant_cascades_decisions_and_unlinks_bookings(db):
+    """Regression: deleting an applicant used to leave their decisions and
+    tour bookings pointing at a now-nonexistent id (list_tours(applicant_id=)
+    would still return the booking, 404ing when the UI tried to open it)."""
+    from models import ApplicantProfile
+
+    aid = "APP-DELETE-TEST"
+    store.save_applicant(aid, ApplicantProfile(
+        name="Cascade Test", monthly_income=5000, desired_rent=1500,
+    ), chunks_indexed=0)
+    store.save_decision(aid, action="approve", reviewer="Taro")
+    booking = store.book_tour(
+        property_id="PROP-002", property_name="Riverside Lofts",
+        agent_id="AGENT-02", agent_name="Jordan Reyes",
+        start="2026-07-28T10:00:00", end="2026-07-28T10:30:00",
+        prospect_name="Cascade Test", applicant_id=aid,
+    )
+
+    assert store.decisions_for(aid)
+    assert store.get_booking(booking["id"])["applicant_id"] == aid
+
+    assert store.delete_applicant(aid) is True
+
+    assert store.get_profile(aid) is None
+    # The decision (reviewer's note ABOUT this applicant) is gone...
+    assert store.decisions_for(aid) == []
+    # ...but the booking itself (a real agent calendar slot) is NOT deleted —
+    # only the dangling applicant_id link is cleared.
+    kept = store.get_booking(booking["id"])
+    assert kept is not None
+    assert kept["applicant_id"] == ""
+    assert kept["status"] == "booked"
 
 
 def test_cancel_then_rebook(db):
@@ -231,6 +281,21 @@ def test_list_bookings_filters(db):
     _book()
     booked = store.list_bookings(status="booked", property_id="PROP-002")
     assert any(b["agent_id"] == "AGENT-01" for b in booked)
+
+
+# ---------------------------------------------------------------------------
+# Clock-time token parser
+# ---------------------------------------------------------------------------
+
+
+def test_parse_time_token_noon_and_afternoon_together():
+    # Regression: a broken `.replace(..., count=0)` no-op used to make this
+    # silently fail to find noon whenever "afternoon" also appeared.
+    assert tours_chat._parse_time_token("lets meet in the afternoon around noon") == 12 * 60
+    assert tours_chat._parse_time_token("noon works") == 12 * 60
+    assert tours_chat._parse_time_token("afternoon works") is None
+    assert tours_chat._parse_time_token("midnight") == 0
+    assert tours_chat._parse_time_token("5pm") == 17 * 60
 
 
 # ---------------------------------------------------------------------------

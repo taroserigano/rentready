@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Users } from "lucide-react";
 import type { Slot, TourAgent } from "../types";
 
@@ -11,10 +12,13 @@ export function AvailabilityPanel({
   loading: boolean;
 }) {
   // Open-slot counts per agent, so each staffer's meter is relative to
-  // whoever has the most availability this window.
-  const counts = new Map<string, number>();
-  for (const s of slots) counts.set(s.agent_id, (counts.get(s.agent_id) ?? 0) + 1);
-  const max = Math.max(1, ...counts.values());
+  // whoever has the most availability this window. Memoized so an unrelated
+  // re-render of the Tours page doesn't redo this on every render.
+  const { counts, max } = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of slots) counts.set(s.agent_id, (counts.get(s.agent_id) ?? 0) + 1);
+    return { counts, max: Math.max(1, ...counts.values()) };
+  }, [slots]);
 
   return (
     <div className="card">

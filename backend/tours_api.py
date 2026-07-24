@@ -99,7 +99,11 @@ def _property_or_404(property_id: str) -> dict:
 
 
 def _area_of(prop: dict) -> str:
-    return (prop.get("neighborhood") or {}).get("name", "")
+    # Historically the property's neighborhood name; now the property's own id
+    # -- every property has exactly one dedicated agent (see tours._SEED_AGENTS)
+    # so eligibility is keyed 1:1 to the property, never shared across a
+    # neighborhood of several properties.
+    return prop.get("id", "")
 
 
 def _open_to_slot(o: tours.OpenSlot) -> Slot:
@@ -116,8 +120,8 @@ def _open_to_slot(o: tours.OpenSlot) -> Slot:
 
 @router.get("/tours/staff")
 def get_staff(property_id: str = Query(None)) -> dict:
-    """All tour agents; if ``property_id`` is given, only staff whose areas
-    cover that property's neighborhood (or areas==[])."""
+    """All tour agents; if ``property_id`` is given, only the staff member
+    dedicated to that property."""
     t0 = time.perf_counter()
     agents = store.list_agents()
     if property_id:

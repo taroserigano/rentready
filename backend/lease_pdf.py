@@ -1,5 +1,5 @@
 """Render a property's generated lease (``leases.lease_sections``) as a real,
-downloadable PDF — the same 18 sections shown in the in-app Summary tab, so
+downloadable PDF — the same 19 sections shown in the in-app Summary tab, so
 the two views never disagree. Mirrors ``pdf_gen.py``'s house style (PyMuPDF,
 A4, 72/523 margins, lazy ``import fitz``).
 

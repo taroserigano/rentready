@@ -45,6 +45,18 @@ TRAIN_PER_PROPERTY = 150  # ~1500 residents for training/metric stability
 TWEEDIE_VP = 1.3
 _MIN_SURVIVAL_EVENTS = 20  # below this, skip the survival head (serve heuristic)
 
+# Heads that get XGBoost monotone_constraints (rr.MONOTONE_BASE), keyed by
+# FEATURE_ORDER_BASE. Scoped initially to the count/regression heads on the
+# plain base feature contract only — do NOT extend to binary heads or to
+# FEATURE_ORDER_ARREARS/CHURN heads without separately re-validating via
+# residents_golden_eval.py first (see the reconciled fix notes).
+_MONOTONE_HEADS = {"late_count_3m", "late_count_12m", "missed_count_12m", "max_days_late_12m"}
+
+
+def _monotone_tuple(feature_order) -> tuple:
+    """rr.MONOTONE_BASE direction for each feature in order, 0 if absent."""
+    return tuple(rr.MONOTONE_BASE.get(f, 0) for f in feature_order)
+
 
 # --------------------------------------------------------------------------
 # Constant-probability fallback (picklable) for a degenerate single-class head.
@@ -307,7 +319,10 @@ def _train_regression(head, feats, labels, splits, seed) -> dict:
     model_type = "xgboost"
     booster = None
     try:
-        reg = _xgb_regressor("reg:tweedie", seed, tweedie_variance_power=TWEEDIE_VP)
+        extra = {"tweedie_variance_power": TWEEDIE_VP}
+        if head["name"] in _MONOTONE_HEADS:
+            extra["monotone_constraints"] = _monotone_tuple(fo)
+        reg = _xgb_regressor("reg:tweedie", seed, **extra)
         reg.fit(X_tr, y_tr)
         booster = reg.get_booster()
     except Exception as exc:  # noqa: BLE001

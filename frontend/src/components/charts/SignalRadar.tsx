@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import {
   PolarAngleAxis,
   PolarGrid,
@@ -20,15 +21,22 @@ export const LABELS: Record<string, string> = {
   laundry: "Laundry",
 };
 
-export function SignalRadar({
+/* memo()'d + memoized `data`: this sits inside the Apply results tree, which
+ * re-renders on every keystroke in the (unmemoized) application form — this
+ * skips rebuilding the radar dataset and redoing recharts layout each time. */
+export const SignalRadar = memo(function SignalRadar({
   breakdown,
 }: {
   breakdown: Record<string, number>;
 }) {
-  const data = Object.entries(breakdown).map(([k, v]) => ({
-    signal: LABELS[k] ?? k,
-    value: Math.round(v * 100),
-  }));
+  const data = useMemo(
+    () =>
+      Object.entries(breakdown).map(([k, v]) => ({
+        signal: LABELS[k] ?? k,
+        value: Math.round(v * 100),
+      })),
+    [breakdown],
+  );
   if (data.length < 3) return null;
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -48,4 +56,4 @@ export function SignalRadar({
       </RadarChart>
     </ResponsiveContainer>
   );
-}
+});

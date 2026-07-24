@@ -523,8 +523,9 @@ def model_card() -> dict:
         "name": "Resident Late-Payment Risk",
         "version": DGP_VERSION,
         "trained_at": (bundle or {}).get("generated_at"),
+        "model_type": bundle.get("model_type", "xgboost") if bundle else "heuristic",
         "description": (
-            "Gradient-boosted model estimating the probability that a resident "
+            "XGBoost gradient-boosted model estimating the probability that a resident "
             "pays rent late, trained on synthetic data. Reason codes come from "
             "TreeSHAP (model) or transparent weights (heuristic fallback)."
         ),

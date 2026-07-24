@@ -63,6 +63,9 @@ _W_BURDEN = 6.5     # rent burden above 0.30 -> more trouble
 _W_UNSTABLE = 2.2   # unstable income -> more trouble
 _RHO = 1.15         # autocorrelation on previous-month trouble (streaks)
 _SEASONAL = 0.12    # small Dec/Jan bump
+_STREAK_DECAY = 0.85  # per-month decay of the FUTURE window's recent-trouble
+                      # memory signal (mirrors the 0.85 decay already used by
+                      # the recency_weighted_lateness feature, for consistency)
 
 # Severity weights (given a trouble month, how bad it is).
 _WS_REL = 3.2
@@ -400,17 +403,41 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
             future_v1.append({"status": status, "days_late": int(days_late), "balance_after": round(balance, 2)})
 
     # ---- v2 future window (independent substream), continuing history state --
-    future = _simulate_future(meta, bal_hist_end, prev_hist_end, c_late, c_sev, snapshot)
+    # recent_trouble_decay is a POST-HOC read of the already-generated history
+    # ledger (an exponential decay over its trouble/clean months) — it does not
+    # change anything about how that ledger was simulated above.
+    recent_trouble_decay = _recent_trouble_decay(ledger)
+    future = _simulate_future(meta, bal_hist_end, recent_trouble_decay, c_late, c_sev, snapshot)
 
     return {"ledger": ledger, "future_v1": future_v1, "future": future,
             "base_rent": base_rent, "current_balance": round(bal_hist_end, 2)}
 
 
-def _simulate_future(meta: dict, balance: float, prev_trouble: int,
+def _recent_trouble_decay(ledger: list) -> float:
+    """Exponential-decay scalar of trouble read from the ALREADY-GENERATED
+    history ledger (chronological scan): jumps to 1.0 on a troubled month and
+    decays by ``_STREAK_DECAY`` each subsequent clean month. This gives the
+    FUTURE window genuine causal memory of how long ago (and how intact) the
+    resident's on-time streak is, without touching the history-generation
+    formula that produced the ledger (byte-identity preserved)."""
+    decay = 0.0
+    for e in ledger:
+        if e["status"] != "paid":
+            decay = 1.0
+        else:
+            decay *= _STREAK_DECAY
+    return decay
+
+
+def _simulate_future(meta: dict, balance: float, recent_trouble_decay: float,
                      c_late: float, c_sev: float, snapshot: date) -> list:
     """Simulate FUTURE_MONTHS forward months from the independent substream,
-    continuing from the history-end (balance, prev_trouble). Same monthly logic
-    as history; each future dict carries everything the head labels need."""
+    continuing from the history-end (balance, recent_trouble_decay). Same
+    monthly logic as history, except the RHO memory term uses the decayed
+    recent-trouble scalar (see ``_recent_trouble_decay``) instead of a raw
+    last-month binary flag, so a longer intact on-time streak carries
+    genuinely less carried-over risk than a short one. Each future dict
+    carries everything the head labels need."""
     base_rent = meta["base_rent"]
     rel = meta["reliability"]
     burden = meta["rent_burden"]
@@ -425,14 +452,14 @@ def _simulate_future(meta: dict, balance: float, prev_trouble: int,
             + _W_REL * (1.0 - rel)
             + _W_BURDEN * (burden - 0.30)
             + _W_UNSTABLE * unstable
-            + _RHO * prev_trouble
+            + _RHO * recent_trouble_decay
             + seasonal
             + fshock[j]
         )
         trouble = meta["f_u_trouble"][j] < _sigmoid(z)
         rent_charged = base_rent
         if not trouble:
-            prev_trouble = 0
+            recent_trouble_decay *= _STREAK_DECAY
             status = "paid"
             days_late = 0
             late_fee = 0.0
@@ -440,13 +467,13 @@ def _simulate_future(meta: dict, balance: float, prev_trouble: int,
             amount_paid = rent_charged + catchup
             balance = max(0.0, balance + rent_charged - amount_paid)
         else:
-            prev_trouble = 1
+            recent_trouble_decay = 1.0
             late_fee = LATE_FEE
             z_sev = (
                 c_sev
                 + _WS_REL * (1.0 - rel)
                 + _WS_BURDEN * (burden - 0.30)
-                + 0.4 * _RHO * prev_trouble
+                + 0.4 * _RHO * recent_trouble_decay
                 + fshock[j]
             )
             severe = meta["f_u_sev"][j] < _sigmoid(z_sev)
@@ -523,6 +550,7 @@ def _emit_labels(sim: dict, meta: dict, c_churn: float) -> dict:
         "late_3m": any_late(3),
         "late_6m": any_late(6),
         "late_12m": any_late(12),
+        "late_count_3m": int(sum(1 for f in fut[:3] if f["status"] != "paid")),
         "late_count_12m": int(sum(1 for f in w12 if f["status"] != "paid")),
         "missed_count_12m": int(sum(1 for f in w12 if f["status"] == "missed")),
         "max_days_late_12m": float(max_days),

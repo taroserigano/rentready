@@ -52,4 +52,38 @@ test.describe("Risk page", () => {
     // No client crash surfaced.
     await expect(page.locator("text=/something went wrong/i")).toHaveCount(0);
   });
+
+  // Targets the SortHeader extraction (module-level + memo()'d): clicking a
+  // column header must still toggle sort direction on a second click of the
+  // SAME column, and switch columns (with a sensible default direction) on a
+  // click of a DIFFERENT column — without losing table rows or crashing.
+  test("sort headers toggle direction and switch columns correctly", async ({ page }) => {
+    const rows = page.locator("table.table tbody tr");
+    const thead = page.locator("table.table thead");
+    // Click the inner <button>, not the <th> — the button doesn't fill the
+    // whole header cell, so clicking the columnheader's center can miss it.
+    const riskHeader = thead.getByRole("button", { name: "Risk", exact: true });
+    const nameHeader = thead.getByRole("button", { name: "Applicant", exact: true });
+
+    // Default sort is Risk, descending (highest risk first).
+    await expect(riskHeader.locator("svg")).toBeVisible();
+    const firstDesc = (await rows.first().locator("td").nth(1).textContent())?.trim();
+
+    // Click Risk again -> ascending.
+    await riskHeader.click();
+    const firstAsc = (await rows.first().locator("td").nth(1).textContent())?.trim();
+    expect(firstAsc).not.toBe(firstDesc);
+
+    // Switch to the Applicant (name) column -> should default to ascending (A→Z).
+    await nameHeader.click();
+    await expect(nameHeader.locator("svg")).toBeVisible();
+    const namesByRow = await rows.evaluateAll((trs) =>
+      trs.map((tr) => tr.querySelector("td")?.textContent?.trim() ?? ""),
+    );
+    expect(namesByRow.length).toBeGreaterThan(0);
+    const sorted = [...namesByRow].sort((a, b) => a.localeCompare(b));
+    expect(namesByRow).toEqual(sorted);
+
+    await expect(page.locator("text=/something went wrong/i")).toHaveCount(0);
+  });
 });

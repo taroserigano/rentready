@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     income_rent_multiple: float = 3.0
     min_credit_score: int = 620
 
+    # Upload cap for /upload's PDF (real applications run a few pages; this is
+    # generous headroom while still bounding memory/disk on one request).
+    max_upload_mb: int = 20
+
     @property
     def has_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)

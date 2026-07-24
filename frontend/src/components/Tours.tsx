@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link2, Workflow } from "lucide-react";
 import type { Property, Slot, TourAgent, TourBooking } from "../types";
 import {
   cancelTour,
@@ -8,6 +9,8 @@ import {
   listTours,
 } from "../api";
 import { toast } from "../toast";
+import { Badge } from "./Badge";
+import { TechBadge } from "./TechBadge";
 import { PropertySelector } from "./PropertySelector";
 import { SchedulerChat } from "./SchedulerChat";
 import { TourList } from "./TourList";
@@ -30,7 +33,13 @@ function errText(e: unknown): string {
       : String(e);
 }
 
-export function Tours({ initialPropertyId }: { initialPropertyId?: string }) {
+export function Tours({
+  initialPropertyId,
+  health,
+}: {
+  initialPropertyId?: string;
+  health?: Record<string, unknown> | null;
+}) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyId, setPropertyId] = useState<string>(initialPropertyId ?? "");
   const [locked, setLocked] = useState<boolean>(!!initialPropertyId);
@@ -146,6 +155,19 @@ export function Tours({ initialPropertyId }: { initialPropertyId?: string }) {
           Chat to find an open time, then book a tour with a leasing agent —
           all in plain language.
         </p>
+        <div className="badges">
+          <TechBadge
+            icon={Workflow}
+            label="LangGraph"
+            title="Every chat turn runs through a compiled LangGraph StateGraph: a resolve-property node, then a conditional edge into the booking flow (or an early exit if the property isn't found)."
+          />
+          <TechBadge
+            icon={Link2}
+            label="LangChain"
+            title="The scheduler's optional grounded rewrite of proposed slots runs through a LangChain-wrapped Claude client; the booking flow itself is fully deterministic."
+          />
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
+        </div>
       </header>
 
       <div className="card">
@@ -158,14 +180,16 @@ export function Tours({ initialPropertyId }: { initialPropertyId?: string }) {
         />
       </div>
 
-      <div className="card">
-        <h2>This week</h2>
-        <TourCalendar
-          slots={slots}
-          bookings={tours}
-          onPick={handlePick}
-        />
-      </div>
+      {propertyId && (
+        <div className="card">
+          <h2>This week</h2>
+          <TourCalendar
+            slots={slots}
+            bookings={tours}
+            onPick={handlePick}
+          />
+        </div>
+      )}
 
       <div className="tours-grid">
         <SchedulerChat

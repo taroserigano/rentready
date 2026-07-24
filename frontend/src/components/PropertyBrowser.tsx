@@ -25,6 +25,7 @@ import {
 import type { PropertiesResponse, Property } from "../types";
 import { getProperties } from "../api";
 import { useSavedProperties } from "../useSavedProperties";
+import { Badge } from "./Badge";
 import { PropThumb } from "./PropPhoto";
 import {
   PropertyDetail,
@@ -252,12 +253,15 @@ function applyClientFilters(list: Property[], f: Filters): Property[] {
 
 export function PropertyBrowser({
   onOpenListing,
+  health,
 }: {
   /** Opens the dedicated full-page listing for a property id. */
   onOpenListing?: (id: string) => void;
+  health?: Record<string, unknown> | null;
 }) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [search, setSearch] = useState("");
+  const [maxRentInput, setMaxRentInput] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price-asc");
   const { toggle: toggleSaved, isSaved, count: savedCount } = useSavedProperties();
@@ -275,6 +279,16 @@ export function PropertyBrowser({
     }, 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Debounce Max rent (~300ms) too — it's the one free-typed field that goes
+  // to the server (see fetchProperties below), so without this every digit
+  // typed would fire its own request.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFilters((f) => (f.maxRent === maxRentInput ? f : { ...f, maxRent: maxRentInput }));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [maxRentInput]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,18 +316,25 @@ export function PropertyBrowser({
     return () => {
       cancelled = true;
     };
-  }, [filters, reloadKey]);
+    // Deliberately narrower than `filters`: fetchProperties only ever reads
+    // area/maxRent/minBedrooms/petsAllowed/q (everything else is filtered
+    // client-side in `sorted` below), so depending on the whole object would
+    // refetch from the server on every unrelated client-side filter tweak.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.area, filters.maxRent, filters.minBedrooms, filters.petsAllowed, filters.q, reloadKey]);
 
   const set = (patch: Partial<Filters>) =>
     setFilters((f) => ({ ...f, ...patch }));
 
   const clearFilters = () => {
     setSearch("");
+    setMaxRentInput("");
     setFilters(EMPTY_FILTERS);
   };
 
   const removeFilter = (key: keyof Filters) => {
     if (key === "q") setSearch("");
+    if (key === "maxRent") setMaxRentInput("");
     set({ [key]: EMPTY_FILTERS[key] } as Partial<Filters>);
   };
 
@@ -341,15 +362,15 @@ export function PropertyBrowser({
 
   const total = sorted.length;
   const totalHomes = inventoryTotal ?? total;
-  // Re-mounting the grid when the result set or order changes re-runs
-  // the stagger animation without animating on unrelated re-renders.
-  const gridKey = `${sortKey}|${sorted.map((p) => p.id).join(",")}`;
 
   return (
     <div className="app">
       <header>
         <h1>Browse homes</h1>
         <p>Every home we know about, with filters — no application needed.</p>
+        <div className="badges">
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
+        </div>
       </header>
 
       <div className="card">
@@ -374,8 +395,8 @@ export function PropertyBrowser({
               type="number"
               min={0}
               placeholder="Any"
-              value={filters.maxRent}
-              onChange={(e) => set({ maxRent: e.target.value })}
+              value={maxRentInput}
+              onChange={(e) => setMaxRentInput(e.target.value)}
             />
           </label>
           <label className="field">
@@ -674,7 +695,6 @@ export function PropertyBrowser({
             </div>
           ) : (
             <div
-              key={gridKey}
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",

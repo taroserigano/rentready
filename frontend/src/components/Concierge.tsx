@@ -2,12 +2,16 @@ import { memo, useEffect, useRef, useState } from "react";
 import {
   Building2,
   Check,
+  ChevronDown,
   Copy,
+  Database,
   DollarSign,
   FileText,
   GitCompare,
+  Link2,
   MapPin,
   MessageSquare,
+  Network,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -19,6 +23,8 @@ import type { CompareItem, ConciergeAnswer, Property } from "../types";
 import { conciergeAsk, conciergeAskStream, getProperties } from "../api";
 import { Markdown } from "./Markdown";
 import { LeaseViewer } from "./LeaseViewer";
+import { Badge } from "./Badge";
+import { TechBadge } from "./TechBadge";
 import { useEvent } from "../useEvent";
 
 /** What lease to show in the viewer, which tab, and where to scroll. */
@@ -38,9 +44,15 @@ interface Msg {
   pending?: boolean;
 }
 
+/** Matches the tone-identity palette already used for Workspace/Apply badges
+ * and how-it-works icons (see index.css `--tone-*` tokens) so this page picks
+ * up the same color language rather than inventing a new one. */
+type Tone = "violet" | "teal" | "blue" | "magenta" | "warm";
+
 interface StarterGroup {
   label: string;
   icon: LucideIcon;
+  tone: Tone;
   items: string[];
 }
 
@@ -51,6 +63,7 @@ const STARTER_GROUPS: StarterGroup[] = [
   {
     label: "Popular",
     icon: Sparkles,
+    tone: "violet",
     items: [
       "What's the pet policy?",
       "How much is the security deposit?",
@@ -61,6 +74,7 @@ const STARTER_GROUPS: StarterGroup[] = [
   {
     label: "Money & deposits",
     icon: DollarSign,
+    tone: "teal",
     items: [
       "What's the monthly rent?",
       "Is there a late fee if rent is paid late?",
@@ -71,6 +85,7 @@ const STARTER_GROUPS: StarterGroup[] = [
   {
     label: "Amenities & home",
     icon: Building2,
+    tone: "blue",
     items: [
       "Is there in-unit laundry?",
       "Is it furnished?",
@@ -81,6 +96,7 @@ const STARTER_GROUPS: StarterGroup[] = [
   {
     label: "Rules & policies",
     icon: ShieldCheck,
+    tone: "magenta",
     items: [
       "Can I sublet my apartment?",
       "How much notice must the landlord give to enter?",
@@ -91,6 +107,7 @@ const STARTER_GROUPS: StarterGroup[] = [
   {
     label: "Compare homes",
     icon: GitCompare,
+    tone: "warm",
     items: [
       "Cheapest 2-bedroom apartment?",
       "Show me homes with a pool",
@@ -338,12 +355,12 @@ const BotAnswer = memo(function BotAnswer({
                       })
                     }
                   >
-                    <span className="cite-num">{i + 1}</span>
+                    <span className="cite-num">{s.cite ?? i + 1}</span>
                     {body}
                   </button>
                 ) : (
                   <div className="cite-item" key={i}>
-                    <span className="cite-num">{i + 1}</span>
+                    <span className="cite-num">{s.cite ?? i + 1}</span>
                     {body}
                   </div>
                 );
@@ -385,9 +402,11 @@ const BotAnswer = memo(function BotAnswer({
 export function Concierge({
   initialPropertyId,
   onViewProperty,
+  health,
 }: {
   initialPropertyId?: string;
   onViewProperty?: (id: string) => void;
+  health?: Record<string, unknown> | null;
 }) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyId, setPropertyId] = useState<string>(initialPropertyId ?? "");
@@ -476,11 +495,13 @@ export function Concierge({
               res: m.res ? { ...m.res, answer: next } : m.res,
             };
           }),
-        onDone: (source) =>
+        onDone: (source, sources) =>
           patchMsg(botId, (m) => ({
             ...m,
             pending: false,
-            res: m.res ? { ...m.res, source } : m.res,
+            res: m.res
+              ? { ...m.res, source, sources: sources ?? m.res.sources }
+              : m.res,
           })),
       });
     } catch {
@@ -520,10 +541,40 @@ export function Concierge({
 
   return (
     <div className="app app-ask">
+      <header>
+        <h1>Ask</h1>
+        <p>
+          Chat with a grounded assistant about any home's rent, amenities, and
+          lease terms — every answer cites the actual listing or lease, and you
+          can compare homes side by side.
+        </p>
+        <div className="badges">
+          <TechBadge
+            icon={Network}
+            label="GraphRAG"
+            title="Property facts come from the Neo4j graph; lease answers come from hybrid (vector + BM25) retrieval — both ground the Claude answer."
+          />
+          <TechBadge
+            icon={Database}
+            label="LlamaIndex"
+            title="Every lease is chunked and indexed in Chroma via LlamaIndex; hybrid vector + BM25 retrieval (with FlashRank reranking) pulls the exact clauses that ground each answer."
+          />
+          <TechBadge
+            icon={Link2}
+            label="LangChain"
+            title="The final answer is synthesized through a LangChain-wrapped Claude client."
+          />
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
+        </div>
+      </header>
+
       <div className="card ask-chat-card">
         <div className="ask-chat-topbar">
-          <div className="ask-scope">
-            <MapPin size={13} className="icon-muted" aria-hidden />
+          <div className={`ask-scope${scopeName ? " has-value" : ""}`}>
+            <span className="ask-scope-icon">
+              <MapPin size={13} aria-hidden />
+            </span>
             <select
               className="ask-scope-select"
               value={propertyId}
@@ -539,6 +590,7 @@ export function Concierge({
                 </option>
               ))}
             </select>
+            <ChevronDown size={14} className="ask-scope-chevron" aria-hidden />
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             {scopeName && (
@@ -580,7 +632,11 @@ export function Concierge({
               )}
               <div className="ask-starters">
                 {STARTER_GROUPS.map((group) => (
-                  <div key={group.label} className="ask-starter-group">
+                  <div
+                    key={group.label}
+                    className="ask-starter-group"
+                    data-tone={group.tone}
+                  >
                     <div className="eyebrow">{group.label}</div>
                     <div className="ask-starter-tiles">
                       {group.items.map((q) => (

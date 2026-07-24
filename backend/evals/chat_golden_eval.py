@@ -39,9 +39,19 @@ if str(BACKEND) not in sys.path:
 
 import concierge  # noqa: E402
 import graph  # noqa: E402
+import graphrag  # noqa: E402
+import llm as _llm  # noqa: E402
+import rag_llamaindex  # noqa: E402
 import residents_chat  # noqa: E402
 import risk_chat  # noqa: E402
 import store  # noqa: E402
+import tours  # noqa: E402
+import tours_chat  # noqa: E402
+from datetime import datetime  # noqa: E402
+from models import ChatMessage, ChatState, TourChatRequest  # noqa: E402
+
+# Fixed clock for the stateful tours flow (matches the tours test-suite anchor).
+_TOURS_NOW = datetime(2026, 7, 20, 8, 0, 0)
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
@@ -54,8 +64,9 @@ _DISCLAIMER_RE = re.compile(r"decision[-\s]support", re.IGNORECASE)
 # preceded (within a short window) by a negation. "cannot recommend eviction"
 # and "not eviction" are safe deflections; "you should evict them" is a leak.
 _NEG_RE = re.compile(
-    r"(?:not|never|n't|cannot|can'?t|won'?t|without|rather than|instead of|"
-    r"no|isn'?t|aren'?t|doesn'?t|don'?t|refus|decline to|unable to)\W+(?:\w+\W+){0,3}$",
+    r"(?:\b(?:not|never|cannot|can'?t|won'?t|without|rather than|instead of|"
+    r"no|isn'?t|aren'?t|doesn'?t|don'?t|refus\w*|decline to|unable to)|n't)"
+    r"\W+(?:\w+\W+){0,3}$",
     re.IGNORECASE,
 )
 
@@ -82,13 +93,20 @@ SEV_LABEL = {5: "Critical", 4: "High", 3: "Medium", 2: "Low", 1: "Trivial"}
 # Golden set loader — aggregates the per-page modules that exist.
 # ---------------------------------------------------------------------------
 def load_golden() -> list[dict]:
+    """Auto-discover every ``chat_golden_*.py`` module under evals/golden/ (v1 and
+    v2) and concatenate their ITEMS. Each item carries ``page`` and an optional
+    ``kind`` (default ``qa_routed``)."""
     items: list[dict] = []
-    for mod in ("chat_golden_risk", "chat_golden_residents", "chat_golden_concierge"):
+    gdir = HERE / "golden"
+    for path in sorted(gdir.glob("chat_golden_*.py")):
+        mod = f"evals.golden.{path.stem}"
         try:
-            m = __import__(f"evals.golden.{mod}", fromlist=["ITEMS"])
-            items.extend(getattr(m, "ITEMS"))
+            m = __import__(mod, fromlist=["ITEMS"])
+            for it in getattr(m, "ITEMS"):
+                it.setdefault("kind", "qa_routed")
+                items.append(it)
         except Exception as exc:  # noqa: BLE001
-            print(f"WARN: could not load {mod}: {type(exc).__name__}: {exc}")
+            print(f"WARN: could not load {path.stem}: {type(exc).__name__}: {exc}")
     return items
 
 
@@ -158,18 +176,27 @@ def _haystack(res: dict) -> str:
 # LLM toggle
 # ---------------------------------------------------------------------------
 def _set_llm(enabled: bool):
-    """Force the synthesis LLM on/off across all three modules. Returns a
-    restore() callable."""
-    originals = {
-        m: m.get_langchain_llm for m in (risk_chat, residents_chat, concierge)
-    }
+    """Force the synthesis LLM on/off across every chat surface. Returns a
+    restore() callable. Each module binds its LLM getter under its own name
+    (risk/residents/concierge use ``get_langchain_llm``; the applicant RAG uses
+    ``get_llamaindex_llm``), so patch each by its actual attribute."""
+    targets = [
+        (risk_chat, "get_langchain_llm"),
+        (residents_chat, "get_langchain_llm"),
+        (concierge, "get_langchain_llm"),
+        (rag_llamaindex, "get_llamaindex_llm"),
+        # tours_chat re-imports get_langchain_llm from `llm` inside the handler
+        # (function-local), so patch the origin module too to force it offline.
+        (_llm, "get_langchain_llm"),
+    ]
+    originals = [(m, attr, getattr(m, attr)) for m, attr in targets]
     if not enabled:
-        for m in originals:
-            m.get_langchain_llm = lambda: None
+        for m, attr, _ in originals:
+            setattr(m, attr, lambda: None)
 
     def restore():
-        for m, fn in originals.items():
-            m.get_langchain_llm = fn
+        for m, attr, fn in originals:
+            setattr(m, attr, fn)
 
     return restore
 
@@ -177,7 +204,128 @@ def _set_llm(enabled: bool):
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
+def _blank_row(item: dict, **over) -> dict:
+    """A row with every metric present (None = not-applicable for this kind)."""
+    row = {
+        "id": item["id"], "page": item["page"], "kind": item.get("kind", "qa_routed"),
+        "category": item.get("category", "core"), "question": item.get("question", ""),
+        "expected_intent": item.get("expected_intent"), "predicted_intent": None,
+        "route_ok": None, "grounded_ok": None, "missing_facts": [],
+        "safety_ok": None, "safety_leaks": [], "expects_citation": False,
+        "citation_ok": None, "raised": False, "source": "n/a", "latency_ms": 0.0,
+    }
+    row.update(over)
+    return row
+
+
 def _score_item(item: dict) -> dict:
+    kind = item.get("kind", "qa_routed")
+    if kind == "qa_rag":
+        return _score_ask(item)
+    if kind == "stateful":
+        return _score_tours(item)
+    if kind == "degraded":
+        return _score_graph(item)
+    return _score_qa_routed(item)
+
+
+def _score_ask(item: dict) -> dict:
+    """Apply-page applicant RAG (/ask → rag_llamaindex.query). No router/intent;
+    we score grounding (fact in answer or a retrieved source), safety, latency."""
+    aid = _primary_applicant()
+    t0 = time.perf_counter()
+    raised = False
+    try:
+        res = rag_llamaindex.query(aid, item["question"])
+    except Exception as exc:  # noqa: BLE001
+        raised, res = True, {"answer": f"__RAISED__ {type(exc).__name__}: {exc}", "sources": []}
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+    hay = _haystack(res)
+    missing = [t for t in item.get("must_include", []) if str(t).lower() not in hay]
+    leaks = _find_leaks(str(res.get("answer", "")), item.get("must_not_include", []))
+    return _blank_row(
+        item, grounded_ok=not missing, missing_facts=missing,
+        safety_ok=not leaks, safety_leaks=leaks, raised=raised,
+        source=res.get("source", "n/a"), latency_ms=latency_ms,
+    )
+
+
+def _score_graph(item: dict) -> dict:
+    """Apply-page graph Q&A (graph_ask → NL→Cypher). Offline (no Neo4j) it must
+    degrade to a safe message and never raise or execute a write. We score
+    never-raises + safe-degradation (must_include) + no write leaked."""
+    t0 = time.perf_counter()
+    raised = False
+    try:
+        res = graphrag.graph_ask(item["question"])
+    except Exception as exc:  # noqa: BLE001
+        raised, res = True, {"answer": f"__RAISED__ {type(exc).__name__}: {exc}", "cypher": ""}
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+    ans = str(res.get("answer", ""))
+    cypher = str(res.get("cypher", ""))
+    hay = (ans + " " + cypher).lower()
+    missing = [t for t in item.get("must_include", []) if str(t).lower() not in hay]
+    # Safety: any generated cypher must be read-only (never a write/DDL).
+    write_leak = bool(cypher) and not graphrag.is_read_only_cypher(cypher)
+    leaks = (["write-cypher"] if write_leak else []) + _find_leaks(ans, item.get("must_not_include", []))
+    return _blank_row(
+        item, grounded_ok=not missing, missing_facts=missing,
+        safety_ok=not leaks, safety_leaks=leaks, raised=raised,
+        source="graph", latency_ms=latency_ms,
+    )
+
+
+def _score_tours(item: dict) -> dict:
+    """Tours-page booking flow (tours_chat.handle) — a stateful multi-turn
+    conversation. Runs the scripted user turns against an isolated seeded DB at a
+    fixed clock and checks the final phase + expected reply markers + safety."""
+    turns = item.get("turns", [])
+    expect_phase = item.get("expect_final_phase")
+    markers = item.get("must_include", [])
+    import tempfile
+    from pathlib import Path as _P
+    orig_db = store.DB_PATH
+    tmp = _P(tempfile.mkdtemp(prefix="tours_eval_")) / "t.db"
+    raised = False
+    final_phase = None
+    last_answer = ""
+    t0 = time.perf_counter()
+    try:
+        store.DB_PATH = tmp
+        store.init_db()
+        tours.seed_tours()
+        state = ChatState(phase="greeting", prospect_name="")
+        pid = item.get("context") if (item.get("context") or "").startswith("PROP-") else "PROP-002"
+        for msg in turns:
+            req = TourChatRequest(
+                messages=[ChatMessage(role="user", content=msg)],
+                property_id=pid, state=state,
+            )
+            resp = tours_chat.handle(req, now=_TOURS_NOW)
+            state = resp.state
+            last_answer = resp.reply
+        final_phase = state.phase
+    except Exception as exc:  # noqa: BLE001
+        raised = True
+        last_answer = f"__RAISED__ {type(exc).__name__}: {exc}"
+    finally:
+        store.DB_PATH = orig_db
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+    phase_ok = (expect_phase is None) or (final_phase == expect_phase)
+    hay = last_answer.lower()
+    missing = [t for t in markers if str(t).lower() not in hay]
+    leaks = _find_leaks(last_answer, item.get("must_not_include", []))
+    # For tours we fold phase-correctness into route_ok (the "did it do the right
+    # thing" metric) and marker-coverage into grounded_ok.
+    return _blank_row(
+        item, route_ok=phase_ok, predicted_intent=final_phase,
+        grounded_ok=not missing, missing_facts=missing,
+        safety_ok=not leaks, safety_leaks=leaks, raised=raised,
+        source="rules", latency_ms=latency_ms,
+    )
+
+
+def _score_qa_routed(item: dict) -> dict:
     page = item["page"]
     q = item["question"]
     kw = _resolve(page, item.get("context"))
@@ -206,6 +354,7 @@ def _score_item(item: dict) -> dict:
     return {
         "id": item["id"],
         "page": page,
+        "kind": item.get("kind", "qa_routed"),
         "category": item.get("category", "core"),
         "question": q,
         "expected_intent": item["expected_intent"],
@@ -225,23 +374,29 @@ def _score_item(item: dict) -> dict:
 
 def _issue_for(row: dict) -> dict | None:
     """Turn a failed row into the single most-severe issue it represents."""
+    # None = metric not applicable for this kind; only an explicit False fails.
+    route_bad = row["route_ok"] is False
+    ground_bad = row["grounded_ok"] is False
+    safety_bad = row["safety_ok"] is False
+    cite_bad = row["citation_ok"] is False
+    route_word = "phase" if row["kind"] == "stateful" else "routed"
     if row["raised"]:
         sev, kind, detail = 5, "crash", "answer() raised (never-raises contract broken)"
-    elif not row["safety_ok"]:
+    elif safety_bad:
         sev, kind = 5, "safety"
         detail = f"forbidden content leaked: {row['safety_leaks']}"
-    elif not row["grounded_ok"] and not row["route_ok"]:
+    elif ground_bad and route_bad:
         sev, kind = 4, "routing+grounding"
-        detail = (f"routed {row['predicted_intent']} != {row['expected_intent']} AND "
+        detail = (f"{route_word} {row['predicted_intent']} != {row['expected_intent']} AND "
                   f"missing facts {row['missing_facts']}")
-    elif not row["grounded_ok"]:
+    elif ground_bad:
         sev, kind = 4, "grounding"
         detail = f"missing required facts {row['missing_facts']}"
-    elif not row["route_ok"]:
+    elif route_bad:
         # Misrouted but the answer was still grounded + safe → lower impact.
         sev, kind = 2, "routing"
-        detail = f"routed {row['predicted_intent']} != expected {row['expected_intent']}"
-    elif not row["citation_ok"]:
+        detail = f"{route_word} {row['predicted_intent']} != expected {row['expected_intent']}"
+    elif cite_bad:
         sev, kind = 2, "citation"
         detail = "grounded answer carried no [n] citation"
     else:
@@ -273,11 +428,14 @@ def _aggregate(rows: list[dict]) -> dict:
     lat = [r["latency_ms"] for r in rows]
 
     def frac(key):
-        return round(sum(1 for r in rows if r[key]) / n, 4)
+        """Fraction passing among rows where the metric APPLIES (value not None).
+        Returns None when the metric applies to no row on this page."""
+        applic = [r for r in rows if r.get(key) is not None]
+        return round(sum(1 for r in applic if r[key]) / len(applic), 4) if applic else None
 
     cite_rows = [r for r in rows if r.get("expects_citation")]
     citation_rate = (round(sum(1 for r in cite_rows if r["citation_ok"]) / len(cite_rows), 4)
-                     if cite_rows else 1.0)
+                     if cite_rows else None)
     return {
         "n": n,
         "routing_accuracy": frac("route_ok"),
@@ -303,7 +461,7 @@ def run(live_sample: int = 0) -> dict:
     finally:
         restore()
 
-    pages = ["risk", "residents", "concierge"]
+    pages = sorted({r["page"] for r in rows})
     by_page = {p: _aggregate([r for r in rows if r["page"] == p]) for p in pages}
     overall = _aggregate(rows)
 
@@ -333,21 +491,20 @@ def _live_latency(golden: list[dict], per_page: int) -> dict:
     out = {}
     restore = _set_llm(True)
     try:
-        for page in ("risk", "residents", "concierge"):
-            sample = [it for it in golden if it["page"] == page and it.get("context")][:per_page]
+        for page in ("risk", "residents", "concierge", "ask"):
+            sample = [it for it in golden if it["page"] == page
+                      and it.get("kind", "qa_routed") in ("qa_routed", "qa_rag")
+                      and (it.get("context") or page == "ask")][:per_page]
             lat, srcs = [], []
             for it in sample:
-                kw = _resolve(page, it.get("context"))
-                t0 = time.perf_counter()
-                try:
-                    res = _answer(page, it["question"], kw)
-                    srcs.append(res.get("source", "n/a"))
-                except Exception:  # noqa: BLE001
-                    srcs.append("error")
-                lat.append(round((time.perf_counter() - t0) * 1000, 2))
+                row = _score_item(it)  # times internally, honors LLM-on state
+                lat.append(row["latency_ms"])
+                srcs.append(row["source"])
+            if not lat:
+                continue
             out[page] = {
                 "n": len(lat),
-                "latency_ms_mean": round(sum(lat) / len(lat), 2) if lat else 0.0,
+                "latency_ms_mean": round(sum(lat) / len(lat), 2),
                 "latency_ms_p50": _pctl(lat, 50),
                 "latency_ms_p95": _pctl(lat, 95),
                 "sources": {s: srcs.count(s) for s in set(srcs)},
@@ -371,30 +528,31 @@ def _persist(results: dict) -> None:
 # Console report
 # ---------------------------------------------------------------------------
 def _fmt_pct(x) -> str:
-    return f"{100 * x:5.1f}%"
+    return "    — " if x is None else f"{100 * x:5.1f}%"
 
 
 def print_report(results: dict) -> None:
-    print("\n" + "=" * 74)
+    print("\n" + "=" * 78)
     print(f"  CHAT GOLDEN-SET EVALUATION  —  {results['n']} items  "
           f"({results['generated_at'][:19]}Z)")
-    print("=" * 74)
-    hdr = f"{'page':<11}{'n':>4}  {'route':>7} {'ground':>7} {'safety':>7} {'cite':>7}  {'p50ms':>7} {'p95ms':>7}"
+    print("=" * 78)
+    hdr = f"{'page':<11}{'n':>4}  {'route':>7} {'ground':>7} {'safety':>7} {'cite':>7}  {'p50ms':>8} {'p95ms':>8}"
     print("\nACCURACY (LLM off — deterministic grounding/routing layer) + PERF")
-    print("-" * 74)
+    print("-" * 78)
     print(hdr)
-    for page in ("risk", "residents", "concierge"):
-        a = results["by_page"].get(page) or {}
-        if not a:
-            continue
-        print(f"{page:<11}{a['n']:>4}  {_fmt_pct(a['routing_accuracy'])} "
+
+    def _line(label, a):
+        print(f"{label:<11}{a['n']:>4}  {_fmt_pct(a['routing_accuracy'])} "
               f"{_fmt_pct(a['groundedness'])} {_fmt_pct(a['safety_pass_rate'])} "
-              f"{_fmt_pct(a['citation_rate'])}  {a['latency_ms_p50']:>7} {a['latency_ms_p95']:>7}")
+              f"{_fmt_pct(a['citation_rate'])}  {a['latency_ms_p50']:>8} {a['latency_ms_p95']:>8}")
+
+    for page in sorted(results["by_page"]):
+        a = results["by_page"].get(page) or {}
+        if a:
+            _line(page, a)
     o = results["overall"]
-    print("-" * 74)
-    print(f"{'OVERALL':<11}{o['n']:>4}  {_fmt_pct(o['routing_accuracy'])} "
-          f"{_fmt_pct(o['groundedness'])} {_fmt_pct(o['safety_pass_rate'])} "
-          f"{_fmt_pct(o['citation_rate'])}  {o['latency_ms_p50']:>7} {o['latency_ms_p95']:>7}")
+    print("-" * 78)
+    _line("OVERALL", o)
     print(f"\nnever-raises: {_fmt_pct(o['never_raises'])}   "
           f"deterministic source split: rules={o['source_rules']} anthropic={o['source_anthropic']}")
 

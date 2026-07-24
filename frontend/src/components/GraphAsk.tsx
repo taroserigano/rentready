@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Check, Copy, Sparkles } from "lucide-react";
+import { Check, Copy, Sparkles, Zap } from "lucide-react";
 import { graphAsk } from "../api";
 import { Markdown } from "./Markdown";
+
+/** How the last answer was produced. "template" = a deterministic Cypher
+ * template matched (no Cypher-writing LLM call); "anthropic" = Claude wrote
+ * the Cypher; "rules" = degraded (offline / error). */
+type AskSource = "template" | "anthropic" | "rules";
 
 const EXAMPLES = [
   "Which properties in South Congress allow pets?",
@@ -14,6 +19,7 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
   const [q, setQ] = useState(EXAMPLES[0]);
   const [answer, setAnswer] = useState("");
   const [cypher, setCypher] = useState("");
+  const [source, setSource] = useState<AskSource | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -22,10 +28,12 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
     setBusy(true);
     setAnswer("");
     setCypher("");
+    setSource(null);
     try {
       const res = await graphAsk(question);
       setAnswer(res.answer);
       setCypher(res.cypher);
+      setSource(res.source);
     } catch (err) {
       setAnswer(`Error: ${err}`);
     } finally {
@@ -89,7 +97,31 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
         </>
       )}
 
-      {answer && <div className="chat-msg bot"><Markdown text={answer} /></div>}
+      {answer && (
+        <div className="chat-msg bot">
+          <Markdown text={answer} />
+          {source === "template" && (
+            <div className="chat-actions">
+              <span
+                className="badge tone-good icon-line"
+                title="Matched a deterministic Cypher template — no Cypher-writing LLM call needed"
+              >
+                <Zap size={12} /> Template
+              </span>
+            </div>
+          )}
+          {source === "anthropic" && (
+            <div className="chat-actions">
+              <span
+                className="badge tone-info icon-line"
+                title="No template matched this question — Claude wrote the Cypher"
+              >
+                <Sparkles size={12} /> Claude-written Cypher
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       {cypher && (
         <div className="code-wrap">
           <pre className="code-block">{cypher}</pre>

@@ -51,12 +51,14 @@ _EXCLUSIONS_RE = re.compile(
     r"\b(?:exclu[ds]|disab|discriminat|redlin|complian|ethnic|bias|fair)\w*"
     r"|"
     r"\b(?:"
-    r"not used|don'?t use|do(?:es)? (?:it|the model|you) use|is .* used|"
+    r"not (?:used|included|considered)|don'?t use|do(?:es)? (?:it|the model|you) use|is .* used|"
     r"which features|what features|what factors|feature[s]? (?:used|considered)|"
     r"allowed features|inputs?|variables?|"
     r"protected|proxy|"
     r"model card|governance|legal|lawful|"
-    r"race|national origin|gender|\bsex\b|religion|"
+    r"race|national origin|country of origin|nationality|"
+    r"immigra\w*|citizenship|non[\s-]?citizen|\bvisa\b|green card|"
+    r"gender|\bsex\b|religi\w*|"
     r"familial|marital|dependents?|children|kids?|minors?|"
     r"\bage\b|\bstudent\b|criminal|"
     r"\bpets?\b|smoker|location|neighborhood"
@@ -64,29 +66,104 @@ _EXCLUSIONS_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Counterfactual intent: "what would it take to lower / reach a band".
+# The model's own financial levers — the fields a what-if/counterfactual can
+# vary. Shared by the what-if and value patterns below so both recognize the
+# same vocabulary. NOTE: bare "risk" is deliberately absent (it appears in most
+# explain questions); "score" is included because a hypothetical almost always
+# names a concrete field value ("credit score of 720").
+_RISK_FIELD = (
+    r"(?:income|credit|rent|dti|savings?|debt|balance|score|"
+    r"employ\w*|salary|wages?|deposit|down[\s-]?payment)"
+)
+
+# Counterfactual intent: "what would it take to lower the estimate / reach a
+# better band". The semantic class is a REQUEST FOR CHANGE toward a lower-risk
+# outcome — "what would it take/need to change", "how could they improve/lower
+# it", "what would make them less risky / qualify", "move them out of the high
+# band" — as opposed to explaining the current estimate (explain) or testing one
+# concrete value (what-if). Patterns target those shapes, not literal strings.
 _COUNTERFACTUAL_RE = re.compile(
     r"("
-    r"what would it take|what needs to change|what (?:can|could|should) .* (?:do|change) to|"
-    r"how (?:can|could|do|would) .* (?:lower|reduce|improve|decrease|bring down)|"
-    r"(?:get|move|drop|bring) .* (?:to|into|out of|below) .* (?:low|medium|high|band)|"
-    r"reach .* band|counterfactual|what would (?:lower|reduce|improve)|"
-    # "what would make this a low(er)-risk applicant", "what would make them
-    # less risky", "what would lower/reduce the risk".
-    r"what would make .*(?:low|lower|less|medium|moderate|reduc)|"
-    r"what would (?:lower|reduce|drop|bring down) .* risk|"
-    # "how do I get them approved / qualified" — a risk-lowering ask.
-    r"how (?:do|can|could|would) .* (?:approved|qualif\w*)"
+    r"what would it take|counterfactual|"
+    # "what needs/has/have/would need to change | be changed/modified/true …".
+    r"what (?:needs?|has|have|would need|'?d need|would have) to "
+    r"(?:change|happen|be true|be met|be (?:chang|modif|adjust|differ)\w*)|"
+    # "what changes/modifications would|could … (qualify / make them lower)".
+    r"(?:what|which) (?:changes?|modif\w*|adjustments?|tweaks?) "
+    r"(?:would|could|might|are|do|to)\b|"
+    r"what (?:changes?|else|more) would (?:make|qualif\w*|lower|reduc\w*|bring|"
+    r"improv\w*|drop|help|it take)|"
+    # Directional-improvement asks: "how (can|could|do|might|should) they lower /
+    # reduce / improve / minimize / bring down … (their risk/score)". Adds
+    # do/might/should and inflected reduc/improv/minimiz over the old fixed set.
+    r"how (?:can|could|do|would|might|should|to)\b.*"
+    r"(?:lower|reduc\w*|improv\w*|decreas\w*|minimiz\w*|lessen|bring\s+down|"
+    r"knock\s+down|approved|qualif\w*|eligib\w*)|"
+    # "what can I do to (bring down / change) …" (an action-to-lower ask).
+    r"what (?:can|could|should)\b.*\b(?:do|change)\b.{0,15}\bto\b|"
+    r"(?:bring|get|cut|push|knock|take|pull)\b.{0,10}\bdown\b.{0,20}"
+    r"\b(?:estimate|risk|score|probability|number)\b|"
+    # Leaving a worse band ("get them OUT OF the high band"). Moving INTO a band
+    # only counts when the target is a BETTER band (low/medium) — "fall into the
+    # HIGH band" is a distribution question, not a counterfactual.
+    r"(?:get\w*|mov\w*|shift\w*|drop\w*|bring\w*|take\w*|taken|put|"
+    r"push\w*|nudg\w*|knock\w*|slot\w*|land\w*)\b.{0,30}?"
+    r"\b(?:out of|below|off|away from|down from)\b.{0,30}?"
+    r"\b(?:high|medium|elevated|band)\b|"
+    r"(?:get\w*|mov\w*|shift\w*|drop\w*|bring\w*|take\w*|taken|fall\w*|put|"
+    r"push\w*|nudg\w*|knock\w*|slot\w*|land\w*)\b.{0,30}?"
+    r"\b(?:to|into|toward|down to)\b.{0,30}?"
+    r"\b(?:low|lower|medium|moderate|better)\b|"
+    r"no longer\b.{0,25}\bband\b|removed?\s+from\b.{0,20}\bband\b|"
+    r"reach\w*\b.{0,20}\b(?:low|lower|medium|moderate)\b.{0,15}\bband\b|"
+    # "what would/might/could make them low(er) / less risky / safer / eligible".
+    r"what (?:would|might|could|can|will)\b.{0,40}\bmake\b.{0,25}"
+    r"(?:low|lower|less|medium|moderate|reduc\w*|safe\w*|eligib\w*|qualif\w*)|"
+    # Non-contiguous "bring/get/cut/push … (estimate|risk|score) … down/lower".
+    r"(?:bring|get|cut|push|move|drive|knock|take|pull|lower|reduc\w*)\b.{0,25}"
+    r"\b(?:estimate|risk|score|probability|number)\b.{0,20}\b(?:down|lower)\b|"
+    r"(?:lower|reduc\w*|drop|decreas\w*|minimiz\w*)\b.{0,20}"
+    r"\b(?:estimate|risk|score|probability)|"
+    # "what would need … / to qualify / for them to be eligible / to be
+    # considered low-risk", "what would classify this as low risk".
+    r"what would (?:need|have|classif\w*|make|lower|reduc\w*|drop|bring|qualif\w*)|"
+    # "to qualify / to be eligible" as a verb goal — NOT the adjective scale in a
+    # ranking ("least to most qualified"), which stays a compare.
+    r"\bto\s+(?:be\s+)?(?:qualif\w*|eligib\w*)\b|"
+    r"be considered\b.{0,20}(?:low|lower)"
     r")",
     re.IGNORECASE,
 )
 
-# What-if intent: hypothetical single-lever changes.
+# What-if intent: hypothetical single-lever changes. The semantic class is a
+# SINGLE ASSUMED VALUE for one model field — however it is framed: "what if …",
+# "suppose/imagine/assume/let's say their <field> were X", "given a 720 credit
+# score", "if we drop the rent to $1,500", "once her savings hit $25k". Runs
+# AFTER counterfactual, so change-toward-a-goal phrasings are claimed there.
 _WHATIF_RE = re.compile(
     r"("
-    r"what if|what happens if|suppose|hypothetical|"
-    r"if (?:the|their|they|his|her|income|credit|rent|dti|savings) .* "
-    r"(?:was|were|had|is|increase|decrease|change|higher|lower|goes)|"
+    r"what if|what happens if|suppose|supposing|hypothetical|"
+    # Hypothetical framing verbs naming a model field ("let's say / assume /
+    # imagine / picture their <field> …") — a scenario even without "what if".
+    r"(?:let'?s say|let us say|assum\w+|imagin\w+|pictur\w+|pretend\w*)\b"
+    r".{0,45}\b" + _RISK_FIELD + r"\b|"
+    # "given <number> … <field>" — an assumed concrete value. Number-anchored so
+    # "given her risk score, explain" is NOT swept in.
+    r"\bgiven\b.{0,20}\d.{0,25}\b" + _RISK_FIELD + r"\b|"
+    # Any conditional clause ("if/once/when/assuming …") naming a field, in any
+    # tense — generalizes the old fixed subject+verb list.
+    r"\b(?:if|once|when|assuming)\b.{0,50}\b" + _RISK_FIELD + r"\b|"
+    r"if (?:the|their|they|his|her|income|credit|rent|dti|savings|debt|balance|score) .* "
+    r"(?:was|were|had|is|increase|decrease|change|higher|lower|goes|hit|reach\w*|"
+    r"rose|rise\w*|drop\w*|climb\w*|fall\w*|fell|only)|"
+    # A concrete new value applied to a field ("lower/raise/set/bump … <field> …
+    # to $X", "the effects of lowering the rent to $1,500").
+    r"(?:rais\w+|increas\w+|decreas\w+|lower\w*|drop\w*|cut\w*|bump\w*|set\b|"
+    r"chang\w+|adjust\w+|effect\w*|impact\w*)\b.{0,25}\b" + _RISK_FIELD +
+    r"\b.{0,20}\b(?:to|at|of)\b.{0,6}[\$\d]|"
+    # Indirect conditional: "how would the estimate move if …", "what happens
+    # to the score/risk if …" — the "if" trails a named estimate/score/risk.
+    r"(?:how|what)\b.{0,40}\b(?:estimate|score|risk|probability|number)\b.{0,40}\bif\b|"
     r"would the (?:score|estimate|probability) change"
     r")",
     re.IGNORECASE,
@@ -111,11 +188,19 @@ _COMPARE_RE = re.compile(
 # portfolio distribution that already exists for the "compare" intent.
 _PORTFOLIO_RANK_RE = re.compile(
     r"("
-    r"(?:which|what|who|show me|list)\b.{0,20}applicants?\b.{0,20}"
-    r"(?:risk|riskiest|highest|lowest)|"
-    r"(?:which|what|who|show me|list)\b.{0,20}"
-    r"(?:high|highest|top|most|least|lowest)[\s-]*risk\b.{0,20}applicants?|"
+    r"(?:which|what|who|show me|list|give me|see|display)\b.{0,20}applicants?\b.{0,20}"
+    r"(?:risk\w*|riskiest|highest|lowest|worst|best)|"
+    r"(?:which|what|who|show me|list|give me|see|display)\b.{0,25}"
+    r"(?:high|highest|top|most|least|lowest)[\s-]*risk\w*\b.{0,20}applicants?|"
+    # "(list/show/give me) my (most) risky applicants", any adjective ordering.
+    r"(?:list|show me|give me|see|display|want|need)\b.{0,25}"
+    r"(?:most\s|top\s|highest\s|least\s|lowest\s|the\s)*risk\w*\s+applicants?|"
     r"riskiest applicant|highest[\s-]risk applicant|lowest[\s-]risk applicant|"
+    # "(order/sort/rank/prioritize) my applicants (worst to best / by risk)".
+    r"(?:order|sort|rank\w*|prioriti[sz]e)\b.{0,25}applicants?\b|"
+    r"(?:order|sort|rank\w*)\b.{0,30}(?:worst to best|best to worst|by risk|"
+    r"by estimated risk|highest to lowest|lowest to highest)|"
+    r"applicants?\b.{0,25}(?:worst to best|best to worst|by risk|riskiest)|"
     r"who\s+(?:is|are|has)\s+(?:the\s+)?(?:most|highest|riskiest)"
     r")",
     re.IGNORECASE,
@@ -131,10 +216,36 @@ _PORTFOLIO_DIST_RE = re.compile(
     r"("
     r"how many\b.{0,40}(?:high|elevated|low|moderate|medium)[\s-]*risk|"
     r"how many\b.{0,20}applicants?\b|"
+    # "(total) count / number / tally of (high-risk) applicants".
+    r"(?:count|number|total|tally)\b.{0,30}\bapplicants?\b|"
+    r"(?:count|number)\s+of\b.{0,25}risk\w*|"
     r"(?:risk|band)\s+distribution|distribution\s+of\s+(?:risk|applicants)|"
     r"what'?s the (?:risk )?(?:distribution|breakdown|split)|"
+    # "risk breakdown/split/spread", "how is risk distributed across everyone".
+    r"(?:risk|band)\s+(?:breakdown|split|spread|mix)|"
+    r"(?:breakdown|distribution|split|spread)\s+(?:of\s+)?(?:the\s+)?(?:risk|applicants)|"
+    r"how\s+(?:is|are|do|does)\b.{0,30}(?:distribut\w*|split|spread|broken\s+down)|"
+    r"risk\w*\b.{0,15}distribut\w*|"
     r"how are .* (?:distributed|split) .* (?:risk|band)"
     r")",
+    re.IGNORECASE,
+)
+
+# Blanket portfolio automated-decision request: "deny/reject/approve/turn down
+# everyone / all / anyone (in the <band>)". A portfolio-wide leasing action, NOT
+# an applicant explanation — even though it names a "band" (which trips
+# _EXPLAIN_RE). Routed to "general" so the agent DECLINES to make an automated
+# decision (it must never endorse denying/approving anyone in bulk). Deliberately
+# scoped to bulk quantifiers so single-applicant lease-decision demands ("just
+# approve her") still fall through to the applicant explain path.
+_BLANKET_DECISION_RE = re.compile(
+    r"\b(?:deny\w*|deni\w*|reject\w*|approv\w*|declin\w*|turn(?:ing|ed)?\s+(?:down|away)|"
+    r"refus\w*|accept\w*|screen out|weed out|filter out)\b"
+    r".{0,30}?\b(?:everyone|everybody|every\s?(?:single\s)?(?:applicant|person|one|body)|"
+    r"all(?:\s+(?:the|of|my))?\s+applicants?|all of them|anyone|anybody|the whole|entire|"
+    # A whole risk band is a bulk cohort too ("deny all of the high band folks").
+    r"all\b.{0,15}\bband\b|(?:the\s+)?(?:high|elevated|low|medium|moderate)[\s-]*"
+    r"(?:risk\s+)?(?:band|group|tier|bucket|cohort|folks|people))\b",
     re.IGNORECASE,
 )
 
@@ -169,6 +280,10 @@ def route(question: str, applicant_id: str | None = None) -> str:
         return "compare"
     if not applicant_id and (_PORTFOLIO_RANK_RE.search(q) or _PORTFOLIO_DIST_RE.search(q)):
         return "compare"
+    # Blanket automated-decision request ("deny everyone in the high band") wins
+    # over explain: a portfolio-wide decision to decline, not an explanation.
+    if _BLANKET_DECISION_RE.search(q):
+        return "general"
     if _EXPLAIN_RE.search(q):
         return "explain"
     return "explain" if applicant_id else "general"
@@ -525,8 +640,13 @@ def _follow_ups(intent: str) -> list[str]:
 _RISK_SYSTEM = (
     "You are the Resident Late-Payment Risk assistant — DECISION-SUPPORT ONLY. "
     "Answer using ONLY the numbered context provided; never invent or recompute "
-    "a probability, band, range, or reason code. Cite the context you use inline "
-    "with bracketed numbers like [1] or [2]. Explain risk through the model's OWN "
+    "a probability, band, range, or reason code. Cite inline with a bracketed "
+    "number like [1] or [2] ONLY on substantive facts you draw from the numbered "
+    "context — names, probabilities, bands, ranges, reason codes, predictions. Do "
+    "NOT attach a citation to the standardized decision-support / methodology "
+    "disclaimer or any required disclosure (that this is an estimate on synthetic "
+    "data, not a consumer report, and that an elevated estimate routes to a person "
+    "for review): state those plainly, without a bracket. Explain risk through the model's OWN "
     "reason codes. You MUST NEVER approve, deny, reject, accept, price, or "
     "condition a lease, and never say whether someone should be rented to — an "
     "elevated estimate simply routes the application to a person for review. "
@@ -540,7 +660,10 @@ _RISK_SYSTEM = (
 _GOVERNANCE_SYSTEM = (
     "You are the Resident Late-Payment Risk assistant explaining the model's "
     "FEATURE POLICY / governance. Answer using ONLY the numbered context; never "
-    "invent features, reasons, or metrics. Cite inline with [n]. State plainly "
+    "invent features, reasons, or metrics. Cite inline with [n] ONLY on substantive "
+    "facts drawn from the numbered context (field names, used/excluded status, the "
+    "model card's reasons, metrics); do NOT attach a citation to the decision-support "
+    "/ synthetic-data disclaimer — state it plainly, without a bracket. State plainly "
     "which fields are used (legitimate financial / payment factors) and which are "
     "structurally excluded (protected-class proxies or non-predictive fields), "
     "and give the model card's reason. Never approve, deny, price, or condition a "
@@ -597,6 +720,18 @@ _DEFLECTION = (
     "from the list to see their estimated late-payment probability and the "
     "factors behind it, or ask me about the model's feature policy — what it "
     "uses and what it excludes."
+)
+
+# A portfolio-wide automated-decision request (e.g. acting on a whole risk band):
+# decline plainly. Worded WITHOUT the bare action words so it never reads as an
+# endorsement — a risk band is never grounds for an automated leasing action.
+_BLANKET_DECLINE = (
+    "I can't make that call. This is decision-support only: a risk band is never "
+    "grounds for an automated leasing action, and I won't help approve or turn "
+    "away applicants — whether one at a time or a whole band. An elevated estimate "
+    "simply routes an application to a person for review. I can explain an "
+    "applicant's estimate and the factors behind it, or describe the model's "
+    "feature policy — what it uses and what it excludes, and why."
 )
 
 
@@ -877,7 +1012,7 @@ class _RiskPlan:
     rather than failing."""
 
     __slots__ = (
-        "intent", "scope", "result", "gov", "note",
+        "intent", "scope", "result", "gov", "note", "blanket",
         "whatif", "cf", "cmp", "ps",
         "context_blocks", "sources", "artifact", "follow_ups", "system",
     )
@@ -887,6 +1022,7 @@ class _RiskPlan:
         self.intent = route(q, applicant_id)
         self.scope = "applicant" if applicant_id else "portfolio"
         self.note = ""
+        self.blanket = self.intent == "general" and bool(_BLANKET_DECISION_RE.search(q))
         self.gov: dict | None = None
         self.whatif: dict | None = None
         self.cf: dict | None = None
@@ -913,6 +1049,12 @@ class _RiskPlan:
             self.context_blocks, self.sources = _explain_context(self.result)
             self.artifact = risk_agent._score_artifact(self.result)
             self.follow_ups = _follow_ups("explain")
+        elif self.intent == "general" and self.blanket:
+            # Blanket automated-decision request: no grounded context to
+            # synthesize — always emit the deterministic decline.
+            self.context_blocks, self.sources = [], []
+            self.artifact = risk_agent._none_artifact()
+            self.follow_ups = _follow_ups("general")
         elif self.intent == "general":
             self.context_blocks, self.sources = _general_context()
             self.artifact = risk_agent._none_artifact()
@@ -1038,6 +1180,8 @@ class _RiskPlan:
         )
 
     def deterministic_answer(self) -> str:
+        if self.blanket:
+            return _BLANKET_DECLINE
         if self.intent == "exclusions" and self.gov is not None:
             return _deterministic_exclusions(self.gov)
         if self.whatif is not None:

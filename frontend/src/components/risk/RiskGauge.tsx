@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   PolarAngleAxis,
   RadialBar,
@@ -11,8 +12,10 @@ import { BAND_COLOR, BAND_LABEL } from "./riskTone";
  * Semicircular calibrated-probability gauge. The needle-free radial fill maps
  * 0–100% onto a 180° arc; the band label and percentage sit in the centre so
  * the reading never relies on colour alone. Static (isAnimationActive=false).
+ * memo()'d: all props are primitives, so this only actually recharts-relayouts
+ * when the probability/band/size themselves change, not on every parent render.
  */
-export function RiskGauge({
+export const RiskGauge = memo(function RiskGauge({
   probability,
   band,
   size = 168,
@@ -84,4 +87,4 @@ export function RiskGauge({
       </div>
     </div>
   );
-}
+});

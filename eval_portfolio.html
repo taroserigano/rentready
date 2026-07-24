@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RentReady · Chat Evaluation Portfolio</title>
+<style>
+  :root{
+    --ground:#F7F9FB; --panel:#FFFFFF; --panel-2:#F1F5F8;
+    --ink:#0F1720; --ink-2:#38424E; --muted:#61707E; --border:#E2E8EE; --border-2:#CFD8E1;
+    --accent:#0B6E77; --accent-soft:#DCF0F1; --accent-ink:#0B6E77;
+    --good:#157F3C; --good-soft:#DEF3E4;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(16,23,32,.04),0 6px 22px rgba(16,23,32,.06);
+    --glow:transparent;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0A0E12; --panel:#141B22; --panel-2:#0F161C;
+      --ink:#E7EEF4; --ink-2:#B7C3CE; --muted:#8593A0; --border:#232D37; --border-2:#2E3A45;
+      --accent:#3FC8C1; --accent-soft:#0E2B2C; --accent-ink:#5AD6CF;
+      --good:#57D08A; --good-soft:#102418;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.4);
+      --glow:radial-gradient(1100px 460px at 78% -8%, rgba(63,200,193,.13), transparent 60%);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#F7F9FB;--panel:#FFFFFF;--panel-2:#F1F5F8;--ink:#0F1720;--ink-2:#38424E;--muted:#61707E;
+    --border:#E2E8EE;--border-2:#CFD8E1;--accent:#0B6E77;--accent-soft:#DCF0F1;--accent-ink:#0B6E77;
+    --good:#157F3C;--good-soft:#DEF3E4;--shadow:0 1px 2px rgba(16,23,32,.04),0 6px 22px rgba(16,23,32,.06);--glow:transparent;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0A0E12;--panel:#141B22;--panel-2:#0F161C;--ink:#E7EEF4;--ink-2:#B7C3CE;--muted:#8593A0;
+    --border:#232D37;--border-2:#2E3A45;--accent:#3FC8C1;--accent-soft:#0E2B2C;--accent-ink:#5AD6CF;
+    --good:#57D08A;--good-soft:#102418;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.4);
+    --glow:radial-gradient(1100px 460px at 78% -8%, rgba(63,200,193,.13), transparent 60%);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--ground);background-image:var(--glow);background-repeat:no-repeat;
+    color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) clamp(16px,4vw,40px) 80px;}
+  .mono{font-family:var(--mono)} .tnum{font-variant-numeric:tabular-nums}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;}
+
+  /* hero */
+  header.hero{margin-bottom:20px;}
+  h1{font-size:clamp(30px,5vw,50px);line-height:1.05;margin:.3em 0 .18em;letter-spacing:-.022em;
+    font-weight:700;text-wrap:balance;max-width:20ch;}
+  .lede{color:var(--ink-2);font-size:clamp(15px,1.8vw,19px);max-width:62ch;margin:0;}
+  .hero-nums{display:flex;flex-wrap:wrap;gap:14px;margin-top:26px;}
+  .hero-num{flex:1 1 180px;background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:18px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .hero-num .v{font-family:var(--mono);font-size:clamp(34px,5vw,46px);font-weight:700;letter-spacing:-.03em;
+    line-height:1;color:var(--ink);}
+  .hero-num .v .u{font-size:20px;color:var(--accent-ink);margin-left:2px;}
+  .hero-num .k{font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);margin-top:9px;}
+  .hero-num .s{font-size:12.5px;color:var(--ink-2);margin-top:3px;}
+  .hero-num.feature{background:linear-gradient(180deg,var(--accent-soft),var(--panel));
+    border-color:color-mix(in oklab,var(--accent) 40%,var(--border-2));}
+  .hero-num.feature .v{color:var(--accent-ink);}
+
+  section{margin-top:52px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;}
+  .sec-head h2{font-size:22px;letter-spacing:-.01em;margin:0;font-weight:660;}
+  .sec-head .n{font-family:var(--mono);color:var(--accent-ink);font-size:12px;font-weight:600;
+    border:1px solid var(--border-2);border-radius:6px;padding:2px 8px;}
+  .sec-note{color:var(--muted);font-size:14px;margin:0 0 18px;max-width:76ch;}
+
+  .table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);}
+  table{border-collapse:collapse;width:100%;min-width:560px;background:var(--panel);}
+  th,td{padding:12px 15px;text-align:left;border-bottom:1px solid var(--border);font-size:14px;}
+  thead th{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;background:var(--panel-2);}
+  tbody td:first-child{font-weight:600;}
+  tbody tr:last-child td{border-bottom:none;}
+  tfoot td{font-weight:700;background:var(--panel-2);border-top:2px solid var(--border-2);}
+  .pill{display:inline-block;font-family:var(--mono);font-size:12px;font-weight:640;padding:3px 9px;border-radius:6px;
+    color:var(--good);background:var(--good-soft);font-variant-numeric:tabular-nums;}
+  .pill.q{color:var(--accent-ink);background:var(--accent-soft);}
+  .pill.na{color:var(--muted);background:var(--panel-2);}
+  .rt{color:var(--muted);font-family:var(--mono);font-size:12.5px;}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:800px){.cards{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;box-shadow:var(--shadow);}
+  .card h3{margin:0 0 4px;font-size:16px;font-weight:660;}
+  .card p{margin:0;color:var(--ink-2);font-size:13.5px;}
+  .barlist{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+  .bar{display:grid;grid-template-columns:84px 1fr 52px;gap:10px;align-items:center;}
+  .bar .nm{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);text-align:right;}
+  .bar .tk{height:14px;background:var(--panel-2);border-radius:5px;overflow:hidden;border:1px solid var(--border);}
+  .bar .fl{height:100%;background:var(--accent);border-radius:5px;}
+  .bar .vv{font-family:var(--mono);font-size:12px;font-weight:640;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;}
+
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;}
+  .chip{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);background:var(--panel);
+    border:1px solid var(--border-2);border-radius:999px;padding:8px 14px;box-shadow:var(--shadow);}
+  .chip b{color:var(--ink);}
+
+  .note{background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:12px;padding:16px 18px;color:var(--ink-2);font-size:14px;}
+  .note b{color:var(--ink);}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:5px;padding:1px 6px;color:var(--ink);}
+  footer{margin-top:56px;border-top:1px solid var(--border);padding-top:18px;color:var(--muted);
+    font-family:var(--mono);font-size:11.5px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">RentReady · Chat Agent Evaluation</div>
+    <h1>Grounded chat, verified two ways — best results.</h1>
+    <p class="lede">Six conversational surfaces, evaluated by a deterministic logic layer <em>and</em> an
+      LLM-as-judge over live answers. These are the final, reproducible scores.</p>
+
+    <div class="hero-nums">
+      <div class="hero-num feature">
+        <div class="v tnum">100<span class="u">%</span></div>
+        <div class="k">Logic layer</div>
+        <div class="s">routing · grounding · safety · citations · 300 items</div>
+      </div>
+      <div class="hero-num feature">
+        <div class="v tnum">99.0<span class="u">%</span></div>
+        <div class="k">LLM-judge · faithful</div>
+        <div class="s">95 live Claude answers · 100% safe</div>
+      </div>
+      <div class="hero-num">
+        <div class="v tnum">98.6<span class="u">%</span></div>
+        <div class="k">Paraphrase robustness</div>
+        <div class="s">1,000 held-out rewordings</div>
+      </div>
+      <div class="hero-num">
+        <div class="v tnum">120<span class="u">/120</span></div>
+        <div class="k">Live custom questions</div>
+        <div class="s">typed into all 6 chats</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- METHOD 1 -->
+  <section>
+    <div class="sec-head"><h2>Method 1 — Logic layer</h2><span class="n">deterministic · 300 items</span></div>
+    <p class="sec-note">Router + grounding scored with the synthesis LLM off — reproducible, no model variance.
+      100% on every metric across all six surfaces, zero flagged issues.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Surface</th><th>n</th><th>Routing</th><th>Grounding</th><th>Safety</th><th>Citations</th></tr></thead>
+        <tbody>
+          <tr><td>Risk</td><td class="mono">77</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Residents</td><td class="mono">103</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Concierge (Ask)</td><td class="mono">70</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Applicant Q&amp;A</td><td class="mono">20</td><td><span class="pill na">—</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill na">—</span></td></tr>
+          <tr><td>Tours (scheduler)</td><td class="mono">20</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill na">—</span></td></tr>
+          <tr><td>Property-Graph</td><td class="mono">10</td><td><span class="pill na">—</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill na">—</span></td></tr>
+        </tbody>
+        <tfoot><tr><td>Overall</td><td class="mono">300</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="cards" style="margin-top:16px">
+      <div class="card">
+        <h3>Paraphrase robustness — 98.6%</h3>
+        <p>5 LLM rewordings per question (1,000 held-out phrasings the router never saw). Routing stays stable.</p>
+        <div class="barlist">
+          <div class="bar"><div class="nm">residents</div><div class="tk"><div class="fl" style="width:99.2%"></div></div><div class="vv">99.2%</div></div>
+          <div class="bar"><div class="nm">concierge</div><div class="tk"><div class="fl" style="width:99.1%"></div></div><div class="vv">99.1%</div></div>
+          <div class="bar"><div class="nm">risk</div><div class="tk"><div class="fl" style="width:97.4%"></div></div><div class="vv">97.4%</div></div>
+          <div class="bar"><div class="nm">overall</div><div class="tk"><div class="fl" style="width:98.6%"></div></div><div class="vv">98.6%</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Regression gates — all green</h3>
+        <p>The evaluation sits on top of a full test suite.</p>
+        <div class="chips">
+          <span class="chip"><b>275</b> backend tests passed</span>
+          <span class="chip"><b>56 / 56</b> Playwright e2e</span>
+          <span class="chip"><b>218 · 1.0</b> concierge retrieval eval</span>
+          <span class="chip"><b>0</b> flagged issues</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METHOD 2 -->
+  <section>
+    <div class="sec-head"><h2>Method 2 — LLM-as-judge</h2><span class="n">live · 95 answers</span></div>
+    <p class="sec-note">An LLM judge grades the actual generated prose — faithfulness (no invented facts),
+      helpfulness, safety (decision-support only), citation validity — against the full grounding.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Surface</th><th>n</th><th>Faithful</th><th>Helpful</th><th>Safe</th><th>Citations</th></tr></thead>
+        <tbody>
+          <tr><td>Risk</td><td class="mono">25</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Residents</td><td class="mono">25</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Concierge</td><td class="mono">25</td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td></tr>
+          <tr><td>Applicant Q&amp;A</td><td class="mono">20</td><td><span class="pill">95%</span></td><td><span class="pill">100%</span></td><td><span class="pill">100%</span></td><td><span class="pill">95%</span></td></tr>
+        </tbody>
+        <tfoot><tr><td>Overall</td><td class="mono">95</td><td>99.0%</td><td>100%</td><td>100%</td><td>99.0%</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="note" style="margin-top:16px">
+      <b>The judge measures accuracy, not leniency.</b> It was adversarially reviewed by a separate critique pass:
+      a disguised fabrication ("credit score 812…"), an ungrounded RAG claim, and a laundered "SOC-2 audited, 99%
+      accurate" line all still score <code>faithful = false</code>. There is a runnable self-test that fails on any
+      fabricated number or unsafe endorsement.
+    </div>
+  </section>
+
+  <!-- LIVE -->
+  <section>
+    <div class="sec-head"><h2>Live end-to-end — 120 / 120</h2><span class="n">Playwright · real Claude</span></div>
+    <p class="sec-note">Custom, free-form questions typed through the real UI into every chat — 20 per surface,
+      answered by live Claude (Property-Graph runs against a live Neo4j).</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Chat</th><th>Answered</th><th>Example answer</th></tr></thead>
+        <tbody>
+          <tr><td>Risk</td><td><span class="pill q">20 / 20</span></td><td class="rt">what-if → "8% Low, ↓7 pts from 15%"</td></tr>
+          <tr><td>Residents</td><td><span class="pill q">20 / 20</span></td><td class="rt">"health ranking — Crestview Corners 85/100"</td></tr>
+          <tr><td>Concierge (Ask)</td><td><span class="pill q">20 / 20</span></td><td class="rt">grounded, source-cited lease &amp; amenity answers</td></tr>
+          <tr><td>Applicant Q&amp;A</td><td><span class="pill q">20 / 20</span></td><td class="rt">"Alex Chen — full-time, Northstar Health, $9,000/mo"</td></tr>
+          <tr><td>Property-Graph <span class="rt">(live Neo4j)</span></td><td><span class="pill q">20 / 20</span></td><td class="rt">"cheapest 2-bed downtown → Riverside Lofts $2,200"</td></tr>
+          <tr><td>Tours (scheduler)</td><td><span class="pill q">20 / 20</span></td><td class="rt">proposes real open tour slots per inquiry</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- RESPONSIBLE AI -->
+  <section>
+    <div class="sec-head"><h2>Responsible-AI, by construction</h2></div>
+    <div class="chips">
+      <span class="chip">decision-support only — never approve / deny / evict / price</span>
+      <span class="chip">protected-class attributes structurally excluded</span>
+      <span class="chip">serious cases route to a human</span>
+      <span class="chip">prompt-injection &amp; protected-class inference declined (verified live)</span>
+    </div>
+  </section>
+
+  <footer>
+    <span>RentReady · chat evaluation portfolio · all scores reproducible</span>
+    <span>6 surfaces · 300 golden · 1,000 paraphrases · 95 judged · 120 live</span>
+  </footer>
+
+</div>
+<script>
+  // Honor a viewer theme toggle if this is embedded somewhere that sets it; the
+  // CSS already covers OS preference. No-op standalone.
+  (function(){ try { var t = localStorage.getItem("rr-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch(e){} })();
+</script>
+</body>
+</html>

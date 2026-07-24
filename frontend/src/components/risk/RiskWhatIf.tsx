@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { getApplicant, getRisk, scoreRisk } from "../../api";
 import type { ApplicantProfile, RiskResult } from "../../types";
@@ -10,7 +10,16 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
-function SliderRow({
+// Module-level (not an inline arrow in JSX) so the credit-score SliderRow
+// gets a referentially-stable `format` prop too, matching money() — needed
+// for the memo() below to actually skip the other rows while dragging one.
+function asString(n: number): string {
+  return String(n);
+}
+
+/* memo()'d: dragging one slider re-renders RiskWhatIf on every tick; this
+ * keeps the other three SliderRows from re-rendering along with it. */
+const SliderRow = memo(function SliderRow({
   label,
   min,
   max,
@@ -58,7 +67,7 @@ function SliderRow({
       />
     </label>
   );
-}
+});
 
 /**
  * Risk What-if — an exploratory re-score of the SELECTED applicant. Seeds an
@@ -127,6 +136,14 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
   function patch(key: keyof ApplicantProfile, value: number) {
     setProfile((p) => (p ? { ...p, [key]: value } : p));
   }
+
+  // Stable identities (empty deps) so the memo()'d SliderRow for an untouched
+  // field doesn't re-render just because a sibling slider's onChange prop
+  // would otherwise be a fresh closure every render.
+  const onIncomeChange = useCallback((n: number) => patch("monthly_income", n), []);
+  const onRentChange = useCallback((n: number) => patch("desired_rent", n), []);
+  const onCreditChange = useCallback((n: number) => patch("credit_score", n), []);
+  const onDebtChange = useCallback((n: number) => patch("monthly_debt_payments", n), []);
 
   function reset() {
     setProfile(base);
@@ -199,7 +216,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
                   value={income}
                   base={baseIncome}
                   format={money}
-                  onChange={(n) => patch("monthly_income", n)}
+                  onChange={onIncomeChange}
                 />
                 <SliderRow
                   label="Desired rent"
@@ -209,7 +226,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
                   value={rent}
                   base={baseRent}
                   format={money}
-                  onChange={(n) => patch("desired_rent", n)}
+                  onChange={onRentChange}
                 />
                 <SliderRow
                   label="Credit score"
@@ -218,8 +235,8 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
                   step={5}
                   value={credit}
                   base={baseCredit}
-                  format={(n) => String(n)}
-                  onChange={(n) => patch("credit_score", n)}
+                  format={asString}
+                  onChange={onCreditChange}
                 />
                 <SliderRow
                   label="Monthly debt payments"
@@ -229,7 +246,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
                   value={debt}
                   base={baseDebt}
                   format={money}
-                  onChange={(n) => patch("monthly_debt_payments", n)}
+                  onChange={onDebtChange}
                 />
               </div>
 

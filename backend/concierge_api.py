@@ -180,7 +180,7 @@ def lease(property_id: str) -> dict:
 
 @router.get("/concierge/lease/{property_id}/pdf")
 def lease_pdf_route(property_id: str) -> Response:
-    """The generated lease as a real PDF — same 18 sections as ``lease()``
+    """The generated lease as a real PDF — same 19 sections as ``lease()``
     above, rendered for download/inline viewing. 404 if unknown."""
     t0 = time.perf_counter()
     p = _property_or_404(property_id)

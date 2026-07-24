@@ -6,7 +6,7 @@ test.describe("navigation + deep links", () => {
     await page.goto("/");
     await expectShell(page);
 
-    await clickNav(page, "Risk");
+    await clickNav(page, "Risk Assessment");
     await expect(page).toHaveURL(/#\/risk$/);
     await expect(page.getByRole("heading", { name: "Late-payment risk", level: 1 })).toBeVisible();
 

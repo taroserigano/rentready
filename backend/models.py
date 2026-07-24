@@ -180,7 +180,8 @@ class TourAgent(BaseModel):
     id: str
     name: str
     role: str = "Leasing Consultant"
-    # Neighborhood names this agent covers; [] means "covers all areas".
+    # Property ids this agent is dedicated to (normally exactly one, so no
+    # two properties ever share an agent); [] means "covers all properties".
     areas: list[str] = Field(default_factory=list)
 
 
@@ -512,6 +513,8 @@ class ResidentRow(BaseModel):
     serious_probability: float
     serious_band: Literal["low", "medium", "high"]
     current_balance: float
+    # Historical count of late payments in the trailing 12 months (from the ledger).
+    late_payments_12mo: int = 0
     top_driver: str = ""
 
 

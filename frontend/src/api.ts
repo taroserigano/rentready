@@ -22,9 +22,11 @@ import type {
   ConciergeAnswer,
   ConciergeMeta,
   ConciergeEvalResult,
+  Source,
   LeaseDoc,
   RiskResult,
   RiskListResponse,
+  RiskModelCard,
   RiskEvalResult,
   RiskChatRequest,
   RiskChatAnswer,
@@ -287,7 +289,7 @@ export async function sendFeedback(input: {
 
 export async function graphAsk(
   question: string,
-): Promise<{ answer: string; cypher: string }> {
+): Promise<{ answer: string; cypher: string; source: "template" | "anthropic" | "rules" }> {
   return json(
     await fetch(`${BASE}/graph-ask`, {
       method: "POST",
@@ -458,7 +460,10 @@ export async function conciergeAsk(input: {
 export interface ConciergeStreamHandlers {
   onMeta: (meta: ConciergeMeta) => void;
   onToken: (text: string) => void;
-  onDone: (source: string) => void;
+  /** `sources`, when present, replaces the `meta` sources with the subset the
+   * finished answer actually cited — narrower than (or equal to) what `meta`
+   * sent, never wider. */
+  onDone: (source: string, sources?: Source[]) => void;
 }
 
 /**
@@ -513,7 +518,7 @@ export async function conciergeAskStream(
     } else if (frame.type === "token") {
       handlers.onToken(frame.text ?? "");
     } else if (frame.type === "done") {
-      handlers.onDone(frame.source ?? "anthropic");
+      handlers.onDone(frame.source ?? "anthropic", frame.sources as Source[] | undefined);
     }
   };
 
@@ -571,6 +576,10 @@ export async function scoreRisk(profile: ApplicantProfile): Promise<RiskResult> 
 /** Batch risk over all saved applicants, ranked highest-first. */
 export async function listRisk(): Promise<RiskListResponse> {
   return json(await fetch(`${BASE}/risk`));
+}
+
+export async function getRiskModelCard(): Promise<RiskModelCard> {
+  return json(await fetch(`${BASE}/risk/model-card`));
 }
 
 export async function runRiskEval(): Promise<RiskEvalResult> {

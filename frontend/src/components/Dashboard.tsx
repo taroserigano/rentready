@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -13,6 +13,7 @@ import {
 import type { DashboardStats } from "../types";
 import { getDashboardStats } from "../api";
 import { Avatar } from "./Avatar";
+import { Badge } from "./Badge";
 
 type Verdict = "qualified" | "needs_review" | "not_qualified";
 
@@ -98,7 +99,7 @@ function when(s: string): string {
   });
 }
 
-export function Dashboard() {
+export function Dashboard({ health }: { health?: Record<string, unknown> | null }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -125,6 +126,9 @@ export function Dashboard() {
       <header>
         <h1>Dashboard</h1>
         <p>The whole system at a glance: applicants, homes, traffic, feedback.</p>
+        <div className="badges">
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
+        </div>
       </header>
 
       {loading && (
@@ -157,22 +161,38 @@ function DashboardBody({
   stats: DashboardStats;
   onRefresh: () => void;
 }) {
-  const verdictData = (Object.keys(VERDICT_LABELS) as Verdict[]).map((v) => ({
-    name: VERDICT_LABELS[v],
-    count: stats.verdicts[v] ?? 0,
-    color: VERDICT_COLORS[v],
-  }));
+  // Memoized so recharts (which treats a new array reference as new data and
+  // redoes its layout/scale pass) only recomputes when the underlying stats
+  // actually change, not on every DashboardBody render.
+  const verdictData = useMemo(
+    () =>
+      (Object.keys(VERDICT_LABELS) as Verdict[]).map((v) => ({
+        name: VERDICT_LABELS[v],
+        count: stats.verdicts[v] ?? 0,
+        color: VERDICT_COLORS[v],
+      })),
+    [stats.verdicts],
+  );
 
   const requestsByEndpoint = stats.traffic.requests_by_endpoint ?? {};
-  const requestVolumeData = Object.entries(requestsByEndpoint).map(([endpoint, count]) => ({
-    name: ENDPOINT_LABELS[endpoint] ?? _titleCase(endpoint),
-    count,
-  }));
+  const requestVolumeData = useMemo(
+    () =>
+      Object.entries(requestsByEndpoint).map(([endpoint, count]) => ({
+        name: ENDPOINT_LABELS[endpoint] ?? _titleCase(endpoint),
+        count,
+      })),
+    [requestsByEndpoint],
+  );
 
   const byArea = stats.properties.by_area ?? {};
-  const areaEntries = Object.entries(byArea);
-  const areaData = areaEntries.slice(0, MAX_AREA_BARS).map(([name, count]) => ({ name, count }));
-  const areasOmitted = Math.max(0, areaEntries.length - MAX_AREA_BARS);
+  const areaData = useMemo(
+    () =>
+      Object.entries(byArea)
+        .slice(0, MAX_AREA_BARS)
+        .map(([name, count]) => ({ name, count })),
+    [byArea],
+  );
+  const areasOmitted = Math.max(0, Object.keys(byArea).length - MAX_AREA_BARS);
 
   const petsPct =
     stats.properties.total > 0

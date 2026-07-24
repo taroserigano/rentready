@@ -65,6 +65,59 @@ def test_list_residents_shape(client):
     assert row["late_band"] in ("low", "medium", "high")
 
 
+def test_score_many_source_reflects_actual_fallback_not_static_status(monkeypatch):
+    """Regression: the response-level "source" used to come from a static
+    residents_risk.status()["trained"] check — true whenever the model bundle
+    loaded at all, even if predict_bulk silently fell back to the heuristic
+    for some heads on THIS request. It must instead reflect what actually
+    happened while scoring, so a partial degradation isn't mislabeled "model"."""
+    import resident_api
+    import residents_risk
+
+    def _head(source: str, **extra) -> dict:
+        return {"probability": 0.2, "band": "low", "source": source, **extra}
+
+    def fake_predict_bulk(residents, heads=None):
+        out = []
+        for i, r in enumerate(residents):
+            # First resident's "late" head fell back to heuristic; everything
+            # else (for every resident) used the model.
+            late_source = "heuristic" if i == 0 else "model"
+            out.append({
+                "resident_id": r.get("resident_id", ""),
+                "late": _head(late_source),
+                "arrears": _head("model", expected_balance=0.0),
+                "churn": _head("model"),
+                "serious": _head("model"),
+            })
+        return out
+
+    monkeypatch.setattr(residents_risk, "predict_bulk", fake_predict_bulk)
+    # Even though the bundle claims fully "trained", one heuristic head above
+    # must still win — proves the label no longer comes from this static check.
+    monkeypatch.setattr(residents_risk, "status", lambda: {"trained": True})
+
+    residents = residents_risk.load_residents()[:3]
+    rows, aggs, source = resident_api._score_many(residents)
+    assert len(rows) == len(residents)
+    assert source == "heuristic"
+
+    # And the all-model case still reports "model".
+    monkeypatch.setattr(
+        residents_risk, "predict_bulk",
+        lambda residents, heads=None: [
+            {
+                "resident_id": r.get("resident_id", ""),
+                "late": _head("model"), "arrears": _head("model", expected_balance=0.0),
+                "churn": _head("model"), "serious": _head("model"),
+            }
+            for r in residents
+        ],
+    )
+    _, _, source_all_model = resident_api._score_many(residents)
+    assert source_all_model == "model"
+
+
 def test_list_residents_filtered_by_property(client, sample_resident):
     pid = sample_resident["property_id"]
     body = client.get("/residents", params={"property_id": pid}).json()

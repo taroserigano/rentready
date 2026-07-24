@@ -138,7 +138,7 @@ export default function App() {
       ["tours", "Tours"],
       ["ask", "Ask"],
       ["dashboard", "Dashboard"],
-      ["risk", "Risk"],
+      ["risk", "Risk Assessment"],
       ["residents", "Residents"],
       ["evaluations", "Evaluations"],
       ["monitoring", "Monitoring"],
@@ -199,7 +199,7 @@ export default function App() {
     return (
       <>
         <Nav view={view} setView={navigate} commands={commands} />
-        <PropertyBrowser onOpenListing={goToProperty} />
+        <PropertyBrowser onOpenListing={goToProperty} health={health} />
       </>
     );
   }
@@ -226,6 +226,7 @@ export default function App() {
         <Concierge
           initialPropertyId={askPropertyId ?? undefined}
           onViewProperty={goToProperty}
+          health={health}
         />
       </>
     );
@@ -235,7 +236,7 @@ export default function App() {
     return (
       <>
         <Nav view={view} setView={navigate} commands={commands} />
-        <Tours initialPropertyId={tourPropertyId ?? undefined} />
+        <Tours initialPropertyId={tourPropertyId ?? undefined} health={health} />
       </>
     );
   }
@@ -244,7 +245,7 @@ export default function App() {
     return (
       <>
         <Nav view={view} setView={navigate} commands={commands} />
-        <Dashboard />
+        <Dashboard health={health} />
       </>
     );
   }
@@ -253,7 +254,7 @@ export default function App() {
     return (
       <>
         <Nav view={view} setView={navigate} commands={commands} />
-        <Risk initialApplicantId={riskApplicantId ?? undefined} />
+        <Risk initialApplicantId={riskApplicantId ?? undefined} health={health} />
       </>
     );
   }
@@ -265,6 +266,7 @@ export default function App() {
         <Residents
           initialPropertyId={residentPropertyId ?? undefined}
           initialResidentId={residentId ?? undefined}
+          health={health}
         />
       </>
     );
@@ -363,7 +365,7 @@ function Nav({
       {tab("tours", "Tours")}
       {tab("ask", "Ask")}
       {tab("dashboard", "Dashboard")}
-      {tab("risk", "Risk")}
+      {tab("risk", "Risk Assessment")}
       {tab("residents", "Residents")}
       <ThemeToggle />
       {commands && <CommandPalette commands={commands} />}

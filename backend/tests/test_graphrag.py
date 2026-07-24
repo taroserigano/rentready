@@ -67,3 +67,135 @@ def test_clean_cypher_strips_fences_and_prefix():
     assert graphrag._clean_cypher("```cypher\nMATCH (n) RETURN n```") == "MATCH (n) RETURN n"
     assert graphrag._clean_cypher("cypher\nMATCH (n) RETURN n") == "MATCH (n) RETURN n"
     assert graphrag._clean_cypher("MATCH (n) RETURN n") == "MATCH (n) RETURN n"
+
+
+def test_read_only_cypher_guard_known_gap_documents_why_layer_2_exists():
+    """The keyword blocklist is a fast pre-check, not the real safety
+    boundary — a write hidden behind an APOC procedure name containing none
+    of the blocked keywords slips past it. This is why graph_ask() also runs
+    the query under a real Neo4j read-mode transaction (run_read_only_cypher),
+    which the server itself enforces regardless of how the write is spelled."""
+    sneaky_write = "CALL apoc.refactor.rename.label('Property','Deleted') YIELD committedOperations RETURN committedOperations"
+    assert graphrag.is_read_only_cypher(sneaky_write) is True
+
+
+def test_run_read_only_cypher_uses_read_routing(monkeypatch):
+    """graph.run_read_only_cypher must open the query in READ access mode —
+    this is what actually stops a write query from executing, not the
+    client-side keyword check."""
+    from neo4j import RoutingControl
+
+    calls = {}
+
+    class FakeDriver:
+        def execute_query(self, cypher, params, database_, routing_):
+            calls["cypher"] = cypher
+            calls["routing_"] = routing_
+            return ([], None, None)
+
+    monkeypatch.setattr(graph, "_driver", lambda: FakeDriver())
+    graph.run_read_only_cypher("MATCH (n) RETURN n")
+    assert calls["routing_"] is RoutingControl.READ
+
+
+# ---------------------------------------------------------------------------
+# Deterministic Cypher templates (the common filter/search shapes) — no
+# Cypher-writing LLM call, so these are pure functions testable offline.
+# ---------------------------------------------------------------------------
+
+
+def test_template_area_and_pets():
+    cypher, params, kind, meta = graphrag._build_template(
+        "Which properties in South Congress allow pets?"
+    )
+    assert kind == "property_search"
+    assert params["area"] == "South Congress"
+    assert "pets_allowed = true" in cypher
+    assert meta["want_pets"] is True
+
+
+def test_template_beds_and_price():
+    cypher, params, kind, meta = graphrag._build_template("Cheapest 2-bedroom under $2,000?")
+    assert kind == "property_search"
+    assert params["min_beds"] == 2
+    assert params["max_rent"] == 2000.0
+
+
+def test_template_area_reverse_lookup_for_amenity():
+    cypher, params, kind, meta = graphrag._build_template("Which areas have a gym?")
+    assert kind == "areas_with_amenity"
+    assert params == {"amenity": "Gym"}
+    assert "IN_NEIGHBORHOOD" in cypher
+
+
+def test_template_multiple_amenities_and_parking():
+    cypher, params, kind, meta = graphrag._build_template("Homes with a pool and parking")
+    assert kind == "property_search"
+    assert params["wanted_amenities"] == ["Pool"]
+    assert meta["want_parking"] is True
+    assert "collect(" in cypher and "all(" in cypher
+
+
+def test_no_template_for_unfiltered_question():
+    """A question with no recognizable filter falls back to the free-form LLM
+    Cypher path, unchanged from before this feature existed."""
+    assert graphrag._build_template("How many properties are there?") is None
+
+
+def test_display_cypher_inlines_param_values():
+    cypher = "MATCH (p:Property) WHERE p.monthly_rent <= $max_rent RETURN p"
+    rendered = graphrag._display_cypher(cypher, {"max_rent": 2000.0})
+    assert "$max_rent" not in rendered
+    assert "2000.0" in rendered
+
+
+def test_template_answer_property_search_lists_matches():
+    rows = [{"name": "The Heights", "property_type": "Apartment",
+             "monthly_rent": 1300, "bedrooms": 1, "bathrooms": 1}]
+    answer = graphrag._template_answer("property_search", rows, {})
+    assert "The Heights" in answer and "$1,300/mo" in answer
+
+
+def test_template_answer_property_search_handles_no_matches():
+    assert "No properties" in graphrag._template_answer("property_search", [], {})
+
+
+def test_template_answer_areas_with_amenity():
+    rows = [{"neighborhood": "Zilker"}, {"neighborhood": "Downtown"}]
+    answer = graphrag._template_answer("areas_with_amenity", rows, {"amenity": "Gym"})
+    assert "Zilker" in answer and "Downtown" in answer and "Gym" in answer
+
+
+def test_graph_ask_uses_template_source_when_matched(monkeypatch):
+    """graph_ask() must skip the Cypher-writing LLM entirely for a recognized
+    filter shape — even offline (no Anthropic key), as long as Neo4j itself is
+    reachable — and must not fall through to the free-form LLM path."""
+    monkeypatch.setattr(graph, "is_available", lambda: True)
+    monkeypatch.setattr(
+        graph, "run_read_only_cypher",
+        lambda cypher, params=None: [
+            {"name": "The Heights", "property_type": "Apartment",
+             "monthly_rent": 1300, "bedrooms": 1, "bathrooms": 1}
+        ],
+    )
+    result = graphrag.graph_ask("Which properties in South Congress allow pets?")
+    assert result["source"] == "template"
+    assert "The Heights" in result["answer"]
+    assert "$area" not in result["cypher"]  # rendered for display, not the raw placeholder
+
+
+def test_graph_ask_template_degrades_when_neo4j_unavailable():
+    """The autouse conftest fixture forces graph.is_available() False, so a
+    matched template must degrade gracefully rather than crash."""
+    result = graphrag.graph_ask("Which properties in South Congress allow pets?")
+    assert result["source"] == "rules"
+    assert "not available" in result["answer"]
+
+
+def test_graph_ask_coalesces_extended_thinking_content_blocks(monkeypatch):
+    """A regression guard: the free-form answer step must extract only the
+    "text" block, not stringify a "thinking" block ahead of it."""
+    assert graphrag._coalesce([
+        {"type": "thinking", "thinking": "reasoning...", "signature": "abc"},
+        {"type": "text", "text": "final answer"},
+    ]) == "final answer"

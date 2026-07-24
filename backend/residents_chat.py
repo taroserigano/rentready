@@ -53,6 +53,24 @@ _GOVERNANCE_RE = re.compile(
     r"(?:features?|inputs?|factors?|data)\s+you\s+use|you use|what do you look at|"
     r"how (?:is|are|do you|does it) .* (?:measured|calculated|computed|defined|work)|"
     r"how measured|how do you (?:know|decide|predict)|what does the model (?:use|look at)|"
+    # Feature-policy phrasings that describe USING / RELYING ON / FACTORING IN an
+    # input, or what the score is BASED ON — "do you rely on X", "is X factored
+    # in / taken into account", "what goes into the score", "the model uses X",
+    # "X as a signal", "the features the model uses". These are governance, not a
+    # scored explanation of one resident.
+    r"rel(?:y|ies|ied|ying) on|utiliz\w*|makes? use of|"
+    r"set up to use|designed to use|able to use|"
+    # "based on" only as a feature question ("what is the score based on",
+    # "based on what") — NOT "refuse to renew based on this" (an action).
+    r"based on what|what\b[^?.]{0,30}\bbased on|goes? into|input into|"
+    r"factor\w* in\b|factored into|factor\w* into|take[sn]? .{0,15}into account|"
+    r"into account|come[sd]? into play|coming into play|"
+    r"(?:the model|it|you)\s+uses?\b|\bsignals?\b|\bfeatures?\b|"
+    # "is X a factor" / "are X factors" — a yes/no feature-policy question in
+    # the same shape as "is X used", just with "factor" instead of "used".
+    r"\bis\b[^?.]{0,25}\ba\s+factor\b|\bare\b[^?.]{0,25}\bfactors?\b|"
+    r"intended use|"
+    r"\blocation\b|neighbou?rhood|"
     r"model card|governance|fair|fairness|bias|biased|discriminat\w*|protected|proxy|redlin\w*|"
     r"race|ethnic\w*|national origin|gender|\bsex\b|disab\w*|religion|"
     r"familial|marital|dependents?|children|kids?|minors?|\bage\b|\bstudent\b|criminal"
@@ -69,7 +87,16 @@ _PROPERTY_HEALTH_RE = re.compile(
     r"(?:which|what) (?:propert(?:y|ies)|apartment|building|communit(?:y|ies)|unit)|"
     r"best (?:propert|apartment|building|communit)|worst (?:propert|apartment|building|communit)|"
     r"needs?\b.{0,20}attention|lowest[-\s]scoring|dragging\b.{0,30}\bdown|"
-    r"rank(?:ing)? .* (?:propert|apartment|building)|"
+    # Ranking a set of PROPERTIES, in either word order ("rank my properties",
+    # "sort/order my properties best to worst", "properties ranked from best to
+    # worst"). Without the reverse form, "put my properties in order ... worst"
+    # fell through to severity on the bare "worst".
+    # "list" deliberately excluded — "list the tenants at this property" is a
+    # resident ranking, not a property ranking; rank/sort/order/put are property-
+    # ranking verbs.
+    r"(?:rank\w*|sort\w*|order|put)\b[^?.]{0,30}(?:propert|apartment|building|communit)|"
+    r"(?:propert(?:y|ies)|apartment|building|communit(?:y|ies))\b[^?.]{0,40}"
+    r"(?:rank\w*|sort\w*|in order|best to worst|worst to best|from (?:the )?best|from (?:the )?worst)|"
     r"how (?:healthy|is this property|is my property|are (?:my|the) propert)"
     r")",
     re.IGNORECASE,
@@ -80,28 +107,62 @@ _PROPERTY_HEALTH_RE = re.compile(
 # ranks PROPERTIES). Without this, these phrasings fell through to "general"
 # and the assistant claimed it had no resident data at all, even in portfolio
 # scope where a ranking is exactly what portfolio_health-style tools produce.
-# "tenants" is treated as a synonym for "residents" throughout. "renew" and
-# "fall behind" are included so "which tenants should I not renew" and "list the
-# tenants most likely to fall behind" rank residents rather than falling through
-# to horizon / retention.
+# "tenants" is treated as a synonym for "residents" throughout, alongside the
+# colloquial "renters" / "lessees" / "occupants" (so portfolio "which renters
+# are most likely to fall behind / at risk / behind on rent" ranks residents
+# rather than falling through to horizon / general). "renew" and "fall behind"
+# are included so "which tenants should I not renew" and "list the tenants most
+# likely to fall behind" rank residents rather than falling through to horizon /
+# retention.
+_SUBJECTS = r"(?:residents?|tenants?|renters?|lessees?|occupants?|units?|people|persons?|person|someone|somebody|anyone|anybody|individuals?|folks|households?)"
 _AT_RISK_RESIDENTS_RE = re.compile(
     r"("
-    r"(?:which|what|who|show me|list)\b.{0,25}\b(?:residents?|tenants?)\b.{0,30}"
-    r"(?:at risk|risk|behind|late|delinquent|owe|owing|arrears|churn|renew|fall)|"
-    r"\b(?:residents?|tenants?)\b.{0,20}(?:most|highest)\b.{0,10}\brisk|"
-    r"(?:riskiest|highest[\s-]risk)\s+(?:residents?|tenants?)|"
-    r"who\s+(?:is|are)\s+(?:most\s+)?likely\s+to\s+(?:miss|churn|leave|pay late|fall behind)|"
-    r"who\s+owes\s+the\s+most|who\s+is\s+behind\s+on\s+rent"
+    # "which/who/list/show me/give me/identify <subject> ... <risk word>" — the
+    # gap is generous (.{0,45}) because paraphrases pad the middle ("at this
+    # property are considered the highest ...", "with the highest chance of ...").
+    r"(?:which|what|who|whom|show me|list|give me|tell me|identify|find|name|rank)\b.{0,25}\b"
+    + _SUBJECTS + r"\b.{0,45}"
+    r"(?:at risk|risk|behind|late|delinquent|owe|owed|owes|owing|arrears|balance|"
+    r"outstanding|debt|churn|renew|fall|miss|slip|shaky|trouble)|"
+    r"\b" + _SUBJECTS + r"\b.{0,20}(?:most|highest|greatest|biggest)\b.{0,10}\brisk|"
+    # "riskiest / high-risk / shakiest <subject>" (risk word BEFORE the subject).
+    r"(?:riskiest|highest[\s-]?risk|high[\s-]?risk|most (?:at[\s-]?risk|likely)|shakiest)\s+"
+    + _SUBJECTS + r"|"
+    # "who is most likely to / most at risk of / has the greatest chance of ..."
+    # (no explicit subject word — the "who" carries it).
+    r"who\s+(?:is|are|has|have)\b[^?.]{0,30}"
+    r"(?:most likely|at risk|most at[\s-]?risk|highest risk|biggest risk|"
+    r"greatest? (?:risk|likelihood|chance)|highest (?:chance|likelihood)|likely to)|"
+    # balance-ranking: "who owes the most", "who has the largest outstanding debt".
+    r"who\b[^?.]{0,25}(?:owes?|owed|owing|balance|outstanding|debt|behind on rent)"
     r")",
     re.IGNORECASE,
+)
+
+# Within an at-risk-residents ranking, which metric to rank by: churn/
+# non-renewal risk (this cue) vs. late-payment risk (no cue -> the default).
+# Without this, a portfolio ranking asked in churn/renewal terms ("which
+# residents are at risk of churning?") still ranked and labeled everyone by
+# their LATE-PAYMENT probability -- a different number attached to the wrong
+# question, silently wrong rather than merely incomplete.
+_CHURN_METRIC_CUE = re.compile(
+    r"\b(churn\w*|renew\w*|non[\s-]?renew\w*|retention)\b", re.IGNORECASE
 )
 
 # Compare: this resident vs their property vs the portfolio.
 _COMPARE_RE = re.compile(
     r"\b("
-    r"compare|versus|\bvs\.?\b|percentile|\brank\b|ranking|"
-    r"relative to|compared to|against (?:the )?(?:portfolio|property|others|average)|"
-    r"how does .* compare|typical resident|other residents?|the average"
+    # "compar*" covers compare/compares/compared/comparison; "in relation to" /
+    # "in comparison" / "measure up" / "stack up" / "better or worse" / "where
+    # do they stand" are all relative-position phrasings that otherwise leaked to
+    # explain.
+    r"compar\w*|versus|\bvs\.?\b|percentile|\brank\b|ranking|"
+    r"relative to|in relation to|in comparison|"
+    r"against (?:the |an? )?(?:portfolio|propert|other|average|typical|peer|rest)|"
+    r"how (?:does|do) .* (?:compar|stack|measure|rank)|"
+    r"measure up|stack(?:s|ed)? up|where (?:do|does) .{0,20}? stand|"
+    r"better or worse|worse or better|"
+    r"typical (?:resident|tenant|renter|person)|other residents?|(?:the|an) average"
     r")\b",
     re.IGNORECASE,
 )
@@ -110,26 +171,47 @@ _COMPARE_RE = re.compile(
 # arrears so "clear their balance" is a cure question, not an arrears-$ one.
 _CURE_RE = re.compile(
     r"\b("
-    r"cure|clear (?:the|their|his|her|this)? ?balance|clear it|"
-    r"catch up|caught up|pay (?:it|the balance|them)? ?off|pay(?:ing)? down|"
-    r"get current|become current|bring (?:the )?balance to zero|"
-    r"resolve (?:the|their)? ?(?:balance|arrears|debt)|when will .* (?:cured|cleared|current)|"
-    # "go away on its own", "clear on its own", "disappear" — a self-cure question
-    # about an existing balance, not an arrears-$ question.
-    r"go away|on its own|clear up|sort itself out|disappear|resolve itself"
+    r"cure|"
+    # "clear/clears/cleared/clearing" (their balance, it, up, what they owe) — a
+    # trailing "\w*" would swallow "clearly", so pin the inflections explicitly.
+    r"clear(?:s|ed|ing)?\b|"
+    # get square / paid off / paid back — "will they pay it off/down/back".
+    r"catch\w* up|caught up|pay(?:s|ing|ed)?\b[^?.]{0,15}?(?:off|down|back)|"
+    r"pay (?:off|down|back)|repay\w*|settl\w*|"
+    # get current / square / even / on track — "back on track", "dig out".
+    r"get(?:ting)?\b[^?.]{0,12}?(?:current|square|even|caught up|on track|back on track)|"
+    r"back on track|become current|"
+    r"bring (?:the )?balance to zero|balance to zero|(?:go|going|goes)? ?to zero|"
+    r"resolv\w*|dig (?:out|their way out|themselves out)|recover\w*|"
+    r"when will .* (?:cured|cleared|current|paid|settled|square)|"
+    # "go away on its own", "clears up on its own", "take care of itself",
+    # "disappear" — a self-cure question about an existing balance.
+    r"go away|on its own|clears? up|sort itself out|disappear|"
+    r"resolve itself|take care of (?:itself|themselves)"
     r")\b",
     re.IGNORECASE,
 )
 
 # Retention / renewal: will they renew / stay / move out / churn.
+# NOTE: bare stems carry a trailing "\w*" (not a closing "\b") so inflections
+# match — "renew" must also catch "renewing"/"renewed"/"renewals", or those
+# paraphrases fall through to explain/arrears. Renewal phrasings that describe
+# STAYING PUT ("stick around", "stays beyond their lease", "remain past their
+# lease", "continue living here", "lease expires/ends/term") contain no
+# pay-late token, so the _LATE_LIKELIHOOD_CUE below never flips them to horizon.
 _RETENTION_RE = re.compile(
     r"\b("
-    r"renew|renewal|non[\s-]?renew|churn|retain|retention|"
+    r"renew\w*|non[\s-]?renew\w*|churn|retain|retention|"
     r"move out|moving out|move-out|leave|leaving|vacat|"
-    r"will (?:they|he|she) stay|are they staying|lease end|"
+    r"will (?:they|he|she) stay|are they staying|"
+    r"lease end\w*|lease term|lease expir\w*|end of (?:their|the|this) lease|"
+    r"remain\w* (?:here|past|beyond|with us|a (?:resident|tenant|renter)|in (?:place|the|their))|"
+    r"continue (?:to )?(?:living|leasing|renting|stay|residing)|continue living|"
     # "will they still be here (next year)", "here next year", "stick around" —
     # a stay/renewal question; must beat the horizon reading of "next year".
-    r"still (?:be )?(?:here|around|with us|living here)|(?:be |stay )here next|stick around"
+    r"still (?:be )?(?:here|around|with us|living here)|(?:be |stay )here next|"
+    r"stick\w* around|stay\w* (?:beyond|past|after|through|put)|"
+    r"(?:beyond|past|after) (?:their|the|this)? ?(?:current )?lease"
     r")\b",
     re.IGNORECASE,
 )
@@ -151,12 +233,22 @@ _ARREARS_RE = re.compile(
 # Frequency: how often / how many times late / number of late months.
 _FREQUENCY_RE = re.compile(
     r"\b("
-    r"how often|how many (?:times|months|payments)|number of (?:times|late|missed)|"
-    r"how frequent|frequency|how many late|count of late|times late|"
-    r"how many .* (?:late|missed)|"
+    # "how frequent\w*" / "how regular\w*" catch "how frequently"/"how regularly"
+    # (a closing "\b" after "frequent" blocked the "-ly" form). The count/number
+    # lists include months + missed + payments so "number of months late" and
+    # "how many missed payments" / "count of missed payments" route here.
+    r"how often|how many (?:times|months|payments|missed|late)|"
+    r"number of (?:times|late|missed|months|payments)|"
+    r"how frequent\w*|how regular\w*|frequency|how many late|"
+    r"count of (?:late|missed|times)|times late|"
+    r"how many .* (?:late|missed)|(?:rate|count|number) of\b[^?.]{0,20}(?:late|miss)|"
     # "how much lateness" / "how much late-paying" — a COUNT question about
-    # lateness, so frequency, not arrears-$.
-    r"lateness|how much .*(?:late|miss)"
+    # lateness, so frequency, not arrears-$. Anchored to "how much" (rather than
+    # a bare "lateness" trigger): "how bad could their lateness get" is a
+    # severity question that happens to use the word "lateness", and severity's
+    # "how bad" cue would otherwise never get a chance (frequency is checked
+    # first) if "lateness" alone were enough to claim the question.
+    r"how much\b[^?.]{0,15}\blateness\b|how much .*(?:late|miss)"
     r")\b",
     re.IGNORECASE,
 )
@@ -177,7 +269,10 @@ _SEVERITY_RE = re.compile(
 # Horizon: likelihood of paying late over a window (month / quarter / 6mo / year).
 _HORIZON_RE = re.compile(
     r"\b("
-    r"likely|likelihood|chance|probab|will .* pay late|will .* be late|"
+    # "chances?" and "probab\w*" — a closing "\b" after the bare stems blocked
+    # "chances"/"probable"/"probably", so those likelihood paraphrases leaked to
+    # explain.
+    r"likely|likelihood|chances?|probab\w*|odds|will .* pay late|will .* be late|"
     r"pay late|paying late|be late|going to be late|risk of (?:being |paying )?late|"
     r"next (?:month|quarter|year|6 months|six months|12 months)|"
     r"this (?:year|quarter|month)|over the next"
@@ -194,6 +289,62 @@ _EXPLAIN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Explicit late-payment-LIKELIHOOD cue — "likely/chance/odds ... to pay late",
+# "chance of paying late", "late next <period>". Used ONLY to break the
+# multi-part tie where a "renew" token would otherwise let retention win: when a
+# question asks the late-payment likelihood AND mentions renewal, the pay-late
+# question is primary and must route horizon. Pure-retention questions ("will
+# they renew?", "will they still be here next year?", "likely to move out?")
+# contain no "late" token, so this never fires on them.
+_LATE_LIKELIHOOD_CUE_RE = re.compile(
+    r"\b(?:likely|likelihood|chance|chances|probab\w*|odds|risk)\b[^?.]{0,25}?"
+    r"\b(?:pay(?:ing)?\s+late|be(?:ing)?\s+late|late\s+payments?)\b"
+    # Reversed order — "late payment ... likely" — so the pay-late cue is found
+    # whichever side of the likelihood word it sits on.
+    r"|\b(?:pay(?:ing)?\s+late|be(?:ing)?\s+late|late\s+payments?)\b[^?.]{0,25}?"
+    r"\b(?:likely|likelihood|chances?|probab\w*|odds)\b"
+    r"|\b(?:pay(?:ing)?\s+late|be(?:ing)?\s+late)\b[^?.]{0,15}?\bnext\s+"
+    r"(?:month|quarter|year|6\s*months?|six\s+months?)\b"
+    r"|\blate\s+next\s+(?:month|quarter|year)\b"
+    # A bare pay-late / late-payment mention is enough INSIDE the retention branch:
+    # a "will they pay late AND renew" question is primary-horizon even without an
+    # explicit likelihood word ("do you think they'll be late on payments, and
+    # will they renew?"). No retention golden mentions paying late, so this only
+    # ever flips genuine multi-part pay-late+renew questions.
+    r"|\b(?:pay(?:ing)?\s+late|be(?:ing)?\s+late|late\s+(?:on\s+)?payments?|"
+    r"late\s+on\s+(?:rent|payments?))\b",
+    re.IGNORECASE,
+)
+
+# A likelihood/probability question about FALLING BEHIND or paying late — even
+# when it uses "behind on"/"fall behind" (which also trip the arrears cue). Used
+# to keep such questions on horizon: "how probable is it that they'll fall
+# behind on rent next quarter" is a likelihood question, not an arrears-$ one.
+# Requires an explicit likelihood word, so plain arrears questions ("what's
+# their expected balance", "how much will they owe") never match.
+_FUTURE_LATE_LIKELIHOOD_RE = re.compile(
+    r"\b(?:likely|likelihood|chances?|probab\w*|odds)\b[^?.]{0,40}?"
+    r"\b(?:pay(?:ing)?\s+late|be(?:ing)?\s+late|late\s+payments?|"
+    r"fall(?:ing)?\s+behind|behind\s+on\s+rent|slip(?:ping)?\s+on\s+rent|"
+    r"miss(?:ing)?\s+(?:a\s+|their\s+)?(?:payment|rent))\b",
+    re.IGNORECASE,
+)
+
+# Common one-letter-dropped typos on words the router keys off of — without
+# this, "quater"/"moth" never matches any regex, so the question silently
+# falls through to the property/resident scope default instead of routing on
+# the time-horizon the user actually typed.
+_TYPO_FIXES = [
+    (re.compile(r"\bquater\b", re.IGNORECASE), "quarter"),
+    (re.compile(r"\bmoth\b", re.IGNORECASE), "month"),
+]
+
+
+def _fix_typos(q: str) -> str:
+    for pattern, replacement in _TYPO_FIXES:
+        q = pattern.sub(replacement, q)
+    return q
+
 
 def route(question: str, resident_id: str | None = None, property_id: str | None = None) -> str:
     """Classify the question into an intent.
@@ -202,7 +353,7 @@ def route(question: str, resident_id: str | None = None, property_id: str | None
     retention, arrears, frequency, severity, horizon, explain — then a scope
     default (``explain`` when a resident is selected, ``property_health`` when
     only a property is selected, else ``general``)."""
-    q = question or ""
+    q = _fix_typos(question or "")
     if _GOVERNANCE_RE.search(q):
         return "governance"
     if _PROPERTY_HEALTH_RE.search(q):
@@ -214,8 +365,19 @@ def route(question: str, resident_id: str | None = None, property_id: str | None
     if _CURE_RE.search(q):
         return "cure"
     if _RETENTION_RE.search(q):
+        # Multi-part guard: an explicit late-payment-likelihood cue ("likely to
+        # pay late", "chance of paying late", "late next <period>") is the PRIMARY
+        # question and routes horizon even when a "renew" token is also present.
+        # Pure-retention questions have no pay-late cue, so they still route here.
+        if _LATE_LIKELIHOOD_CUE_RE.search(q):
+            return "horizon"
         return "retention"
     if _ARREARS_RE.search(q):
+        # A likelihood question about falling behind / paying late over a window
+        # is a horizon question, even though "behind on"/"fall behind" also trip
+        # the arrears cue. Plain balance/owe questions have no likelihood word.
+        if _FUTURE_LATE_LIKELIHOOD_RE.search(q):
+            return "horizon"
         return "arrears"
     if _FREQUENCY_RE.search(q):
         return "frequency"
@@ -495,11 +657,13 @@ def _portfolio_health_artifact(ranked: list) -> dict:
     }
 
 
-def _property_health_artifact(health: dict, ranked: list | None = None) -> dict:
-    art = {"kind": "property_health", "scope": "property", "property": health}
-    if ranked:
-        art["properties"] = ranked
-    return art
+def _property_health_artifact(health: dict) -> dict:
+    # Deliberately carries only THIS property, not the full portfolio ranking —
+    # a scoped "how healthy is this property" question should render a single
+    # score card, not the entire property list (the UI's health-list renderer
+    # would otherwise dump every property any time one is discussed).
+    return {"kind": "property_health", "scope": "property", "property": health,
+            "properties": [health]}
 
 
 def _compare_artifact(pred: dict, health: dict | None, ranked: list) -> dict:
@@ -519,7 +683,7 @@ def _compare_artifact(pred: dict, health: dict | None, ranked: list) -> dict:
 # ---------------------------------------------------------------------------
 # HEAD SELECTION per intent (which heads carry the numbers for the answer)
 # ---------------------------------------------------------------------------
-_HEADS_FREQUENCY = ["late_count_12m", "missed_count_12m"]
+_HEADS_FREQUENCY = ["late_count_3m", "late_count_12m", "missed_count_12m"]
 _HEADS_SEVERITY = ["max_days_late_12m", "p_30d_12m", "p_60d_12m", "p_90d_12m",
                    "delinquency_bucket_12m", "serious"]
 _HEADS_ARREARS = ["arrears_3m", "arrears_12m", "peak_balance_12m"]
@@ -578,6 +742,11 @@ _FOLLOWUPS = {
         "Which properties are healthiest?",
         "How is this ranking measured?",
     ],
+    "late_forecast": [
+        "Which residents are most likely to be late?",
+        "Which properties are healthiest?",
+        "How is this estimate measured?",
+    ],
     "compare": [
         "Why is this resident's risk at this level?",
         "How does their property compare to the portfolio?",
@@ -608,8 +777,13 @@ _RESIDENT_SYSTEM = (
     "PROACTIVE OUTREACH and RETENTION for CURRENT residents. Answer using ONLY "
     "the numbered context provided; never invent or recompute a probability, "
     "count, dollar amount, band, or reason code — every number must come from "
-    "the context. Cite the context you use inline with bracketed numbers like "
-    "[1] or [2]. Explain risk through the model's OWN reason codes. You MUST "
+    "the context. Cite inline with a bracketed number like [1] or [2] ONLY on "
+    "substantive facts you draw from the numbered context — names, probabilities, "
+    "counts, dollar amounts, bands, reason codes, predictions. Do NOT attach a "
+    "citation to the standardized decision-support / methodology disclaimer or any "
+    "required disclosure (that this is an estimate on synthetic data, not a consumer "
+    "report, and that an elevated estimate routes to a person for a supportive human "
+    "review): state those plainly, without a bracket. Explain risk through the model's OWN reason codes. You MUST "
     "NEVER recommend or imply eviction, denial, non-renewal, pricing, late fees, "
     "lease conditioning, or any automated action, and never say a resident "
     "should be removed or penalized — a serious-delinquency estimate simply "
@@ -626,8 +800,11 @@ _RESIDENT_SYSTEM = (
 _GOVERNANCE_SYSTEM = (
     "You are the Resident Risk assistant explaining the model's FEATURE POLICY / "
     "governance and how outcomes are measured. Answer using ONLY the numbered "
-    "context; never invent features, reasons, or metrics. Cite inline with [n]. "
-    "State plainly which fields are used (legitimate ledger / tenancy / "
+    "context; never invent features, reasons, or metrics. Cite inline with [n] ONLY "
+    "on substantive facts drawn from the numbered context (field names, used/excluded "
+    "status, the model card's reasons, metrics); do NOT attach a citation to the "
+    "decision-support / synthetic-data disclaimer — state it plainly, without a "
+    "bracket. State plainly which fields are used (legitimate ledger / tenancy / "
     "affordability factors) and which are structurally excluded (protected-class "
     "proxies or non-predictive fields), and give the model card's reason. Never "
     "recommend eviction, denial, pricing, or any automated action. This is "
@@ -653,10 +830,25 @@ _COMPARE_SYSTEM = (
 
 _AT_RISK_RESIDENTS_SYSTEM = (
     _RESIDENT_SYSTEM
-    + " This turn lists the residents with the highest late-payment probability "
-    "(portfolio-wide, or within one property if scoped) as neutral context for "
-    "prioritizing proactive outreach — never as a ranking that penalizes anyone "
-    "or a basis for eviction, denial, or automated action."
+    + " This turn lists the residents with the highest risk probability for "
+    "whichever risk the context header names -- late payment, or churn/"
+    "non-renewal -- (portfolio-wide, or within one property if scoped) as "
+    "neutral context for prioritizing proactive outreach — never as a ranking "
+    "that penalizes anyone or a basis for eviction, denial, or automated "
+    "action."
+)
+
+_LATE_FORECAST_SYSTEM = (
+    _RESIDENT_SYSTEM
+    + " This turn reports an AGGREGATE late-payment count forecast, over whichever "
+    "window (next quarter or next 12 months) the context states — the SUM of every "
+    "individual resident's own late-payment-count estimate for that window, for a "
+    "property or the whole portfolio. Report only the window, total, and range "
+    "given in the context as neutral planning context, never as a ranking or a "
+    "basis for eviction, denial, or automated action. If the context's window "
+    "doesn't match what the user asked for (e.g. they asked for 12 months but the "
+    "context is quarterly), say so plainly rather than rescaling or inventing a "
+    "number for the window that isn't there."
 )
 
 
@@ -669,6 +861,8 @@ def _system_for(intent: str) -> str:
         return _AT_RISK_RESIDENTS_SYSTEM
     if intent == "compare":
         return _COMPARE_SYSTEM
+    if intent == "late_forecast":
+        return _LATE_FORECAST_SYSTEM
     return _RESIDENT_SYSTEM
 
 
@@ -730,7 +924,9 @@ class _ResidentPlan:
     )
 
     def __init__(self, question, resident_id, property_id):
-        q = question or ""
+        # Fixed once here (not just inside route()) since _parse_horizon and
+        # other planners re-scan this same text for the same keywords below.
+        q = _fix_typos(question or "")
         self.intent = route(q, resident_id, property_id)
         self.resident_id = resident_id or ""
         self.property_id = property_id or ""
@@ -749,7 +945,7 @@ class _ResidentPlan:
         elif self.intent == "property_health":
             self._plan_property_health()
         elif self.intent == "at_risk_residents":
-            self._plan_at_risk_residents()
+            self._plan_at_risk_residents(q)
         elif self.intent == "general" and not resident_id:
             self._plan_general()
         elif self.intent == "compare":
@@ -759,7 +955,12 @@ class _ResidentPlan:
             self.pred = score_resident(resident_id)
             if self.pred is None:
                 # No resolvable resident — empty context => deterministic deflection.
-                if property_id:
+                if self.intent == "frequency":
+                    # A count/frequency question has no resident to score, but
+                    # DOES have a genuine aggregate answer (sum of everyone's own
+                    # late-count estimate) for a property or the whole portfolio.
+                    self._plan_late_forecast(q)
+                elif property_id:
                     self._plan_property_health()
                 else:
                     self.context_blocks, self.sources = [], []
@@ -857,13 +1058,15 @@ class _ResidentPlan:
     def _plan_frequency(self) -> None:
         heads = self._heads()
         name = self._name()
+        late_c3 = heads.get("late_count_3m", {})
         late_c = heads.get("late_count_12m", {})
         missed_c = heads.get("missed_count_12m", {})
         line = (
-            f"Late-payment frequency — {name} (next 12 months). Expected late months: "
+            f"Late-payment frequency — {name}. Expected late months next quarter: about "
+            f"{_num(late_c3.get('expected'))} (range {_count_interval(late_c3)}); next 12 months: "
             f"about {_num(late_c.get('expected'))} (range {_count_interval(late_c)}), of which "
             f"about {_num(missed_c.get('expected'))} fully missed (range {_count_interval(missed_c)})."
-            f"{_conf_note(late_c, missed_c)}"
+            f"{_conf_note(late_c3, late_c, missed_c)}"
         )
         self.context_blocks = [f"Late-payment frequency — {name}:\n{line}"]
         self.sources = [self._src(f"Late-payment frequency — {name}", line)]
@@ -989,7 +1192,7 @@ class _ResidentPlan:
                 self.sources = [{"type": "property_health",
                                  "label": f"Property health — {health.get('name')}",
                                  "snippet": _snippet(line), "property_id": self.property_id}]
-                self.artifact = _property_health_artifact(health, ranked)
+                self.artifact = _property_health_artifact(health)
                 return
         # Portfolio ranking (no property scoped, or health lookup failed).
         if not ranked:
@@ -1014,6 +1217,53 @@ class _ResidentPlan:
         self.sources = [{"type": "property_health", "label": "Portfolio health ranking",
                          "snippet": _snippet(line), "property_id": ""}]
         self.artifact = _portfolio_health_artifact(ranked)
+
+    def _plan_late_forecast(self, q: str = "") -> None:
+        """A frequency/count question ('how many late payments next quarter'
+        or '...next 12 months') with no resident selected: an aggregate is the
+        honest answer — the SUM of every resident's own late-count estimate
+        for the scope and the asked-about window — rather than degrading to
+        the unrelated property-health composite score."""
+        self.intent = "late_forecast"
+        self.follow_ups = _follow_ups("late_forecast")
+        # Count heads only exist at the quarterly and 12-month windows; a
+        # 1mo/6mo phrasing rounds to whichever of those two it's closer to.
+        horizon = _parse_horizon(q)
+        if horizon in ("late_1m", "late_3m"):
+            head, window_txt, window_label = "late_count_3m", "next quarter", "Quarterly"
+        else:
+            head, window_txt, window_label = "late_count_12m", "next 12 months", "12-month"
+        if self.property_id:
+            fc = residents_risk.property_late_forecast(self.property_id, head=head)
+            scope_txt = f"at {_property_name(self.property_id)}"
+        else:
+            fc = residents_risk.portfolio_late_forecast(head=head)
+            scope_txt = "across the portfolio"
+        n = fc.get("resident_count", 0)
+        if n == 0:
+            self.context_blocks = ["No resident data is currently available for this scope."]
+            self.sources = []
+            self.artifact = _none_artifact()
+            return
+        exp = fc.get("expected", 0.0)
+        lo, hi = (fc.get("interval") or [0.0, 0.0])
+        top = fc.get("top_contributors") or []
+        top_txt = "; ".join(f"{t['name']} (~{t['expected']:.1f})" for t in top[:3])
+        line = (
+            f"Expected late payments {window_txt} {scope_txt} (summed across {n} residents): "
+            f"about {exp:.1f} late months total (range {lo:.1f}–{hi:.1f}), summing each "
+            f"resident's own {window_txt.replace('next ', '')} late-payment estimate. "
+            f"Highest expected contributors: {top_txt or 'none notable'}."
+        )
+        self.context_blocks = [f"{window_label} late-payment forecast:\n{line}"]
+        self.sources = [{"type": "late_forecast", "label": f"{window_label} late-payment forecast",
+                         "snippet": _snippet(line), "property_id": self.property_id}]
+        self.artifact = {
+            "kind": "late_forecast",
+            "scope": "property" if self.property_id else "portfolio",
+            "name": f"Expected late payments ({window_txt})",
+            **fc,
+        }
 
     def _plan_compare(self, resident_id) -> None:
         self.follow_ups = _follow_ups("compare")
@@ -1092,11 +1342,16 @@ class _ResidentPlan:
         self.artifact = _none_artifact()
         self.follow_ups = _follow_ups("governance")
 
-    def _plan_at_risk_residents(self, limit: int = 5) -> None:
+    def _plan_at_risk_residents(self, q: str, limit: int = 5) -> None:
         """Rank residents (portfolio-wide, or within ``property_id`` if set) by
-        late-payment probability. Mirrors resident_api._score_many's bulk-scoring
-        pattern so this stays consistent with the /residents table."""
+        late-payment probability, or by churn/non-renewal probability when the
+        question is framed in churn/renewal/retention terms instead (see
+        ``_CHURN_METRIC_CUE``) -- otherwise a churn-framed question silently
+        got ranked and labeled by the wrong metric. Mirrors
+        resident_api._score_many's bulk-scoring pattern so the late-payment
+        case stays consistent with the /residents table."""
         self.intent = "at_risk_residents"
+        metric = "churn" if _CHURN_METRIC_CUE.search(q) else "late"
         scored: list = []
         try:
             residents = residents_risk.load_residents()
@@ -1104,15 +1359,17 @@ class _ResidentPlan:
                 residents = [r for r in residents if r.get("property_id") == self.property_id]
             preds = residents_risk.predict_bulk(residents, heads=residents_risk.BULK_HEADS)
             for r, pred in zip(residents, preds or []):
-                late = (pred or {}).get("late") or {}
+                head = (pred or {}).get(metric) or {}
                 feats = residents_risk.extract_resident_features(r)
                 scored.append({
                     "resident_id": r.get("resident_id", ""),
                     "name": r.get("name", ""),
                     "property_name": _property_name(r.get("property_id", "")),
-                    "probability": float(late.get("probability") or 0.0),
-                    "band": late.get("band", "low"),
-                    "top_driver": residents_risk.heuristic_top_driver(feats),
+                    "probability": float(head.get("probability") or 0.0),
+                    "band": head.get("band", "low"),
+                    "top_driver": residents_risk.heuristic_top_driver(
+                        feats, head="churn" if metric == "churn" else "late_3m"
+                    ),
                 })
             scored.sort(key=lambda x: x["probability"], reverse=True)
         except Exception as exc:  # noqa: BLE001
@@ -1130,15 +1387,22 @@ class _ResidentPlan:
             return
 
         scope_txt = f"at {top[0]['property_name']}" if self.property_id else "across the portfolio"
-        lines = [
-            f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance "
-            f"of paying late in the next year ({t['band']} band). Top driver: {t['top_driver']}."
-            for i, t in enumerate(top)
-        ]
-        self.context_blocks = [
-            f"Highest late-payment-risk residents {scope_txt} (of {len(scored)} scored):\n"
-            + "\n".join(lines)
-        ]
+        if metric == "churn":
+            header = f"Highest churn-risk residents {scope_txt} (of {len(scored)} scored)"
+            lines = [
+                f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance "
+                f"of non-renewal (churn) for leases ending within 6 months "
+                f"({t['band']} band). Top driver: {t['top_driver']}."
+                for i, t in enumerate(top)
+            ]
+        else:
+            header = f"Highest late-payment-risk residents {scope_txt} (of {len(scored)} scored)"
+            lines = [
+                f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance "
+                f"of paying late in the next year ({t['band']} band). Top driver: {t['top_driver']}."
+                for i, t in enumerate(top)
+            ]
+        self.context_blocks = [header + ":\n" + "\n".join(lines)]
         self.sources = [
             {"type": "resident", "label": f"{t['name']} — {t['property_name']}",
              "snippet": _snippet(lines[i]), "resident_id": t["resident_id"]}
@@ -1181,6 +1445,8 @@ class _ResidentPlan:
             return _deterministic_property_health(self)
         if intent == "at_risk_residents":
             return _deterministic_at_risk_residents(self)
+        if intent == "late_forecast":
+            return _deterministic_late_forecast(self)
         if intent == "general":
             return _GENERAL
         if self.pred is None:
@@ -1224,10 +1490,29 @@ def _deterministic_property_health(plan: "_ResidentPlan") -> str:
     return f"{body} [1].{guard}"
 
 
+def _deterministic_late_forecast(plan: "_ResidentPlan") -> str:
+    body = plan.context_blocks[0].split("\n", 1)[-1] if plan.context_blocks else ""
+    if not body:
+        return _GENERAL
+    if not plan.sources:
+        # No-data scope — a status message, not a grounded estimate.
+        return body
+    guard = (
+        " This is decision-support for planning proactive outreach — never a basis for "
+        "eviction, denial, or automated action."
+    )
+    return f"{body} [1].{guard}"
+
+
 def _deterministic_at_risk_residents(plan: "_ResidentPlan") -> str:
     body = plan.context_blocks[0].split("\n", 1)[-1] if plan.context_blocks else ""
     if not body:
         return _GENERAL
+    # No-data scope (no residents scored → no sources): this is a status message,
+    # not a grounded ranking. Return it plainly — no [1] (there is no source to
+    # cite) and no ranking guard (there is no ranking).
+    if not plan.sources:
+        return body
     guard = (
         " This ranking is decision-support for prioritizing proactive outreach — "
         "never a basis for eviction, denial, or automated action."

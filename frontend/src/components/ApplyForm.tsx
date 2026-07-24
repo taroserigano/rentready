@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Wand2 } from "lucide-react";
+import { Cpu, Database, Link2, Upload, Wand2 } from "lucide-react";
 import type {
   AskResponse,
   ApplicantProfile,
@@ -27,6 +27,7 @@ import { Recommendations } from "./Recommendations";
 import { RiskCard } from "./risk/RiskCard";
 import { SampleApplicants } from "./SampleApplicants";
 import { StrengthCard } from "./StrengthCard";
+import { TechBadge } from "./TechBadge";
 import { WhatIfSimulator } from "./WhatIfSimulator";
 
 /** Amenities offered by the sample inventory — one-tap add to the field. */
@@ -320,9 +321,13 @@ export function ApplyForm({
     }
   }, [upload]);
 
+  // formResetKey: remounts ApplicantDetailsForm with fresh internal state
+  // instead of the parent reaching into it, so typing in the form never
+  // re-renders this component (and everything below it) on every keystroke.
+  const [formResetKey, setFormResetKey] = useState(0);
+
   function startOver() {
-    setForm(INITIAL);
-    setErrors({});
+    setFormResetKey((k) => k + 1);
     setUpload(null);
     setEligibility(null);
     setRecs(null);
@@ -330,8 +335,152 @@ export function ApplyForm({
     setPhase("idle");
   }
 
+  return (
+    <div className="app">
+      <header>
+        <h1>Apply</h1>
+        <p>
+          Upload a rental application PDF, or fill in your details manually —
+          either way we'll check eligibility and match you to properties.
+        </p>
+        <div className="badges">
+          <TechBadge
+            icon={Database}
+            label="LlamaIndex"
+            title="The uploaded PDF is chunked, embedded, and indexed in Chroma via LlamaIndex — it powers the profile extraction and the application chat."
+          />
+          <TechBadge
+            icon={Link2}
+            label="LangChain"
+            title="Eligibility explanations and the graph Q&A below are synthesized through a LangChain-wrapped Claude client."
+          />
+          <TechBadge
+            icon={Cpu}
+            label="XGBoost"
+            title="Late-payment risk is scored by a trained XGBoost model with TreeSHAP reason codes."
+          />
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
+          <Badge on={!!health?.langsmith} label="LangSmith" tone="teal" />
+          <Badge on={!!health?.phoenix} label="Phoenix" tone="magenta" />
+          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
+        </div>
+      </header>
 
-  // --- manual-entry form state ---
+      <div>
+        <div className="card">
+          <h2>1. Upload application</h2>
+          <div
+            className="dropzone"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <Upload size={22} aria-hidden />
+            <span className="dz-title">
+              {loading ? "Processing…" : "Drop a rental application PDF"}
+            </span>
+            {!loading && <span className="dz-sub">or click to browse</span>}
+          </div>
+          <SampleApplicants onPick={handleSample} disabled={loading} />
+        </div>
+      </div>
+
+      <div className="section-divider">or fill in your details manually</div>
+
+      <ApplicantDetailsForm
+        key={formResetKey}
+        loading={loading}
+        onSubmit={(profile) => runFlow(() => applyForm(profile))}
+      />
+
+      {error && <div className="error" style={{ marginTop: 18 }}>{error}</div>}
+
+      <div ref={resultsRef}>
+        {upload && (
+          <div className="rec-head" style={{ marginTop: 18 }}>
+            <button type="button" className="btn-small btn-ghost" onClick={startOver}>
+              Start over
+            </button>
+          </div>
+        )}
+
+        <Stepper
+          phase={phase}
+          ready={{ profile: !!upload, eligibility: !!eligibility, recs: !!recs }}
+        />
+
+        {upload ? (
+          <ProfileCard profile={upload.profile} chunks={upload.chunks_indexed} />
+        ) : (
+          phase === "extracting" && <SkeletonCard title="2. Extracted profile" lines={5} />
+        )}
+        {upload?.has_pdf && (
+          <ApplicationPdf applicantId={upload.applicant_id} sectionNumber="2b." />
+        )}
+        {eligibility ? (
+          <EligibilityCard result={eligibility} applicantId={upload?.applicant_id} />
+        ) : (
+          phase === "screening" && <SkeletonCard title="3. Eligibility" lines={2} block={80} />
+        )}
+        {upload && <FinancialHealth profile={upload.profile} />}
+        {upload && <StrengthCard applicantId={upload.applicant_id} sectionNumber="3c." />}
+        {upload && (
+          <RiskCard
+            applicantId={upload.applicant_id}
+            sectionNumber="3d."
+            onOpenFull={() => onOpenRisk(upload.applicant_id)}
+          />
+        )}
+        {upload && (
+          <WhatIfSimulator profile={upload.profile} applicantId={upload.applicant_id} />
+        )}
+        {recs ? (
+          <Recommendations
+            data={recs}
+            applicantId={upload?.applicant_id}
+            monthlyIncome={upload?.profile.monthly_income}
+            onViewListing={onViewListing}
+          />
+        ) : (
+          phase === "screening" && (
+            <SkeletonCard title="4. Recommended properties" lines={2} block={200} />
+          )
+        )}
+        {upload && <Chat onAsk={handleAsk} applicantId={upload?.applicant_id} />}
+        {upload && <GraphAsk neo4jAvailable={!!health?.neo4j_available} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The manual-entry "Your details" card, split out of ApplyForm so its ~40
+ * fields of keystroke-per-render state stay local — without this, typing in
+ * any field re-rendered the entire results tree below (profile, eligibility,
+ * financial health, risk, what-if, recommendations, and all 3 chat surfaces)
+ * on every character. ApplyForm remounts this (via `key`) on "Start over"
+ * instead of reaching in to reset its state.
+ */
+function ApplicantDetailsForm({
+  loading,
+  onSubmit,
+}: {
+  loading: boolean;
+  onSubmit: (profile: ApplicantProfile) => void;
+}) {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Errors>({});
 
@@ -370,10 +519,23 @@ export function ApplyForm({
         next.credit_score = "Credit score must be between 300 and 850";
       }
     }
+    if (form.desired_move_in.trim() !== "") {
+      // Parsed with an explicit local-midnight time (not bare "YYYY-MM-DD",
+      // which Date parses as UTC and can shift a day in negative-UTC zones)
+      // so this compares apples-to-apples with `today`, also local midnight.
+      const moveIn = new Date(`${form.desired_move_in}T00:00:00`);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (Number.isNaN(moveIn.getTime())) {
+        next.desired_move_in = "Enter a valid date";
+      } else if (moveIn < today) {
+        next.desired_move_in = "Move-in date can't be in the past";
+      }
+    }
     return next;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
@@ -436,644 +598,538 @@ export function ApplyForm({
       references_count: numberOr(form.references_count, 0),
     };
 
-    runFlow(() => applyForm(profile));
+    onSubmit(profile);
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>Apply</h1>
-        <p>
-          Upload a rental application PDF, or fill in your details manually —
-          either way we'll check eligibility and match you to properties.
-        </p>
-        <div className="badges">
-          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
-          <Badge on={!!health?.langsmith} label="LangSmith" tone="teal" />
-          <Badge on={!!health?.phoenix} label="Phoenix" tone="magenta" />
-          <Badge on={!!health?.neo4j_available} label="Neo4j" tone="blue" />
-        </div>
-      </header>
-
-      <div>
-        <div className="card">
-          <h2>1. Upload application</h2>
-          <div
-            className="dropzone"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) handleFile(f);
-            }}
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
-            <Upload size={22} aria-hidden />
-            <span className="dz-title">
-              {loading ? "Processing…" : "Drop a rental application PDF"}
-            </span>
-            {!loading && <span className="dz-sub">or click to browse</span>}
-          </div>
-          <SampleApplicants onPick={handleSample} disabled={loading} />
-        </div>
+    <div className="card">
+      <div className="rec-head" style={{ marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>Your details</h2>
+        <button
+          type="button"
+          className="btn-small btn-ghost icon-line"
+          style={{ marginLeft: "auto" }}
+          onClick={() => {
+            setForm(SAMPLE);
+            setErrors({});
+          }}
+        >
+          <Wand2 size={14} /> Prefill sample
+        </button>
       </div>
+      <form onSubmit={handleSubmit}>
+        <div className="form-grid">
+          <div className="form-section">About you</div>
+          <Field label="Name" error={errors.name}>
+            <input
+              type="text"
+              value={form.name}
+              className={errors.name ? "invalid" : ""}
+              onChange={(e) => setField("name", e.target.value)}
+              placeholder="Jane Doe"
+            />
+          </Field>
+          <Field label="Employment status">
+            <select
+              value={form.employment_status}
+              onChange={(e) => setField("employment_status", e.target.value)}
+            >
+              {EMPLOYMENT.map((v) => (
+                <option key={v} value={v}>
+                  {EMPLOYMENT_LABELS[v]}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-      <div className="section-divider">or fill in your details manually</div>
+          <div className="form-section">Budget</div>
+          <Field label="Monthly income $" error={errors.monthly_income}>
+            <input
+              type="number"
+              min={0}
+              value={form.monthly_income}
+              className={errors.monthly_income ? "invalid" : ""}
+              onChange={(e) => setField("monthly_income", e.target.value)}
+              placeholder="5000"
+            />
+          </Field>
+          <Field label="Desired rent $" error={errors.desired_rent}>
+            <input
+              type="number"
+              min={0}
+              value={form.desired_rent}
+              className={errors.desired_rent ? "invalid" : ""}
+              onChange={(e) => setField("desired_rent", e.target.value)}
+              placeholder="1500"
+            />
+          </Field>
+          <Field label="Credit score (optional)" error={errors.credit_score}>
+            <input
+              type="number"
+              min={300}
+              max={850}
+              value={form.credit_score}
+              className={errors.credit_score ? "invalid" : ""}
+              onChange={(e) => setField("credit_score", e.target.value)}
+              placeholder="700"
+            />
+          </Field>
+          <AffordabilityHint
+            income={form.monthly_income}
+            rent={form.desired_rent}
+          />
 
-      <div className="card">
-        <div className="rec-head" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Your details</h2>
-          <button
-            type="button"
-            className="btn-small btn-ghost icon-line"
-            style={{ marginLeft: "auto" }}
-            onClick={() => {
-              setForm(SAMPLE);
-              setErrors({});
-            }}
-          >
-            <Wand2 size={14} /> Prefill sample
-          </button>
+          <div className="form-section">Unit preferences</div>
+          <Field label="Bedrooms wanted">
+            <input
+              type="number"
+              min={0}
+              max={5}
+              value={form.bedrooms_wanted}
+              onChange={(e) => setField("bedrooms_wanted", e.target.value)}
+              placeholder="2"
+            />
+          </Field>
+          <Field label="Bathrooms wanted">
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={form.bathrooms_wanted}
+              onChange={(e) => setField("bathrooms_wanted", e.target.value)}
+              placeholder="1.5"
+            />
+          </Field>
+          <Field label="Bathroom type">
+            <select
+              value={form.bath_type_wanted}
+              onChange={(e) => setField("bath_type_wanted", e.target.value)}
+            >
+              <option value="any">Any</option>
+              <option value="full">Full bath</option>
+              <option value="shower_only">Shower only</option>
+            </select>
+          </Field>
+          <Field label="Minimum square feet (optional)">
+            <input
+              type="number"
+              min={0}
+              value={form.min_square_feet}
+              onChange={(e) => setField("min_square_feet", e.target.value)}
+              placeholder="650"
+            />
+          </Field>
+
+          <div className="form-section">Lifestyle</div>
+          <div className="check-row">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.has_pets}
+                onChange={(e) => setField("has_pets", e.target.checked)}
+              />
+              I have pets
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.needs_balcony}
+                onChange={(e) => setField("needs_balcony", e.target.checked)}
+              />
+              Need balcony
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.needs_parking}
+                onChange={(e) => setField("needs_parking", e.target.checked)}
+              />
+              Need parking
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.needs_in_unit_laundry}
+                onChange={(e) =>
+                  setField("needs_in_unit_laundry", e.target.checked)
+                }
+              />
+              Need in-unit laundry
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.furnished_wanted}
+                onChange={(e) =>
+                  setField("furnished_wanted", e.target.checked)
+                }
+              />
+              Want furnished
+            </label>
+          </div>
+          <label className="field" style={{ gridColumn: "1 / -1" }}>
+            <span>Amenities</span>
+            <input
+              type="text"
+              value={form.amenities}
+              onChange={(e) => setField("amenities", e.target.value)}
+              placeholder="Gym, Pool"
+            />
+            <span className="field-hint">
+              Separate with commas, like: Gym, Pool
+            </span>
+            <div className="chip-row">
+              {COMMON_AMENITIES.map((a) => {
+                const on = selectedAmenities.includes(a);
+                return (
+                  <button
+                    type="button"
+                    key={a}
+                    className="chip"
+                    aria-pressed={on}
+                    style={
+                      on
+                        ? {
+                            borderColor: "var(--accent)",
+                            color: "var(--accent-text)",
+                            background: "var(--accent-soft)",
+                          }
+                        : undefined
+                    }
+                    onClick={() => toggleAmenity(a)}
+                  >
+                    {on ? "✓ " : "+ "}
+                    {a}
+                  </button>
+                );
+              })}
+            </div>
+          </label>
+
+          <div className="form-section">Location &amp; lease</div>
+          <Field label="Preferred area">
+            <select
+              value={form.preferred_area}
+              onChange={(e) => setField("preferred_area", e.target.value)}
+            >
+              <option value="">No preference</option>
+              {AREAS.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Lease term in months (optional)">
+            <input
+              type="number"
+              min={1}
+              value={form.lease_term_wanted}
+              onChange={(e) => setField("lease_term_wanted", e.target.value)}
+              placeholder="12"
+            />
+          </Field>
         </div>
-        <form onSubmit={handleSubmit}>
+
+        <p className="muted form-optional-note">
+          The sections below are optional. Filling them in helps us review
+          your application faster.
+        </p>
+
+        <details className="form-details">
+          <summary>Employment</summary>
           <div className="form-grid">
-            <div className="form-section">About you</div>
-            <Field label="Name" error={errors.name}>
+            <Field label="Employer">
               <input
                 type="text"
-                value={form.name}
-                className={errors.name ? "invalid" : ""}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="Jane Doe"
+                value={form.employer}
+                onChange={(e) => setField("employer", e.target.value)}
+                placeholder="Acme Corp"
               />
             </Field>
-            <Field label="Employment status">
-              <select
-                value={form.employment_status}
-                onChange={(e) => setField("employment_status", e.target.value)}
-              >
-                {EMPLOYMENT.map((v) => (
-                  <option key={v} value={v}>
-                    {EMPLOYMENT_LABELS[v]}
-                  </option>
-                ))}
-              </select>
+            <Field label="Job title">
+              <input
+                type="text"
+                value={form.job_title}
+                onChange={(e) => setField("job_title", e.target.value)}
+                placeholder="Software Engineer"
+              />
             </Field>
+            <Field label="Months at this job">
+              <input
+                type="number"
+                min={0}
+                value={form.employment_length_months}
+                onChange={(e) =>
+                  setField("employment_length_months", e.target.value)
+                }
+                placeholder="24"
+              />
+            </Field>
+            <Field label="Other monthly income $">
+              <input
+                type="number"
+                min={0}
+                value={form.other_income_monthly}
+                onChange={(e) =>
+                  setField("other_income_monthly", e.target.value)
+                }
+                placeholder="0"
+              />
+            </Field>
+          </div>
+        </details>
 
-            <div className="form-section">Budget</div>
-            <Field label="Monthly income $" error={errors.monthly_income}>
+        <details className="form-details">
+          <summary>Financial</summary>
+          <div className="form-grid">
+            <Field label="Savings balance $">
               <input
                 type="number"
                 min={0}
-                value={form.monthly_income}
-                className={errors.monthly_income ? "invalid" : ""}
-                onChange={(e) => setField("monthly_income", e.target.value)}
-                placeholder="5000"
+                value={form.savings_balance}
+                onChange={(e) => setField("savings_balance", e.target.value)}
+                placeholder="10000"
               />
             </Field>
-            <Field label="Desired rent $" error={errors.desired_rent}>
+            <Field label="Monthly debt payments $">
               <input
                 type="number"
                 min={0}
-                value={form.desired_rent}
-                className={errors.desired_rent ? "invalid" : ""}
-                onChange={(e) => setField("desired_rent", e.target.value)}
-                placeholder="1500"
+                value={form.monthly_debt_payments}
+                onChange={(e) =>
+                  setField("monthly_debt_payments", e.target.value)
+                }
+                placeholder="0"
               />
             </Field>
-            <Field label="Credit score (optional)" error={errors.credit_score}>
-              <input
-                type="number"
-                min={300}
-                max={850}
-                value={form.credit_score}
-                className={errors.credit_score ? "invalid" : ""}
-                onChange={(e) => setField("credit_score", e.target.value)}
-                placeholder="700"
-              />
-            </Field>
-            <AffordabilityHint
-              income={form.monthly_income}
-              rent={form.desired_rent}
-            />
+          </div>
+        </details>
 
-            <div className="form-section">Unit preferences</div>
-            <Field label="Bedrooms wanted">
+        <details className="form-details">
+          <summary>Rental history</summary>
+          <div className="form-grid">
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              <span>Current address</span>
+              <input
+                type="text"
+                value={form.current_address}
+                onChange={(e) => setField("current_address", e.target.value)}
+                placeholder="123 Main St, Austin, TX"
+              />
+            </label>
+            <Field label="Current rent $">
               <input
                 type="number"
                 min={0}
-                max={5}
-                value={form.bedrooms_wanted}
-                onChange={(e) => setField("bedrooms_wanted", e.target.value)}
-                placeholder="2"
+                value={form.current_rent}
+                onChange={(e) => setField("current_rent", e.target.value)}
+                placeholder="1400"
               />
             </Field>
-            <Field label="Bathrooms wanted">
+            <Field label="Years at current address">
               <input
                 type="number"
                 min={0}
                 step={0.5}
-                value={form.bathrooms_wanted}
-                onChange={(e) => setField("bathrooms_wanted", e.target.value)}
-                placeholder="1.5"
+                value={form.years_at_current_address}
+                onChange={(e) =>
+                  setField("years_at_current_address", e.target.value)
+                }
+                placeholder="2"
               />
             </Field>
-            <Field label="Bathroom type">
-              <select
-                value={form.bath_type_wanted}
-                onChange={(e) => setField("bath_type_wanted", e.target.value)}
-              >
-                <option value="any">Any</option>
-                <option value="full">Full bath</option>
-                <option value="shower_only">Shower only</option>
-              </select>
-            </Field>
-            <Field label="Minimum square feet (optional)">
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              <span>Reason for moving</span>
+              <input
+                type="text"
+                value={form.reason_for_moving}
+                onChange={(e) =>
+                  setField("reason_for_moving", e.target.value)
+                }
+                placeholder="Closer to work"
+              />
+            </label>
+            <Field label="Evictions">
               <input
                 type="number"
                 min={0}
-                value={form.min_square_feet}
-                onChange={(e) => setField("min_square_feet", e.target.value)}
-                placeholder="650"
+                value={form.evictions_count}
+                onChange={(e) => setField("evictions_count", e.target.value)}
+                placeholder="0"
               />
             </Field>
-
-            <div className="form-section">Lifestyle</div>
+            <Field label="Late rent payments in the last 12 months">
+              <input
+                type="number"
+                min={0}
+                value={form.late_payments_12mo}
+                onChange={(e) =>
+                  setField("late_payments_12mo", e.target.value)
+                }
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Bankruptcies">
+              <input
+                type="number"
+                min={0}
+                value={form.bankruptcies_count}
+                onChange={(e) =>
+                  setField("bankruptcies_count", e.target.value)
+                }
+                placeholder="0"
+              />
+            </Field>
             <div className="check-row">
               <label className="check">
                 <input
                   type="checkbox"
-                  checked={form.has_pets}
-                  onChange={(e) => setField("has_pets", e.target.checked)}
-                />
-                I have pets
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={form.needs_balcony}
-                  onChange={(e) => setField("needs_balcony", e.target.checked)}
-                />
-                Need balcony
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={form.needs_parking}
-                  onChange={(e) => setField("needs_parking", e.target.checked)}
-                />
-                Need parking
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={form.needs_in_unit_laundry}
+                  checked={form.landlord_reference}
                   onChange={(e) =>
-                    setField("needs_in_unit_laundry", e.target.checked)
+                    setField("landlord_reference", e.target.checked)
                   }
                 />
-                Need in-unit laundry
+                My current landlord can give a reference
               </label>
               <label className="check">
                 <input
                   type="checkbox"
-                  checked={form.furnished_wanted}
+                  checked={form.criminal_record}
                   onChange={(e) =>
-                    setField("furnished_wanted", e.target.checked)
+                    setField("criminal_record", e.target.checked)
                   }
                 />
-                Want furnished
+                I have a criminal record
               </label>
             </div>
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span>Amenities</span>
-              <input
-                type="text"
-                value={form.amenities}
-                onChange={(e) => setField("amenities", e.target.value)}
-                placeholder="Gym, Pool"
-              />
-              <span className="field-hint">
-                Separate with commas, like: Gym, Pool
-              </span>
-              <div className="chip-row">
-                {COMMON_AMENITIES.map((a) => {
-                  const on = selectedAmenities.includes(a);
-                  return (
-                    <button
-                      type="button"
-                      key={a}
-                      className="chip"
-                      aria-pressed={on}
-                      style={
-                        on
-                          ? {
-                              borderColor: "var(--accent)",
-                              color: "var(--accent-text)",
-                              background: "var(--accent-soft)",
-                            }
-                          : undefined
-                      }
-                      onClick={() => toggleAmenity(a)}
-                    >
-                      {on ? "✓ " : "+ "}
-                      {a}
-                    </button>
-                  );
-                })}
-              </div>
-            </label>
+          </div>
+        </details>
 
-            <div className="form-section">Location &amp; lease</div>
-            <Field label="Preferred area">
-              <select
-                value={form.preferred_area}
-                onChange={(e) => setField("preferred_area", e.target.value)}
-              >
-                <option value="">No preference</option>
-                {AREAS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Lease term in months (optional)">
+        <details className="form-details">
+          <summary>Household</summary>
+          <div className="form-grid">
+            <Field label="People in your household">
               <input
                 type="number"
                 min={1}
-                value={form.lease_term_wanted}
-                onChange={(e) => setField("lease_term_wanted", e.target.value)}
-                placeholder="12"
+                value={form.household_size}
+                onChange={(e) => setField("household_size", e.target.value)}
+                placeholder="1"
               />
             </Field>
-          </div>
-
-          <p className="muted form-optional-note">
-            The sections below are optional. Filling them in helps us review
-            your application faster.
-          </p>
-
-          <details className="form-details">
-            <summary>Employment</summary>
-            <div className="form-grid">
-              <Field label="Employer">
+            <Field label="Co-applicants (people applying with you)">
+              <input
+                type="number"
+                min={0}
+                value={form.co_applicants}
+                onChange={(e) => setField("co_applicants", e.target.value)}
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Dependents (children or others you support)">
+              <input
+                type="number"
+                min={0}
+                value={form.dependents}
+                onChange={(e) => setField("dependents", e.target.value)}
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Number of pets">
+              <input
+                type="number"
+                min={0}
+                value={form.pet_count}
+                onChange={(e) => setField("pet_count", e.target.value)}
+                placeholder="0"
+              />
+            </Field>
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              <span>Kinds of pets</span>
+              <input
+                type="text"
+                value={form.pet_types}
+                onChange={(e) => setField("pet_types", e.target.value)}
+                placeholder="Dog, Cat"
+              />
+              <span className="field-hint">
+                Separate with commas, like: Dog, Cat
+              </span>
+            </label>
+            <Field label="Vehicles">
+              <input
+                type="number"
+                min={0}
+                value={form.vehicles_count}
+                onChange={(e) => setField("vehicles_count", e.target.value)}
+                placeholder="1"
+              />
+            </Field>
+            <div className="check-row">
+              <label className="check">
                 <input
-                  type="text"
-                  value={form.employer}
-                  onChange={(e) => setField("employer", e.target.value)}
-                  placeholder="Acme Corp"
+                  type="checkbox"
+                  checked={form.smoker}
+                  onChange={(e) => setField("smoker", e.target.checked)}
                 />
-              </Field>
-              <Field label="Job title">
-                <input
-                  type="text"
-                  value={form.job_title}
-                  onChange={(e) => setField("job_title", e.target.value)}
-                  placeholder="Software Engineer"
-                />
-              </Field>
-              <Field label="Months at this job">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.employment_length_months}
-                  onChange={(e) =>
-                    setField("employment_length_months", e.target.value)
-                  }
-                  placeholder="24"
-                />
-              </Field>
-              <Field label="Other monthly income $">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.other_income_monthly}
-                  onChange={(e) =>
-                    setField("other_income_monthly", e.target.value)
-                  }
-                  placeholder="0"
-                />
-              </Field>
-            </div>
-          </details>
-
-          <details className="form-details">
-            <summary>Financial</summary>
-            <div className="form-grid">
-              <Field label="Savings balance $">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.savings_balance}
-                  onChange={(e) => setField("savings_balance", e.target.value)}
-                  placeholder="10000"
-                />
-              </Field>
-              <Field label="Monthly debt payments $">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.monthly_debt_payments}
-                  onChange={(e) =>
-                    setField("monthly_debt_payments", e.target.value)
-                  }
-                  placeholder="0"
-                />
-              </Field>
-            </div>
-          </details>
-
-          <details className="form-details">
-            <summary>Rental history</summary>
-            <div className="form-grid">
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span>Current address</span>
-                <input
-                  type="text"
-                  value={form.current_address}
-                  onChange={(e) => setField("current_address", e.target.value)}
-                  placeholder="123 Main St, Austin, TX"
-                />
+                I smoke
               </label>
-              <Field label="Current rent $">
+              <label className="check">
                 <input
-                  type="number"
-                  min={0}
-                  value={form.current_rent}
-                  onChange={(e) => setField("current_rent", e.target.value)}
-                  placeholder="1400"
+                  type="checkbox"
+                  checked={form.is_student}
+                  onChange={(e) => setField("is_student", e.target.checked)}
                 />
-              </Field>
-              <Field label="Years at current address">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={form.years_at_current_address}
-                  onChange={(e) =>
-                    setField("years_at_current_address", e.target.value)
-                  }
-                  placeholder="2"
-                />
-              </Field>
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span>Reason for moving</span>
-                <input
-                  type="text"
-                  value={form.reason_for_moving}
-                  onChange={(e) =>
-                    setField("reason_for_moving", e.target.value)
-                  }
-                  placeholder="Closer to work"
-                />
+                I am a student
               </label>
-              <Field label="Evictions">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.evictions_count}
-                  onChange={(e) => setField("evictions_count", e.target.value)}
-                  placeholder="0"
-                />
-              </Field>
-              <Field label="Late rent payments in the last 12 months">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.late_payments_12mo}
-                  onChange={(e) =>
-                    setField("late_payments_12mo", e.target.value)
-                  }
-                  placeholder="0"
-                />
-              </Field>
-              <Field label="Bankruptcies">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.bankruptcies_count}
-                  onChange={(e) =>
-                    setField("bankruptcies_count", e.target.value)
-                  }
-                  placeholder="0"
-                />
-              </Field>
-              <div className="check-row">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.landlord_reference}
-                    onChange={(e) =>
-                      setField("landlord_reference", e.target.checked)
-                    }
-                  />
-                  My current landlord can give a reference
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.criminal_record}
-                    onChange={(e) =>
-                      setField("criminal_record", e.target.checked)
-                    }
-                  />
-                  I have a criminal record
-                </label>
-              </div>
             </div>
-          </details>
+          </div>
+        </details>
 
-          <details className="form-details">
-            <summary>Household</summary>
-            <div className="form-grid">
-              <Field label="People in your household">
+        <details className="form-details">
+          <summary>Move-in</summary>
+          <div className="form-grid">
+            <Field label="When do you want to move in?" error={errors.desired_move_in}>
+              <input
+                type="date"
+                value={form.desired_move_in}
+                className={errors.desired_move_in ? "invalid" : ""}
+                onChange={(e) => setField("desired_move_in", e.target.value)}
+              />
+            </Field>
+            <Field label="References (people who can vouch for you)">
+              <input
+                type="number"
+                min={0}
+                value={form.references_count}
+                onChange={(e) =>
+                  setField("references_count", e.target.value)
+                }
+                placeholder="0"
+              />
+            </Field>
+            <div className="check-row">
+              <label className="check">
                 <input
-                  type="number"
-                  min={1}
-                  value={form.household_size}
-                  onChange={(e) => setField("household_size", e.target.value)}
-                  placeholder="1"
+                  type="checkbox"
+                  checked={form.guarantor_available}
+                  onChange={(e) =>
+                    setField("guarantor_available", e.target.checked)
+                  }
                 />
-              </Field>
-              <Field label="Co-applicants (people applying with you)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.co_applicants}
-                  onChange={(e) => setField("co_applicants", e.target.value)}
-                  placeholder="0"
-                />
-              </Field>
-              <Field label="Dependents (children or others you support)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.dependents}
-                  onChange={(e) => setField("dependents", e.target.value)}
-                  placeholder="0"
-                />
-              </Field>
-              <Field label="Number of pets">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.pet_count}
-                  onChange={(e) => setField("pet_count", e.target.value)}
-                  placeholder="0"
-                />
-              </Field>
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span>Kinds of pets</span>
-                <input
-                  type="text"
-                  value={form.pet_types}
-                  onChange={(e) => setField("pet_types", e.target.value)}
-                  placeholder="Dog, Cat"
-                />
-                <span className="field-hint">
-                  Separate with commas, like: Dog, Cat
-                </span>
+                I have a guarantor (someone who will co-sign the lease)
               </label>
-              <Field label="Vehicles">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.vehicles_count}
-                  onChange={(e) => setField("vehicles_count", e.target.value)}
-                  placeholder="1"
-                />
-              </Field>
-              <div className="check-row">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.smoker}
-                    onChange={(e) => setField("smoker", e.target.checked)}
-                  />
-                  I smoke
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.is_student}
-                    onChange={(e) => setField("is_student", e.target.checked)}
-                  />
-                  I am a student
-                </label>
-              </div>
             </div>
-          </details>
-
-          <details className="form-details">
-            <summary>Move-in</summary>
-            <div className="form-grid">
-              <Field label="When do you want to move in?">
-                <input
-                  type="date"
-                  value={form.desired_move_in}
-                  onChange={(e) => setField("desired_move_in", e.target.value)}
-                />
-              </Field>
-              <Field label="References (people who can vouch for you)">
-                <input
-                  type="number"
-                  min={0}
-                  value={form.references_count}
-                  onChange={(e) =>
-                    setField("references_count", e.target.value)
-                  }
-                  placeholder="0"
-                />
-              </Field>
-              <div className="check-row">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.guarantor_available}
-                    onChange={(e) =>
-                      setField("guarantor_available", e.target.checked)
-                    }
-                  />
-                  I have a guarantor (someone who will co-sign the lease)
-                </label>
-              </div>
-            </div>
-          </details>
-
-          <div className="form-footer">
-            <button type="submit" disabled={loading}>
-              {loading ? "Checking…" : "Check my eligibility"}
-            </button>
           </div>
-        </form>
-      </div>
+        </details>
 
-      {error && <div className="error" style={{ marginTop: 18 }}>{error}</div>}
-
-      <div ref={resultsRef}>
-        {upload && (
-          <div className="rec-head" style={{ marginTop: 18 }}>
-            <button type="button" className="btn-small btn-ghost" onClick={startOver}>
-              Start over
-            </button>
-          </div>
-        )}
-
-        <Stepper
-          phase={phase}
-          ready={{ profile: !!upload, eligibility: !!eligibility, recs: !!recs }}
-        />
-
-        {upload ? (
-          <ProfileCard profile={upload.profile} chunks={upload.chunks_indexed} />
-        ) : (
-          phase === "extracting" && <SkeletonCard title="2. Extracted profile" lines={5} />
-        )}
-        {upload?.has_pdf && (
-          <ApplicationPdf applicantId={upload.applicant_id} sectionNumber="2b." />
-        )}
-        {eligibility ? (
-          <EligibilityCard result={eligibility} applicantId={upload?.applicant_id} />
-        ) : (
-          phase === "screening" && <SkeletonCard title="3. Eligibility" lines={2} block={80} />
-        )}
-        {upload && <FinancialHealth profile={upload.profile} />}
-        {upload && <StrengthCard applicantId={upload.applicant_id} sectionNumber="3c." />}
-        {upload && (
-          <RiskCard
-            applicantId={upload.applicant_id}
-            sectionNumber="3d."
-            onOpenFull={() => onOpenRisk(upload.applicant_id)}
-          />
-        )}
-        {upload && (
-          <WhatIfSimulator profile={upload.profile} applicantId={upload.applicant_id} />
-        )}
-        {recs ? (
-          <Recommendations
-            data={recs}
-            applicantId={upload?.applicant_id}
-            monthlyIncome={upload?.profile.monthly_income}
-            onViewListing={onViewListing}
-          />
-        ) : (
-          phase === "screening" && (
-            <SkeletonCard title="4. Recommended properties" lines={2} block={200} />
-          )
-        )}
-        {upload && <Chat onAsk={handleAsk} applicantId={upload?.applicant_id} />}
-        {upload && <GraphAsk neo4jAvailable={!!health?.neo4j_available} />}
-      </div>
+        <div className="form-footer">
+          <button type="submit" disabled={loading}>
+            {loading ? "Checking…" : "Check my eligibility"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

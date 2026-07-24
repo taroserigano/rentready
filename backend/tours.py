@@ -19,10 +19,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 DEFAULT_DURATION_MIN = 30
 DEFAULT_STEP_MIN = 30
 DEFAULT_HORIZON_DAYS = 7
+
+# Tours are stored as naive local wall-clock in Austin's zone (see tours_api's
+# _TZID docstring). bare `datetime.now()` returns naive time in whatever zone
+# the SERVER PROCESS happens to run in (UTC in most containers) — comparing
+# that against Central-wall-clock slot times would shift every "is this slot
+# in the past" check by the offset between the two. This gives the current
+# wall-clock time AS IT WOULD READ in Central, regardless of server TZ.
+_LOCAL_TZ = ZoneInfo("America/Chicago")
+
+
+def _local_now() -> datetime:
+    return datetime.now(_LOCAL_TZ).replace(tzinfo=None)
+
 
 _WEEKDAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _MONTH_ABBR = [
@@ -217,7 +231,7 @@ def open_slots(
     is balanced across staff.
     """
     if now is None:
-        now = datetime.now()
+        now = _local_now()
 
     eligible = [a for a in agents if agent_covers(a, area)]
     windows_by_agent: dict[str, list[dict]] = {}
@@ -308,7 +322,7 @@ def slot_is_structurally_valid(
     agent exists, the slot is not in the past, it is aligned to the step, and
     it falls inside one of the agent's recurring windows."""
     if now is None:
-        now = datetime.now()
+        now = _local_now()
     if not any(a["id"] == agent_id for a in agents):
         return False
     if start <= now:
@@ -324,83 +338,49 @@ def slot_is_structurally_valid(
 
 MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
 
-_SEED_AGENTS = [
-    {
-        "id": "AGENT-01",
-        "name": "Maria Lopez",
-        "role": "Leasing Consultant",
-        "areas": ["Downtown", "South Congress"],
-        "days": [MON, TUE, WED, THU, FRI],
-        "start": "09:00",
-        "end": "17:00",
-    },
-    {
-        "id": "AGENT-02",
-        "name": "James Chen",
-        "role": "Leasing Consultant",
-        "areas": ["North Austin", "Mueller"],
-        "days": [MON, TUE, WED, THU, FRI],
-        "start": "09:00",
-        "end": "17:00",
-    },
-    {
-        "id": "AGENT-03",
-        "name": "Priya Patel",
-        "role": "Senior Leasing Agent",
-        "areas": ["Zilker", "East Austin"],
-        "days": [TUE, WED, THU, FRI, SAT],
-        "start": "10:00",
-        "end": "18:00",
-    },
-    {
-        "id": "AGENT-04",
-        "name": "Deshawn Brown",
-        "role": "Tour Specialist",
-        # Pairs with the Downtown/North Austin corridor (Maria + James's turf).
-        "areas": ["Downtown", "South Congress", "North Austin", "Mueller"],
-        # Mon/Wed/Fri 12:00-20:00 + Sat 10:00-14:00
-        "windows": [
-            (MON, "12:00", "20:00"),
-            (WED, "12:00", "20:00"),
-            (FRI, "12:00", "20:00"),
-            (SAT, "10:00", "14:00"),
-        ],
-    },
-    {
-        "id": "AGENT-05",
-        "name": "Sofia Ramirez",
-        "role": "Tour Specialist",
-        # Pairs with the Zilker/East Austin corridor (Priya's turf) plus the
-        # adjacent Pearl District/Deep Ellum properties.
-        "areas": ["Zilker", "East Austin", "Pearl District", "Deep Ellum"],
-        "windows": [
-            (TUE, "12:00", "20:00"),
-            (THU, "12:00", "20:00"),
-            (SAT, "10:00", "18:00"),
-        ],
-    },
-    {
-        "id": "AGENT-06",
-        "name": "Marcus Webb",
-        "role": "Tour Specialist",
-        # Covers the remaining neighborhoods with no dedicated leasing
-        # consultant, so every property still gets a tour specialist.
-        "areas": [
-            "Hyde Park",
-            "Crestview",
-            "Bouldin Creek",
-            "Uptown",
-            "Alamo Heights",
-            "Montrose",
-        ],
-        "windows": [
-            (MON, "10:00", "18:00"),
-            (WED, "10:00", "18:00"),
-            (FRI, "10:00", "18:00"),
-            (SUN, "10:00", "14:00"),
-        ],
-    },
+# Every property gets its own dedicated agent -- eligibility is keyed to the
+# property's OWN id (via `agent["areas"] == [property_id]`), not its
+# neighborhood, so no two properties ever share the same assigned tour agent.
+# (`tours_api._area_of` feeds that property id into `agent_covers` under the
+# same "area" parameter the engine already understands -- one agent, one
+# property, no overlap.)
+_AGENT_NAMES = [
+    "Maria Lopez", "James Chen", "Priya Patel", "Deshawn Brown", "Sofia Ramirez",
+    "Marcus Webb", "Elena Volkov", "Tyrese Jackson", "Grace Kim", "Omar Haddad",
+    "Lucia Fernandez", "Noah Bennett", "Aisha Rahman", "Connor Walsh", "Mei Lin",
+    "Diego Alvarez", "Fatima Al-Sayed", "Jackson Reid", "Naomi Cohen", "Trevor Boyd",
+    "Yuki Tanaka", "Andre Dupont", "Simone Baptiste", "Wesley Foster", "Ingrid Solberg",
+    "Rashid Malik", "Camille Girard", "Devon Marsh", "Anika Sharma", "Miguel Torres",
+    "Clara Jensen", "Bilal Ahmed", "Renee Dubois", "Julian Ortiz", "Keisha Wright",
+    "Henrik Larsen", "Zara Malik", "Cole Ramsey", "Isabela Souza", "Franklin Osei",
+    "Petra Novak", "Damon Ellis", "Nadia Hassan", "Colton Briggs", "Yara Nasser",
+    "Preston Cole", "Amara Nwosu", "Silas Grant", "Leilani Kahale", "Emmett Hale",
 ]
+_ROLE_CYCLE = ["Leasing Consultant", "Senior Leasing Agent", "Tour Specialist"]
+
+
+def _build_seed_agents() -> list[dict]:
+    """One dedicated agent per property, in property order, so assignment is
+    stable and deterministic run to run."""
+    import graph
+
+    agents = []
+    for i, prop in enumerate(graph.load_properties()):
+        agents.append(
+            {
+                "id": f"AGENT-{i + 1:03d}",
+                "name": _AGENT_NAMES[i % len(_AGENT_NAMES)],
+                "role": _ROLE_CYCLE[i % len(_ROLE_CYCLE)],
+                "areas": [prop["id"]],
+                "days": [MON, TUE, WED, THU, FRI, SAT],
+                "start": "09:00",
+                "end": "19:00",
+            }
+        )
+    return agents
+
+
+_SEED_AGENTS = _build_seed_agents()
 
 
 def seed_tours() -> dict:
@@ -430,14 +410,18 @@ def seed_tours() -> dict:
                 store.save_window(spec["id"], weekday, spec["start"], spec["end"])
 
     # One demo booking so the UI is not empty: PROP-002 Riverside Lofts,
-    # 2026-07-22 (Wed) 10:00 with AGENT-01 (covers Downtown).
+    # 2026-07-22 (Wed) 10:00 with its dedicated agent.
+    demo_agent = next(
+        (spec for spec in _SEED_AGENTS if "PROP-002" in spec["areas"]),
+        _SEED_AGENTS[0],
+    )
     demo_start = datetime(2026, 7, 22, 10, 0, 0)
     try:
         store.book_tour(
             property_id="PROP-002",
             property_name="Riverside Lofts",
-            agent_id="AGENT-01",
-            agent_name="Maria Lopez",
+            agent_id=demo_agent["id"],
+            agent_name=demo_agent["name"],
             start=demo_start.isoformat(timespec="seconds"),
             end=(demo_start + timedelta(minutes=30)).isoformat(timespec="seconds"),
             duration_minutes=30,

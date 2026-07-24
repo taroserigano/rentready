@@ -95,6 +95,16 @@
   --accent-warm:      #ff7a45;  --accent-warm-hover: #ff9265;  --accent-warm-text: #ff8a5c;  /* ~8.6:1 on --bg */
   --accent-warm-soft: rgba(255, 122, 69, 0.14);  --accent-warm-line: rgba(255, 122, 69, 0.34);  --accent-warm-ink: #2a0f02;
 
+  /* ---- Ask page starter tiles: a bolder resting fill than --tone-*-soft ----
+     (which is tuned for thin badge backgrounds). Dark theme reads flat/empty
+     with only a soft tint, so these are noticeably richer here specifically;
+     light theme keeps the original gentle --tone-*-soft look (see override). */
+  --ask-tile-violet:  rgba(139, 109, 255, 0.22); --ask-tile-violet-hover:  rgba(139, 109, 255, 0.34);
+  --ask-tile-teal:    rgba(53, 224, 200, 0.20);  --ask-tile-teal-hover:    rgba(53, 224, 200, 0.32);
+  --ask-tile-blue:    rgba(86, 168, 232, 0.22);  --ask-tile-blue-hover:    rgba(86, 168, 232, 0.34);
+  --ask-tile-magenta: rgba(168, 85, 247, 0.22);  --ask-tile-magenta-hover: rgba(168, 85, 247, 0.34);
+  --ask-tile-warm:    rgba(255, 122, 69, 0.20);  --ask-tile-warm-hover:    rgba(255, 122, 69, 0.32);
+
   /* ---- glass ---- */
   --glass-blur: 18px;
 
@@ -248,6 +258,15 @@
   --accent-warm:      #c2410c;  --accent-warm-hover: #a8380a;  --accent-warm-text: #c2410c;  /* ~5.2:1 on #fff */
   --accent-warm-soft: rgba(194, 65, 12, 0.10);  --accent-warm-line: rgba(194, 65, 12, 0.28);  --accent-warm-ink: #ffffff;
 
+  /* Ask page tiles: light theme already reads fine with the gentle default
+     tint against a white page, so keep the original --tone-*-soft strength
+     here rather than the bolder dark-theme fill above. */
+  --ask-tile-violet:  var(--tone-violet-soft);  --ask-tile-violet-hover:  var(--tone-violet-line);
+  --ask-tile-teal:    var(--tone-teal-soft);    --ask-tile-teal-hover:    var(--tone-teal-line);
+  --ask-tile-blue:    var(--tone-blue-soft);    --ask-tile-blue-hover:    var(--tone-blue-line);
+  --ask-tile-magenta: var(--tone-magenta-soft); --ask-tile-magenta-hover: var(--tone-magenta-line);
+  --ask-tile-warm:    var(--accent-warm-soft);  --ask-tile-warm-hover:    var(--accent-warm-line);
+
   /* ---- depth (soft violet drop shadows) ---- */
   --shadow-card: 0 1px 2px rgba(60, 50, 120, 0.08), 0 1px 3px rgba(60, 50, 120, 0.06);
   --shadow-lift: 0 16px 40px -18px rgba(80, 60, 170, 0.30), 0 2px 8px rgba(40, 30, 90, 0.08);
@@ -270,6 +289,13 @@
    ============================================================ */
 
 * { box-sizing: border-box; }
+
+/* Global UI scale: enlarge the whole interface ~20% (equivalent to a browser
+   120% zoom). Applied at the document root so text, spacing, icons, and images
+   all scale uniformly; the DOM is unchanged so nothing else is affected. */
+html {
+  zoom: 1.2;
+}
 
 body {
   margin: 0;
@@ -1926,8 +1952,12 @@ button:active:not(:disabled),
 .table-scroll--capped thead th {
   position: sticky;
   top: 0;
-  background: var(--panel);
-  z-index: 1;
+  /* Must be OPAQUE: --panel is a near-transparent glass tint (rgba alpha ~0.04),
+     so scrolling rows bled through the pinned header. --bg-elev is the solid
+     elevated-surface fallback and reads cleanly in both themes. */
+  background: var(--bg-elev);
+  z-index: 3;
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 
 /* ============================================================
@@ -2255,7 +2285,6 @@ button:active:not(:disabled),
 /* Tighter page shell than the default .app — this page has no header, so
    give the vertical space it would have taken to the chat card instead. */
 .app-ask { padding-top: var(--s-4); padding-bottom: var(--s-4); }
-.app-ask .ask-chat-card { margin-top: 0; }
 
 /* Slim contextual bar (property scope tag + lease/clear icons) shown only
    when relevant — replaces the old boxy toolbar section. */
@@ -2269,25 +2298,65 @@ button:active:not(:disabled),
   flex-shrink: 0;
 }
 .ask-scope {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: var(--r-md);
-  background: var(--field);
+  padding: 9px 14px 9px 12px;
+  border-radius: var(--r-full);
+  background: linear-gradient(180deg, var(--panel-2), var(--field));
   border: 1px solid var(--line-strong);
   min-width: 0;
+  box-shadow: var(--shadow-card);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.ask-scope:hover {
+  border-color: var(--accent);
+}
+.ask-scope:has(.ask-scope-select:focus-visible) {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-card), 0 0 0 3px var(--accent-soft);
+}
+/* A property is scoped: give the pin a quiet accent tint instead of plain muted. */
+.ask-scope.has-value .ask-scope-icon {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.ask-scope-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  color: var(--muted);
+  background: var(--panel-2);
+  flex-shrink: 0;
+  transition: color .15s ease, background .15s ease;
 }
 .ask-scope-select {
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
   background: transparent;
   color: var(--text);
   font-size: var(--fs-sm);
-  font-weight: var(--w-med);
+  font-weight: var(--w-semi);
   max-width: 260px;
-  padding: 0;
+  padding: 0 4px 0 0;
+  cursor: pointer;
 }
 .ask-scope-select:focus { outline: none; }
+.ask-scope-chevron {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform .15s ease, color .15s ease;
+}
+.ask-scope:hover .ask-scope-chevron { color: var(--text-2); }
+.ask-scope:has(.ask-scope-select:focus-visible) .ask-scope-chevron {
+  color: var(--accent-text);
+  transform: rotate(180deg);
+}
 .ask-scope-hint {
   margin: 6px 0 0;
   font-size: var(--fs-xs);
@@ -2384,6 +2453,38 @@ button:active:not(:disabled),
   filter: none;
 }
 .ask-starter-tile:disabled { opacity: 0.5; cursor: default; }
+
+/* Each starter group gets its own tone accent (reusing the Workspace/Apply
+   tone-identity tokens) instead of one flat uniform violet, so the empty-state
+   menu reads as distinct colorful categories rather than a single dark block. */
+.ask-starter-group .eyebrow::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  background: var(--tone-violet-text);
+}
+.ask-starter-group[data-tone="teal"]    .eyebrow::before { background: var(--tone-teal-text); }
+.ask-starter-group[data-tone="blue"]    .eyebrow::before { background: var(--tone-blue-text); }
+.ask-starter-group[data-tone="magenta"] .eyebrow::before { background: var(--tone-magenta-text); }
+.ask-starter-group[data-tone="warm"]    .eyebrow::before { background: var(--accent-warm-text); }
+
+.ask-starter-group[data-tone="violet"]  .ask-starter-tile { border-color: var(--tone-violet-line); background: var(--ask-tile-violet); }
+.ask-starter-group[data-tone="violet"]  .ask-starter-tile svg { color: var(--tone-violet-text); }
+.ask-starter-group[data-tone="violet"]  .ask-starter-tile:hover:not(:disabled) { background: var(--ask-tile-violet-hover); border-color: var(--tone-violet-text); }
+
+.ask-starter-group[data-tone="teal"]    .ask-starter-tile { border-color: var(--tone-teal-line); background: var(--ask-tile-teal); }
+.ask-starter-group[data-tone="teal"]    .ask-starter-tile svg { color: var(--tone-teal-text); }
+.ask-starter-group[data-tone="teal"]    .ask-starter-tile:hover:not(:disabled) { background: var(--ask-tile-teal-hover); border-color: var(--tone-teal-text); }
+
+.ask-starter-group[data-tone="blue"]    .ask-starter-tile { border-color: var(--tone-blue-line); background: var(--ask-tile-blue); }
+.ask-starter-group[data-tone="blue"]    .ask-starter-tile svg { color: var(--tone-blue-text); }
+.ask-starter-group[data-tone="blue"]    .ask-starter-tile:hover:not(:disabled) { background: var(--ask-tile-blue-hover); border-color: var(--tone-blue-text); }
+
+.ask-starter-group[data-tone="magenta"] .ask-starter-tile { border-color: var(--tone-magenta-line); background: var(--ask-tile-magenta); }
+.ask-starter-group[data-tone="magenta"] .ask-starter-tile svg { color: var(--tone-magenta-text); }
+.ask-starter-group[data-tone="magenta"] .ask-starter-tile:hover:not(:disabled) { background: var(--ask-tile-magenta-hover); border-color: var(--tone-magenta-text); }
+
+.ask-starter-group[data-tone="warm"]    .ask-starter-tile { border-color: var(--accent-warm-line); background: var(--ask-tile-warm); }
+.ask-starter-group[data-tone="warm"]    .ask-starter-tile svg { color: var(--accent-warm-text); }
+.ask-starter-group[data-tone="warm"]    .ask-starter-tile:hover:not(:disabled) { background: var(--ask-tile-warm-hover); border-color: var(--accent-warm-text); }
 
 /* Lease Viewer: Summary / Document(PDF) segmented tabs + PDF pane. The
    selector is scoped under .modal-backdrop (not just .lease-viewer-panel) so

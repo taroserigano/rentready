@@ -138,7 +138,16 @@ def _process_pdf(pdf_bytes: bytes) -> UploadResponse:
 async def upload(file: UploadFile = File(...)) -> UploadResponse:
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Please upload a PDF file.")
-    return _process_pdf(await file.read())
+    # Bounded read (not `await file.read()`): reading one extra byte past the
+    # cap tells us the real file is too large without ever buffering it fully
+    # into memory.
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    pdf_bytes = await file.read(max_bytes + 1)
+    if len(pdf_bytes) > max_bytes:
+        raise HTTPException(
+            413, f"PDF exceeds the {settings.max_upload_mb}MB upload limit."
+        )
+    return _process_pdf(pdf_bytes)
 
 
 @app.get("/samples")
@@ -233,6 +242,16 @@ def get_applicant_pdf(applicant_id: str):
 def delete_applicant(applicant_id: str) -> dict:
     if not store.delete_applicant(applicant_id):
         raise HTTPException(404, "Unknown applicant id.")
+    # Best-effort cleanup of what the DB row doesn't own: the uploaded PDF on
+    # disk and this applicant's chunks in the RAG index. Neither failing
+    # should undo the delete that already succeeded above.
+    try:
+        path = UPLOAD_DIR / f"{applicant_id}.pdf"
+        if path.exists():
+            path.unlink()
+    except OSError as exc:
+        print(f"delete_applicant: couldn't remove PDF for {applicant_id} ({exc}).")
+    rag_llamaindex.delete_applicant(applicant_id)
     return {"deleted": applicant_id}
 
 
@@ -253,13 +272,27 @@ def get_eligibility(applicant_id: str) -> EligibilityResult:
 @app.get("/recommend/{applicant_id}", response_model=RecommendResponse)
 def get_recommend(applicant_id: str) -> RecommendResponse:
     t0 = time.perf_counter()
-    result = graphrag.recommend(_get_profile(applicant_id))
-    # Cheap online quality signal: deterministic hallucination tripwire over
-    # the explanations we just served.
-    violations = sum(
-        len(judges.faithfulness_violations(r.match_reason, r.amenities))
-        for r in result["recommendations"]
-    )
+    profile = _get_profile(applicant_id)
+    try:
+        result = graphrag.recommend(profile)
+        # Cheap online quality signal: deterministic hallucination tripwire
+        # over the explanations we just served.
+        violations = sum(
+            len(judges.faithfulness_violations(r.match_reason, r.amenities))
+            for r in result["recommendations"]
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Log the failure too — a bare 500 that skips log_event is invisible
+        # to the monitoring dashboard, which otherwise reads an outage as
+        # silence instead of a spike.
+        store.log_event(
+            endpoint="recommend",
+            applicant_id=applicant_id,
+            latency_ms=(time.perf_counter() - t0) * 1000,
+            source="error",
+            meta={"error": f"{type(exc).__name__}: {exc}"},
+        )
+        raise
     store.log_event(
         endpoint="recommend",
         applicant_id=applicant_id,
@@ -368,7 +401,19 @@ def goal_seek(req: GoalSeekRequest) -> dict:
 def ask(req: AskRequest) -> AskResponse:
     _get_profile(req.applicant_id)
     t0 = time.perf_counter()
-    result = rag_llamaindex.query(req.applicant_id, req.question)
+    try:
+        result = rag_llamaindex.query(req.applicant_id, req.question)
+    except Exception as exc:  # noqa: BLE001 — rag_llamaindex.query() itself
+        # never raises now, but log any failure that somehow still reaches
+        # here rather than let it skip log_event invisibly.
+        store.log_event(
+            endpoint="ask",
+            applicant_id=req.applicant_id,
+            latency_ms=(time.perf_counter() - t0) * 1000,
+            source="error",
+            meta={"error": f"{type(exc).__name__}: {exc}"},
+        )
+        raise
     store.log_event(
         endpoint="ask",
         applicant_id=req.applicant_id,

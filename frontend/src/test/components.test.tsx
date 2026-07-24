@@ -67,7 +67,7 @@ describe("Recommendations", () => {
     };
     render(<Recommendations data={data} />);
     expect(screen.getByText("The Heights")).toBeInTheDocument();
-    expect(screen.getByText(/graph: neo4j/)).toBeInTheDocument();
+    expect(screen.getByText(/Graph DB: neo4j/)).toBeInTheDocument();
     expect(screen.getByText(/90% match/)).toBeInTheDocument();
   });
 

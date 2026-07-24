@@ -30,12 +30,13 @@ import knowledge
 # Property intent: structured facts (amenities, rent, size, availability...).
 _PROPERTY_RE = re.compile(
     r"\b("
-    r"price|cost|how much|monthly rent|what'?s the rent|what is the rent|rental rate|"
+    r"price|cost|how much|monthly rent|monthly cost|monthly fee|monthly payment|"
+    r"what'?s the rent|what is the rent|rental rate|"
     r"the rent|negotiable|"
-    r"bedroom|bed\b|bathroom|bath\b|square feet|square footage|sq ?ft|size|how big|"
-    r"amenit|gym\w*|fitness|pool|swim|rooftop|deck|bike|concierge|playground|"
+    r"bedroom\w*|bed\b|bathroom\w*|bath\b|square feet|square footage|sq ?ft|size|how big|"
+    r"amenit\w*|gym\w*|fitness|pool|swim|rooftop|deck|bike|concierge|playground|"
     r"parking|garage|"
-    r"balcony|laundry|washer|dryer|furnished|gated|storage|"
+    r"balcony|laundry|washer|dryer|furnished|furnitur\w*|gated|behind a gate|storage|"
     r"walk score|transit|neighborhood|located|location|address|"
     r"available|availability|move[- ]?in|year built|floor|"
     r"does it have|do they have|is there a|are there|what amenities"
@@ -44,21 +45,41 @@ _PROPERTY_RE = re.compile(
 )
 
 # Lease intent: policies, obligations, "can I ...", "what happens if ...".
+# Beyond the exact keywords, this also catches the SEMANTIC CLASS of a
+# lease-policy/consequence question phrased without the keyword — the late-rent,
+# payment-failure, break-lease and eviction topics stated in natural language
+# ("paying rent late", "my payment didn't go through", "breaking the agreement
+# before it ends", "kicked out"), plus consequence/penalty question shapes
+# ("what are the consequences of …", "is there a penalty for …", "what's the
+# deal if …") that a real resident uses instead of the golden's exact wording.
 _LEASE_RE = re.compile(
     r"\b("
-    r"deposit|sublet|sublease|assign|"
-    r"notice|terminat|break the lease|break my lease|end the lease|move out early|"
+    r"deposit\w*|sublet\w*|sublease|assign|"
+    r"notice\w*|terminat\w*|penalt\w*|"
+    r"break\w*\s+(the\s+|my\s+|this\s+)?(lease|agreement|contract)|"
+    r"end\w*\s+(the\s+|my\s+|this\s+)?(lease|agreement|contract)|"
+    r"move out early|before\s+(it|the\s+lease|the\s+term)\s+ends?|"
+    # Late / missed / failed rent payment, in either word order.
     r"late fee|late payment|returned payment|nsf|bounced|"
-    r"guests?|visitor|occupan|"
+    r"pay\w*\s+(the\s+|my\s+)?rent\s+late|"
+    r"rent\s+(is\s+|was\s+|gets?\s+|ends?\s+up\s+)?(being\s+)?(paid\s+)?late|"
+    r"late\s+(with\s+)?(the\s+|my\s+)?rent|pay\w*\s+late|paid\s+late|"
+    r"fee\s+for\s+(being|paying)\s+late|"
+    r"past\s+(the\s+)?due(\s+date)?|past[- ]due|"
+    r"didn'?t\s+go\s+through|did\s+not\s+go\s+through|failed\s+to\s+process|"
+    r"payment\s+failed|didn'?t\s+clear|"
+    r"guests?|visitor|occupan\w*|"
     r"can i|am i allowed|allowed to|what happens if|do i have to|how do i|"
     r"pet policy|pets? allowed|pet deposit|pet rent|dogs?|cats?|"
     r"insurance|liability|"
-    r"renew|renewal|month[- ]to[- ]month|"
+    r"renew\w*|month[- ]to[- ]month|"
     r"landlord enter|landlord entry|enter the|entry|"
-    r"utilit\w*|maintenance|repair|"
+    r"utilit\w*|maintenanc\w*|repair\w*|"
     r"lease term|how long is the lease|"
     r"rule|alteration|paint|change the lock|smoking|"
-    r"evict\w*|default|policy"
+    r"evict\w*|kick\w*\s+(me\s+)?out|thrown\s+out|default|policy|"
+    # Consequence / penalty question shapes (obligation-flavored, not amenities).
+    r"consequences?\s+(of|for)|on\s+the\s+hook|what'?s\s+the\s+deal\s+(if|when)"
     r")\b",
     re.IGNORECASE,
 )
@@ -67,10 +88,16 @@ _LEASE_RE = re.compile(
 # Comparative / list intent: the user wants to scan ACROSS properties.
 _COMPARE_INTENT_RE = re.compile(
     r"("
-    r"which\s+propert|which\s+(home|place|apartment|unit|rental|listing|building|complex)|"
+    r"which\s+(of\s+(the\s+|these\s+|those\s+)?)?propert|"
+    r"which\s+(of\s+(the\s+|these\s+|those\s+)?)?(home|place|apartment|unit|rental|listing|building|complex)|"
     r"\bcompare\b|cheapest|least expensive|most affordable|lowest rent|"
-    r"\blist\b|show me|\boptions\b|\bcompar|"
-    r"any\s+(homes?|places?|apartments?|units?|rentals?|listings?|properties)\s+that|"
+    r"budget[\s-]?friendly|budget[\s-]?conscious|"
+    # "list" as an imperative for homes — but not a personal "to-do list".
+    r"(?<!to-do )(?<!to do )\blist\b|show me|\boptions\b|\bcompar|"
+    # "any homes/apartments/…" (plural) signals a cross-property scan. The \b
+    # before "any" keeps "many"/"how many" out, and the required home-noun keeps
+    # "any extra storage"/"any flexibility" as scoped property questions.
+    r"\bany\s+(homes?|places?|apartments?|units?|rentals?|listings?|properties)\b|"
     r"what\s+(properties|homes|apartments|places|rentals|units)|"
     r"across (all )?propert|all (the )?(homes|properties|apartments)"
     r")",
@@ -83,6 +110,19 @@ _COMPARE_INTENT_RE = re.compile(
 # "both" route (a "how much is the security deposit?" is a pure lease question).
 _GENERIC_PROPERTY_RE = re.compile(
     r"\b(how much|does it have|do they have|is there a|are there|is there|do you have)\b",
+    re.IGNORECASE,
+)
+
+# Meta questions ABOUT the assistant itself ("what kinds of questions can you
+# answer?", "what can I ask you about?"). These carry lease-ish tokens ("allowed
+# to", "can i") but are not lease questions — they must stay ``general``.
+_META_ASSISTANT_RE = re.compile(
+    r"("
+    r"what\s+(kinds?|sort|sorts|types?)\s+of\s+(questions?|things?|stuff|help)|"
+    r"what\s+questions?\s+(can|could|do|am\s+i\s+allowed|are\s+you\s+able)|"
+    r"what\s+can\s+(you|i)\s+(ask|answer|help)|what\s+can\s+i\s+ask|"
+    r"what\s+(can|do)\s+you\s+do|how\s+can\s+you\s+help"
+    r")",
     re.IGNORECASE,
 )
 
@@ -193,6 +233,17 @@ def _has_filter_phrase(question: str) -> bool:
     return False
 
 
+def _has_strong_filter_phrase(question: str) -> bool:
+    """A price ceiling or an explicit bedroom count — unambiguous enough that
+    even "is there / does it" phrasing means a cross-property search, not a
+    question about one already-scoped place. Unlike pets/area (which can
+    plausibly describe a single already-scoped home, e.g. "is there parking
+    near this place?"), nobody asks "is there a 2-bedroom under $2000" about
+    one specific unit — that's a catalog search regardless of phrasing."""
+    q = question or ""
+    return bool(_MAX_RENT_RE.search(q) or _BEDS_RE.search(q) or _STUDIO_RE.search(q))
+
+
 def route(question: str, property_id: str | None = None) -> str:
     """Classify the question into which tool(s) to use.
 
@@ -206,9 +257,14 @@ def route(question: str, property_id: str | None = None) -> str:
     if (
         not property_id
         and _has_filter_phrase(q)
-        and not _SINGULAR_RE.search(q)
+        and (not _SINGULAR_RE.search(q) or _has_strong_filter_phrase(q))
     ):
         return "compare"
+
+    # A question about what the assistant can do is general, even though it may
+    # contain lease-ish tokens like "can i" / "allowed to".
+    if _META_ASSISTANT_RE.search(q):
+        return "general"
 
     is_property = bool(_PROPERTY_RE.search(q))
     is_lease = bool(_LEASE_RE.search(q))
@@ -797,11 +853,17 @@ def _deterministic_answer(question, route_, prop, sources, comparison=None) -> s
         cite = "[1]" if has_property else ""
         parts.append(_deterministic_property_answer(prop, question) + (f" {cite}".rstrip()))
 
-    if route_ in ("lease", "both", "general") and lease_sources:
-        # Cite up to the two most relevant lease passages.
+    if route_ in ("lease", "both") and lease_sources:
+        # Cite up to the three most relevant lease passages. (Top-3, not top-2:
+        # a bounced-payment question ranks "Late Fees & Returned Payments" third
+        # behind Default and Rent, so a 2-cap dropped the clause that actually
+        # answers it.) Deliberately NOT "general" here: a general-routed question
+        # by definition matched neither _PROPERTY_RE nor _LEASE_RE, so
+        # knowledge.search()'s top-k for it is retrieval noise, not a real answer
+        # — citing it would fabricate lease grounding for e.g. "Hi there!".
         base_num = 2 if has_property else 1
         offset = 1 if has_property else 0
-        top = lease_sources[:2]
+        top = lease_sources[:3]
         chunks = []
         for i, s in enumerate(top):
             num = offset + i + 1
@@ -818,6 +880,26 @@ def _deterministic_answer(question, route_, prop, sources, comparison=None) -> s
             "lease and details."
         )
     return " ".join(parts).strip()
+
+
+_CITE_RE = re.compile(r"\[(\d+)\]")
+
+
+def _filter_cited_sources(text: str, sources: list[dict]) -> list[dict]:
+    """Keep only the sources the final answer text actually cites via ``[n]``,
+    tagging each with its original citation number (``cite``) so the UI can
+    still match a displayed source to the bracket in the prose — numbering is
+    never rewritten. Retrieval (knowledge.search) always returns up to k
+    passages regardless of relevance, so without this the "sources" panel
+    shows retrieval noise the answer never actually relied on. Falls back to
+    the full list when the text carries no valid citation at all, so grounding
+    evidence is never silently hidden just because the model forgot brackets."""
+    tagged = [{**s, "cite": i + 1} for i, s in enumerate(sources)]
+    cited = {int(m) for m in _CITE_RE.findall(text or "")}
+    valid = {n for n in cited if 1 <= n <= len(sources)}
+    if not valid:
+        return tagged
+    return [s for s in tagged if s["cite"] in valid]
 
 
 # ---------------------------------------------------------------------------
@@ -895,7 +977,7 @@ def _answer(question: str, property_id: str | None, history) -> dict:
     return {
         "answer": text,
         "route": plan.route,
-        "sources": plan.sources,
+        "sources": _filter_cited_sources(text, plan.sources),
         "source": source,
         "property_id": property_id or "",
         "follow_ups": plan.follow_ups,
@@ -944,6 +1026,7 @@ def answer_stream(question: str, property_id: str | None = None, history=None):
 
     # Try streaming the LLM prose; fall back to one deterministic token.
     streamed_any = False
+    full_text = ""
     if plan.context_blocks:
         llm = get_langchain_llm()
         if llm is not None:
@@ -955,9 +1038,17 @@ def answer_stream(question: str, property_id: str | None = None, history=None):
                     text = _coalesce(getattr(chunk, "content", ""))
                     if text:
                         streamed_any = True
+                        full_text += text
                         yield {"type": "token", "text": text}
                 if streamed_any:
-                    yield {"type": "done", "source": "anthropic"}
+                    # The `meta` frame already sent the full retrieved set (the
+                    # answer wasn't written yet); now that it is, narrow the
+                    # sources down to what the answer actually cited.
+                    yield {
+                        "type": "done",
+                        "source": "anthropic",
+                        "sources": _filter_cited_sources(full_text, plan.sources),
+                    }
                     return
             except Exception as exc:  # noqa: BLE001 — degrade to deterministic
                 print(f"concierge: stream synthesis failed ({type(exc).__name__}).")
@@ -971,4 +1062,8 @@ def answer_stream(question: str, property_id: str | None = None, history=None):
             "contact the leasing office."
         )
     yield {"type": "token", "text": det}
-    yield {"type": "done", "source": "rules"}
+    yield {
+        "type": "done",
+        "source": "rules",
+        "sources": _filter_cited_sources(det, plan.sources),
+    }

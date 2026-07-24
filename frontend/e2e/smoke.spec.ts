@@ -13,7 +13,7 @@ test.describe("smoke", () => {
       "Tours",
       "Ask",
       "Dashboard",
-      "Risk",
+      "Risk Assessment",
       "Residents",
     ]) {
       await expect(

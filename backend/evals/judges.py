@@ -109,8 +109,21 @@ def _clamp_score(value, lo: int = 1, hi: int = 5):
 
 def _invoke(llm, system: str, human: str) -> str:
     raw = llm.invoke([("system", system), ("human", human)]).content
-    if isinstance(raw, list):  # some providers return content blocks
-        raw = "".join(str(b) for b in raw)
+    if isinstance(raw, list):
+        # Extended-thinking responses are a list of content blocks: a
+        # {"type": "thinking", ...} block with NO "text" key, then the real
+        # {"type": "text", "text": "..."} block. A naive str(b) join stringifies
+        # the whole thinking-block dict (signature/thinking payload) ahead of
+        # the JSON, which breaks _first_json_obj's regex — pull "text" only.
+        parts = []
+        for b in raw:
+            if isinstance(b, str):
+                parts.append(b)
+            elif isinstance(b, dict):
+                parts.append(str(b.get("text", "")))
+            else:
+                parts.append(str(b))
+        raw = "".join(parts)
     return raw
 
 

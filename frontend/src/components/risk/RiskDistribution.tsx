@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -24,17 +25,20 @@ const TOOLTIP_CURSOR = { fill: "rgba(255,255,255,0.04)" };
 
 const ORDER: RiskBand[] = ["low", "medium", "high"];
 
-/** Count-per-band bar chart. Each bar is coloured by its band via <Cell>. */
-export function RiskDistribution({ rows }: { rows: RiskRow[] }) {
-  const counts: Record<RiskBand, number> = { low: 0, medium: 0, high: 0 };
-  for (const r of rows) counts[r.band] = (counts[r.band] ?? 0) + 1;
-
-  const data = ORDER.map((b) => ({
-    band: b,
-    name: BAND_LABEL[b],
-    count: counts[b],
-    color: BAND_COLOR[b],
-  }));
+/* memo()'d + memoized `data`: Risk.tsx re-renders this on every search
+ * keystroke/band-filter click even though `rows` itself hasn't changed, so
+ * without this recharts was redoing its layout pass on every keystroke. */
+export const RiskDistribution = memo(function RiskDistribution({ rows }: { rows: RiskRow[] }) {
+  const data = useMemo(() => {
+    const counts: Record<RiskBand, number> = { low: 0, medium: 0, high: 0 };
+    for (const r of rows) counts[r.band] = (counts[r.band] ?? 0) + 1;
+    return ORDER.map((b) => ({
+      band: b,
+      name: BAND_LABEL[b],
+      count: counts[b],
+      color: BAND_COLOR[b],
+    }));
+  }, [rows]);
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -68,4 +72,4 @@ export function RiskDistribution({ rows }: { rows: RiskRow[] }) {
       </BarChart>
     </ResponsiveContainer>
   );
-}
+});

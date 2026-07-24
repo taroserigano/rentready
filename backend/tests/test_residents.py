@@ -16,14 +16,17 @@ residents, and the chat router / tools / answer / SSE stream (grounded + rules
 fallback when the LLM is disabled).
 """
 
+import re
 from datetime import date
 
 import pytest
 
 import generate_residents as gen
+import llm as llm_module
 import residents_chat as rc
 import residents_risk as rr
 from models import LedgerEntry, Resident
+from settings import settings as app_settings
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +47,59 @@ def force_heuristic(monkeypatch):
     monkeypatch.setattr(rr, "_model", lambda: None)
     yield
     rr._clear_prediction_caches()
+
+
+def test_model_prunes_only_the_invalid_head_not_the_whole_bundle(monkeypatch, tmp_path):
+    """Regression: _model() used to return None for the ENTIRE bundle if any
+    ONE head's feature_order drifted from code (or was missing its required
+    model key), reverting all 19 heads to heuristics over a single stale
+    head. It must now prune just that head's model key — every other head
+    stays servable, and the bad head's own metrics/feature_order survive for
+    the model card, only its predictor is gone."""
+    import joblib
+
+    required = {
+        "binary": "calibrated_model", "multiclass": "calibrated_model",
+        "count": "regressor", "regression": "regressor", "survival": "hazard_model",
+    }
+    good_spec = rr.HEADS[0]
+    bad_spec = rr.HEADS[1]
+    good_key = required[good_spec["kind"]]
+    bad_key = required[bad_spec["kind"]]
+
+    fake_bundle = {
+        "schema": rr.BUNDLE_SCHEMA,
+        "heads": {
+            good_spec["name"]: {
+                "feature_order": good_spec["feature_order"],
+                good_key: "FAKE_MODEL_OBJECT",
+                "metrics": {"auc": 0.81},
+            },
+            bad_spec["name"]: {
+                "feature_order": ["totally", "wrong", "contract"],  # drifted
+                bad_key: "FAKE_MODEL_OBJECT",
+                "metrics": {"auc": 0.77},  # must survive the prune
+            },
+        },
+    }
+
+    artifact = tmp_path / "fake_bundle.joblib"
+    artifact.write_bytes(b"placeholder")  # only needs .exists() to be True
+    monkeypatch.setattr(rr, "ARTIFACT_PATH", artifact)
+    monkeypatch.setattr(joblib, "load", lambda path: fake_bundle)
+    rr._model.cache_clear()
+    try:
+        bundle = rr._model()
+        assert bundle is not None  # the whole bundle is NOT invalidated
+
+        good_sub = bundle["heads"][good_spec["name"]]
+        assert good_key in good_sub  # untouched, still servable
+
+        bad_sub = bundle["heads"][bad_spec["name"]]
+        assert bad_key not in bad_sub  # stripped -> heuristic for this head only
+        assert bad_sub["metrics"] == {"auc": 0.77}  # informational data kept
+    finally:
+        rr._model.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +317,19 @@ def test_cure_not_applicable_when_no_balance():
     pred = rr.predict_resident(CLEAN)
     assert pred["heads"]["p_cure_6m"]["band"] == "not_applicable"
     assert pred["heads"]["p_cure_6m"]["probability"] is None
+
+
+def test_cure_eligibility_matches_the_training_label_gate():
+    """Regression: serving used `current_balance > 0.0` while the training
+    labeler (generate_residents.CURE_EPS gate) required `> CURE_EPS` ($1) to
+    ever emit a cure-head label — a resident with a balance in (0, CURE_EPS]
+    was scored by a model that saw zero training rows in that range. The two
+    gates must use the identical threshold."""
+    assert gen.CURE_EPS == rr.CURE_EPS
+    just_under = {"current_balance": rr.CURE_EPS}
+    just_over = {"current_balance": rr.CURE_EPS + 0.01}
+    assert rr._elig_cure(just_under) is False
+    assert rr._elig_cure(just_over) is True
 
 
 def test_churn_applicable_within_horizon_else_not():
@@ -515,9 +584,21 @@ def test_predict_residents_skips_bad_entries():
     ("Do you use race or location?", "governance"),
     ("What features does the model use?", "governance"),
     ("hello there", "general"),
+    # Regression: "quater" (missing 'r') used to fall through every regex and
+    # default to property_health instead of routing on the time horizon typed.
+    ("tell me prediction for next quater", "horizon"),
+    ("what about next moth", "horizon"),
 ])
 def test_route_maps_questions_to_intents(question, intent):
     assert rc.route(question) == intent
+
+
+def test_quarter_typo_still_picks_the_3_month_head():
+    """Regression: _parse_horizon re-scans the raw question for "quarter" to
+    pick which head answers the question — the typo fix must apply to that
+    text too, not just inside route(), or the intent would be right but the
+    answer would still cite the wrong (12-month) head."""
+    assert rc._parse_horizon(rc._fix_typos("prediction for next quater")) == "late_3m"
 
 
 @pytest.mark.parametrize("question", rc._FOLLOWUPS["property_health"])
@@ -615,6 +696,37 @@ def test_answer_at_risk_residents_scoped_to_property():
     )
 
 
+def test_answer_at_risk_residents_churn_framed_uses_churn_metric():
+    """Regression: a churn/renewal-framed ranking question ('at risk of
+    churning') used to be routed to the same at_risk_residents intent but
+    silently ranked and labeled everyone by their LATE-PAYMENT probability
+    instead -- the right intent, the wrong metric, cited with total
+    confidence. It must rank/label by the churn head instead."""
+    a = rc.answer("which residents are at risk of churning?")
+    assert a["intent"] == "at_risk_residents"
+    assert "churn" in a["answer"].lower()
+    assert "paying late" not in a["answer"].lower()
+
+    residents = rr.load_residents()
+    preds = rr.predict_bulk(residents, heads=rr.BULK_HEADS)
+    best = max(
+        zip(residents, preds),
+        key=lambda rp: (rp[1] or {}).get("churn", {}).get("probability") or 0.0,
+    )
+    top_pct = rc._pct(best[1]["churn"]["probability"])
+    assert top_pct in a["answer"]
+    assert best[0]["name"] in a["answer"]
+
+
+def test_answer_at_risk_residents_late_framed_still_uses_late_metric():
+    """Regression guard for the fix above: a plain late-payment framing must
+    keep using the late head, not accidentally flip to churn."""
+    a = rc.answer("which residents are most likely to fall behind on rent?")
+    assert a["intent"] == "at_risk_residents"
+    assert "paying late" in a["answer"].lower()
+    assert "non-renewal" not in a["answer"].lower()
+
+
 def test_answer_never_raises_on_garbage():
     a = rc.answer("", resident_id=None, property_id=None)
     assert isinstance(a["answer"], str) and a["answer"]
@@ -644,3 +756,241 @@ def test_answer_stream_matches_answer_artifact():
                                             resident_id=rid) if e["type"] == "meta")
     assert meta["artifact"] == a["artifact"]
     assert meta["intent"] == a["intent"]
+
+
+# ===========================================================================
+# 10. late_count_3m HEAD (quarterly late-payment forecast) — unit tests
+# ===========================================================================
+def test_late_count_3m_registered_in_head_catalog():
+    spec = rr.HEADS_BY_NAME["late_count_3m"]
+    assert spec["family"] == "frequency"
+    assert spec["kind"] == "count"
+    assert spec["feature_order"] == rr.FEATURE_ORDER_BASE
+    assert spec["band_edges"] is None  # served as expected+interval, not a band
+    assert "late_count_3m" in rr.HEAD_NAMES
+
+
+def test_late_count_3m_valid_on_representative_residents():
+    for res in (CLEAN, BAD, rr.load_residents()[0]):
+        pred = rr.predict_resident(res)
+        _assert_head_valid("late_count_3m", pred["heads"]["late_count_3m"])
+
+
+def test_late_count_3m_valid_on_heuristic_path(force_heuristic):
+    for res in (CLEAN, BAD):
+        pred = rr.predict_resident(res)
+        _assert_head_valid("late_count_3m", pred["heads"]["late_count_3m"])
+
+
+def test_late_count_3m_worse_resident_scores_higher(force_heuristic):
+    """A resident who is missing every recent payment must never get a LOWER
+    expected quarterly late-count than a spotless one (direction, not an exact
+    value, since the DGP/model may not match the heuristic bit-for-bit)."""
+    clean = rr.predict_resident(CLEAN)["heads"]["late_count_3m"]["expected"]
+    bad = rr.predict_resident(BAD)["heads"]["late_count_3m"]["expected"]
+    assert bad > clean
+
+
+def test_late_count_3m_never_raises_on_degenerate_heuristic(force_heuristic):
+    pred = rr.predict_resident(make_resident([]))
+    h = pred["heads"]["late_count_3m"]
+    assert h["expected"] >= 0.0
+    assert len(h["interval"]) == 2
+
+
+def test_late_count_3m_included_in_bulk_and_matches_single():
+    residents = rr.load_residents()[:12]
+    bulk = rr.predict_bulk(residents, heads=["late_count_3m"])
+    for r, b in zip(residents, bulk):
+        single = rr.predict_resident(r, with_reasons=False, heads=["late_count_3m"])
+        assert b["heads"]["late_count_3m"]["expected"] == single["heads"]["late_count_3m"]["expected"]
+
+
+# ===========================================================================
+# 11. QUARTERLY LATE-PAYMENT FORECAST (property/portfolio aggregate)
+# ===========================================================================
+def test_property_late_forecast_matches_sum_of_bulk_predictions():
+    pid = rr.RESIDENT_PROPERTY_IDS[0]
+    residents = [r for r in rr.load_residents() if r.get("property_id") == pid]
+    assert residents, "fixture property should have residents"
+    fc = rr.property_late_forecast(pid)
+    assert fc["property_id"] == pid
+    assert fc["resident_count"] == len(residents)
+
+    # The aggregate must be the exact SUM of each resident's own prediction —
+    # not a re-derived or approximated number.
+    preds = rr.predict_bulk(residents, heads=["late_count_3m"])
+    expected_sum = sum(p["heads"]["late_count_3m"]["expected"] for p in preds)
+    lo_sum = sum(p["heads"]["late_count_3m"]["interval"][0] for p in preds)
+    hi_sum = sum(p["heads"]["late_count_3m"]["interval"][1] for p in preds)
+    assert fc["expected"] == pytest.approx(round(expected_sum, 1), abs=0.15)
+    assert fc["interval"][0] == pytest.approx(round(lo_sum, 1), abs=0.15)
+    assert fc["interval"][1] == pytest.approx(round(hi_sum, 1), abs=0.15)
+    assert fc["interval"][0] <= fc["expected"] <= fc["interval"][1]
+
+    # top_contributors is sorted descending and drawn from the real residents.
+    contributors = fc["top_contributors"]
+    assert len(contributors) <= 5
+    assert [c["expected"] for c in contributors] == sorted(
+        (c["expected"] for c in contributors), reverse=True
+    )
+    resident_ids = {r["resident_id"] for r in residents}
+    assert all(c["resident_id"] in resident_ids for c in contributors)
+
+
+def test_portfolio_late_forecast_matches_sum_of_bulk_predictions():
+    residents = rr.load_residents()
+    fc = rr.portfolio_late_forecast()
+    assert fc["resident_count"] == len(residents)
+    preds = rr.predict_bulk(residents, heads=["late_count_3m"])
+    expected_sum = sum(p["heads"]["late_count_3m"]["expected"] for p in preds)
+    assert fc["expected"] == pytest.approx(round(expected_sum, 1), abs=1.0)
+    assert fc["interval"][0] <= fc["expected"] <= fc["interval"][1]
+
+
+def test_property_late_forecast_unknown_property_is_empty():
+    fc = rr.property_late_forecast("PROP-DOES-NOT-EXIST")
+    assert fc["property_id"] == "PROP-DOES-NOT-EXIST"
+    assert fc["resident_count"] == 0
+    assert fc["expected"] == 0.0
+    assert fc["interval"] == [0.0, 0.0]
+    assert fc["top_contributors"] == []
+
+
+def test_late_forecast_never_raises_on_load_failure(monkeypatch):
+    monkeypatch.setattr(rr, "load_residents", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    fc = rr.property_late_forecast("PROP-041")
+    assert fc == {"property_id": "PROP-041", "resident_count": 0, "expected": 0.0,
+                  "interval": [0.0, 0.0], "top_contributors": []}
+    fc2 = rr.portfolio_late_forecast()
+    assert fc2["resident_count"] == 0
+
+
+# ===========================================================================
+# 12. RESIDENTS CHAT — late_forecast intent (integration)
+# ===========================================================================
+@pytest.mark.parametrize("question", [
+    "how many late payments could anticipate next quarter",
+    "how many late payments do you expect next quarter",
+    "how many residents will be late next quarter",
+])
+def test_late_forecast_questions_route_to_frequency(question):
+    """These are exactly the phrasings a resident manager would type with no
+    resident selected — route() must still classify them as 'frequency' (the
+    per-resident intent name); it is _ResidentPlan that upgrades a resident-less
+    'frequency' question to the property/portfolio aggregate."""
+    assert rc.route(question) == "frequency"
+
+
+def test_answer_late_forecast_property_scope():
+    pid = rr.RESIDENT_PROPERTY_IDS[0]
+    a = rc.answer("How many late payments could we anticipate next quarter?",
+                  property_id=pid)
+    assert a["intent"] == "late_forecast"
+    assert a["source"] == "rules"
+    assert a["artifact"]["kind"] == "late_forecast"
+    assert a["artifact"]["scope"] == "property"
+    assert a["artifact"]["property_id"] == pid
+
+    fc = rr.property_late_forecast(pid)
+    assert rc._num(fc["expected"]) in a["answer"]
+    assert "[1]" in a["answer"]
+    # the guard names eviction/denial only to DISCLAIM them ("never a basis
+    # for eviction...") — never as an endorsed recommendation.
+    assert "never a basis for eviction" in a["answer"].lower()
+    assert "recommend eviction" not in a["answer"].lower()
+
+
+def test_answer_late_forecast_portfolio_scope():
+    a = rc.answer("How many late payments do you expect next quarter?")
+    assert a["intent"] == "late_forecast"
+    assert a["artifact"]["scope"] == "portfolio"
+    fc = rr.portfolio_late_forecast()
+    assert a["artifact"]["resident_count"] == fc["resident_count"]
+    assert rc._num(fc["expected"]) in a["answer"]
+    assert "[1]" in a["answer"]
+
+
+def test_answer_late_forecast_empty_property_is_graceful():
+    a = rc.answer("How many late payments next quarter?", property_id="PROP-DOES-NOT-EXIST")
+    assert a["intent"] == "late_forecast"
+    assert a["artifact"]["kind"] == "none"
+    assert a["sources"] == []
+    # no fabricated citation when there is nothing to cite
+    assert "[1]" not in a["answer"]
+
+
+def test_answer_frequency_resident_scope_still_includes_quarterly_count():
+    """A resident-scoped frequency question must not regress: it should now
+    ALSO surface the quarterly (late_count_3m) figure alongside the existing
+    12-month one, not replace it."""
+    rid = rr.load_residents()[0]["resident_id"]
+    pred = rr.predict_resident(rr.get_resident(rid))
+    a = rc.answer("How many late payments have they had, and how many next quarter?",
+                  resident_id=rid)
+    assert a["intent"] == "frequency"
+    q_expected = rc._num(pred["heads"]["late_count_3m"]["expected"])
+    assert q_expected in a["answer"]
+    assert "late_count_3m" in a["artifact"]["heads"]
+
+
+def test_answer_stream_late_forecast_meta_token_done():
+    events = list(rc.answer_stream("How many late payments next quarter?",
+                                   property_id=rr.RESIDENT_PROPERTY_IDS[0]))
+    types = [e["type"] for e in events]
+    assert types[0] == "meta" and types[-1] == "done"
+    assert events[0]["intent"] == "late_forecast"
+    token_text = "".join(e["text"] for e in events if e["type"] == "token")
+    assert "[1]" in token_text
+
+
+def test_answer_late_forecast_never_raises_on_garbage():
+    a = rc.answer("how many late payments", resident_id=None, property_id=None)
+    assert isinstance(a["answer"], str) and a["answer"]
+    a2 = rc.answer("how many late payments", resident_id="RES-DOES-NOT-EXIST",
+                   property_id="PROP-DOES-NOT-EXIST")
+    assert isinstance(a2["answer"], str) and a2["answer"]
+
+
+# ===========================================================================
+# 13. LIVE LLM INTEGRATION (opt-in — hits the real Claude API)
+#
+# Every other test in this module runs through the `no_llm` autouse fixture
+# (conftest.py), which forces the deterministic "rules" path so the suite is
+# offline/fast/repeatable. This one test deliberately restores the REAL LLM
+# for the residents chat agent to verify the full synthesis path end-to-end:
+# that Claude, given only the numbered late_forecast context, states the
+# correct aggregate number and cites it — not the routing/templating layer,
+# which every test above already covers deterministically.
+#
+# Skips gracefully (not a failure) when no API key is configured, e.g. a CI
+# runner without secrets. Run explicitly with:
+#   pytest tests/test_residents.py -k test_live_llm
+# ===========================================================================
+@pytest.mark.skipif(
+    not app_settings.anthropic_api_key,
+    reason="no ANTHROPIC_API_KEY configured (.env); live-LLM test skipped",
+)
+def test_live_llm_late_forecast_grounds_the_real_number(monkeypatch):
+    # Undo the module-level no_llm patch for just this test.
+    monkeypatch.setattr(rc, "get_langchain_llm", llm_module.get_langchain_llm)
+
+    pid = rr.RESIDENT_PROPERTY_IDS[0]
+    fc = rr.property_late_forecast(pid)
+    a = rc.answer("How many late payments could we anticipate next quarter?",
+                  property_id=pid)
+
+    assert a["intent"] == "late_forecast"
+    if a["source"] != "anthropic":
+        pytest.skip("LLM call did not succeed (network/proxy); rules fallback took over")
+
+    # The real model must state the aggregate figure computed from the heads —
+    # never invent its own number — and cite the source it came from.
+    assert re.search(rf"\b{re.escape(rc._num(fc['expected']))}\b", a["answer"])
+    assert "[1]" in a["answer"]
+    # never an ENDORSED adverse action (naming eviction only to disclaim it,
+    # e.g. "never a basis for eviction", is fine and expected).
+    lowered = a["answer"].lower()
+    assert "recommend eviction" not in lowered
+    assert "should evict" not in lowered
+    assert "you should deny" not in lowered

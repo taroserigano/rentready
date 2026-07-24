@@ -116,6 +116,49 @@ FEATURE_ORDER_ARREARS = FEATURE_ORDER_BASE + _ARREARS_EXTRA
 FEATURE_ORDER_CURE = FEATURE_ORDER_BASE + _ARREARS_EXTRA
 FEATURE_ORDER_CHURN = FEATURE_ORDER_BASE + _CHURN_EXTRA
 
+# --------------------------------------------------------------------------
+# Shared XGBoost monotone-constraint direction, keyed to FEATURE_ORDER_BASE.
+# +1 = prediction must be non-decreasing in the feature; -1 = non-increasing;
+# 0 = unconstrained. This is the SINGLE source of truth train_residents.py
+# reads from (via a per-head feature_order lookup) for every count/regression
+# head it constrains — do not define a second/parallel constraint mapping.
+# --------------------------------------------------------------------------
+MONOTONE_BASE = {
+    "late_count_3mo": 1,
+    "late_count_6mo": 1,
+    "late_count_12mo": 1,
+    "late_count_24mo": 1,
+    "missed_count_12mo": 1,
+    "partial_count_12mo": 1,
+    "nsf_count_12mo": 1,
+    "max_days_late_12mo": 1,
+    "avg_days_late_12mo": 1,
+    "on_time_streak_months": -1,
+    "recency_weighted_lateness": 1,
+    "balance_trend_6mo": 0,
+    "current_balance_ratio": 0,
+    "late_fees_12mo": 1,
+    "rent_to_income": 1,
+    "income_verified": 0,
+    "autopay_enrolled": -1,
+    "tenure_months": 0,
+    "prior_renewals": 0,
+    "notice_response_rate": 0,
+    "notices_sent_12mo": 1,
+    "maintenance_requests_12mo": 0,
+    "complaints_12mo": 0,
+    "portal_logins_90d": 0,
+    "months_since_last_late": -1,
+    "trouble_month_rate": 1,
+    "longest_late_streak_12mo": 1,
+    "count_30plus_12mo": 1,
+    "count_60plus_12mo": 1,
+    "balance_trend_3mo": 0,
+    "max_balance_12mo": 1,
+    "months_in_arrears_12mo": 1,
+    "months_since_balance_zero": -1,
+}
+
 # Documented for the model card: fields deliberately kept OUT of every model.
 EXCLUDED_FEATURES = [
     {"field": "property_id", "reason": "Location proxy for protected classes (redlining). Kept only to audit fairness across properties, never a model input."},
@@ -149,7 +192,11 @@ def _delinq_bucket(max_days: float) -> int:
 # Eligibility predicates (feature-derived; churn/cure heads are gated).
 # --------------------------------------------------------------------------
 def _elig_cure(features: dict) -> bool:
-    return float(features.get("current_balance", 0.0)) > 0.0
+    # Must match generate_residents.py's training-label gate (CURE_EPS) exactly
+    # — a resident with a balance in (0, CURE_EPS] would otherwise be served a
+    # prediction from a model that never saw such a row during training (every
+    # training example with that balance range was excluded as "already cured").
+    return float(features.get("current_balance", 0.0)) > CURE_EPS
 
 
 def _elig_churn6(features: dict) -> bool:
@@ -200,6 +247,10 @@ HEADS = [
        "P(any late payment in the next 12 months / year)",
        "reliable; low-confidence for short-tenure residents", band_edges=(0.35, 0.65)),
     # FREQUENCY family — overdispersed counts → tweedie.
+    _H("late_count_3m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
+       "Expected number of late months over the next 3 months / quarter (0-3)",
+       "reliable point estimate; short horizon keeps the interval tighter than "
+       "the 12mo count", calibration="empirical_pi"),
     _H("late_count_12m", "frequency", "count", "reg:tweedie", FEATURE_ORDER_BASE,
        "Expected number of late months over the next 12 months (0-12)",
        "reliable point estimate; interval widened for streak overdispersion",
@@ -744,6 +795,11 @@ def _heuristic_head(head: str, features: dict):
         z, contribs = _heuristic_logodds(head, features)
         return _clamp(_sigmoid(z), 0.02, 0.98), contribs
 
+    if head == "late_count_3m":
+        rate = float(features.get("trouble_month_rate", 0.0))
+        recent = float(features.get("late_count_3mo", 0.0))
+        expected = max(0.0, 0.6 * rate * 3.0 + 0.4 * recent)
+        return expected, {"trouble_month_rate": rate * 1.8, "late_count_3mo": recent * 0.4}
     if head == "late_count_12m":
         rate = float(features.get("trouble_month_rate", 0.0))
         recent = float(features.get("late_count_12mo", 0.0))
@@ -805,8 +861,12 @@ def _heuristic_head(head: str, features: dict):
 # --------------------------------------------------------------------------
 @lru_cache(maxsize=1)
 def _model():
-    """Load the persisted multi-head bundle, or None on any failure. Refuses a
-    bundle whose schema, per-head feature_order, or kind key drifts from code."""
+    """Load the persisted multi-head bundle, or None if the file itself is
+    missing/unreadable/wrong-schema. Each head is then validated
+    INDEPENDENTLY — a feature_order drift or missing required key in one head
+    prunes just that head from the returned bundle (so it falls back to its
+    own heuristic), rather than invalidating the whole bundle and reverting
+    all 19 heads to heuristics over one stale head."""
     try:
         import joblib
 
@@ -822,18 +882,33 @@ def _model():
             "binary": "calibrated_model", "multiclass": "calibrated_model",
             "count": "regressor", "regression": "regressor", "survival": "hazard_model",
         }
+        pruned_heads = dict(heads)
         for spec in HEADS:
-            sub = heads.get(spec["name"])
+            name = spec["name"]
+            sub = pruned_heads.get(name)
             if not isinstance(sub, dict):
-                return None
-            if sub.get("feature_order") != spec["feature_order"]:
-                return None  # trained against a different contract — refuse it
+                continue  # already absent; per-head predict code treats this as heuristic
             key = required[spec["kind"]]
-            if key not in sub:
-                if spec["kind"] == "survival":
-                    continue  # survival may be absent (too few eligible) -> heuristic
-                return None
-        return bundle
+            invalid = sub.get("feature_order") != spec["feature_order"]
+            if not invalid and key not in sub and spec["kind"] != "survival":
+                # survival may legitimately lack hazard_model (too few
+                # eligible rows at training time) -> heuristic, same as
+                # always; every OTHER kind missing its key is a real defect.
+                invalid = True
+            if invalid:
+                # Strip only the servable model key — every per-head predict
+                # function checks `key in sub` (or catches the resulting
+                # KeyError) and falls back to its heuristic, so this head
+                # degrades on its own instead of invalidating the whole
+                # bundle. metrics/feature_order/etc. stay intact so the model
+                # card can still report this head's training-time numbers.
+                print(f"residents_risk: head {name!r} failed validation "
+                      f"(contract drift or missing {key!r}); heuristic for "
+                      f"this head only.")
+                stripped = dict(sub)
+                stripped.pop(key, None)
+                pruned_heads[name] = stripped
+        return {**bundle, "heads": pruned_heads}
     except Exception as exc:  # noqa: BLE001 — degrade to heuristics
         print(f"residents_risk: model load failed ({type(exc).__name__}: {exc}); using heuristics.")
         return None
@@ -1381,11 +1456,13 @@ def top_driver(sub_result: dict) -> str:
     return max(ups, key=lambda rc: abs(rc.get("contribution", 0)))["label"]
 
 
-def heuristic_top_driver(features: dict) -> str:
-    """Cheap top late-risk driver from transparent heuristic weights — NO TreeSHAP.
-    Lets bulk rows keep a driver label without the per-head SHAP cost."""
+def heuristic_top_driver(features: dict, head: str = "late_3m") -> str:
+    """Cheap top-driver label for ``head`` from transparent heuristic weights —
+    NO TreeSHAP. Lets bulk rows keep a driver label without the per-head SHAP
+    cost. Defaults to the late-payment head; pass ``head="churn"`` for a
+    churn/retention-framed ranking."""
     try:
-        _, contribs = _heuristic_head("late_3m", features)
+        _, contribs = _heuristic_head(head, features)
         return top_driver({"reason_codes": _reason_codes(contribs, features, FEATURE_ORDER_BASE)})
     except Exception:  # noqa: BLE001
         return ""
@@ -1509,6 +1586,67 @@ def portfolio_health(snapshot: date = RESIDENT_SNAPSHOT) -> list:
 
 
 # --------------------------------------------------------------------------
+# Late-payment count forecast — sums a genuine frequency head (``late_count_3m``
+# for the quarterly view, ``late_count_12m`` for the annual one; never a
+# proration of one from the other) across a scope's residents.
+# --------------------------------------------------------------------------
+_LATE_FORECAST_HEADS = {"late_count_3m", "late_count_12m"}
+
+
+def _late_forecast_from_residents(residents: list, snapshot: date, head: str = "late_count_3m") -> dict:
+    if head not in _LATE_FORECAST_HEADS:
+        raise ValueError(f"unsupported late-forecast head: {head!r}")
+    if not residents:
+        return {"resident_count": 0, "expected": 0.0, "interval": [0.0, 0.0], "top_contributors": []}
+    preds = predict_bulk(residents, snapshot, heads=[head])
+    total_expected = total_lo = total_hi = 0.0
+    rows = []
+    for r, pred in zip(residents, preds):
+        h = (pred.get("heads") or {}).get(head) or {}
+        exp = float(h.get("expected") or 0.0)
+        iv = h.get("interval") or [exp, exp]
+        lo, hi = (float(iv[0]), float(iv[1])) if len(iv) == 2 else (exp, exp)
+        total_expected += exp
+        total_lo += lo
+        total_hi += hi
+        rows.append({"resident_id": r.get("resident_id", ""), "name": r.get("name", ""),
+                     "expected": round(exp, 2)})
+    rows.sort(key=lambda x: -x["expected"])
+    return {
+        "resident_count": len(residents),
+        "expected": round(total_expected, 1),
+        "interval": [round(total_lo, 1), round(total_hi, 1)],
+        "top_contributors": rows[:5],
+    }
+
+
+def property_late_forecast(property_id: str, snapshot: date = RESIDENT_SNAPSHOT,
+                            head: str = "late_count_3m") -> dict:
+    """Expected total late payments for one property over the requested window
+    (quarter via ``late_count_3m``, 12 months via ``late_count_12m``) — the SUM
+    of every resident's own estimate, a genuine model output for that window
+    rather than a proration of the other one. Never raises."""
+    try:
+        residents = [r for r in load_residents() if r.get("property_id") == property_id]
+        out = _late_forecast_from_residents(residents, snapshot, head=head)
+        out["property_id"] = property_id
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.property_late_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"property_id": property_id, "resident_count": 0, "expected": 0.0,
+                "interval": [0.0, 0.0], "top_contributors": []}
+
+
+def portfolio_late_forecast(snapshot: date = RESIDENT_SNAPSHOT, head: str = "late_count_3m") -> dict:
+    """Same aggregate forecast, across every resident in the portfolio."""
+    try:
+        return _late_forecast_from_residents(load_residents(), snapshot, head=head)
+    except Exception as exc:  # noqa: BLE001
+        print(f"residents_risk.portfolio_late_forecast failed ({type(exc).__name__}: {exc}).")
+        return {"resident_count": 0, "expected": 0.0, "interval": [0.0, 0.0], "top_contributors": []}
+
+
+# --------------------------------------------------------------------------
 # Cached data loader (mirrors graph.load_properties)
 # --------------------------------------------------------------------------
 @lru_cache(maxsize=1)
@@ -1600,8 +1738,9 @@ def model_card() -> dict:
     return {
         "name": "Resident Risk (multi-head)", "version": DGP_VERSION, "schema": BUNDLE_SCHEMA,
         "trained_at": (bundle or {}).get("generated_at"),
+        "model_type": "xgboost" if bundle else "heuristic",
         "description": (
-            "A catalog of gradient-boosted heads estimating late-payment, frequency, "
+            "A catalog of XGBoost gradient-boosted heads estimating late-payment, frequency, "
             "severity, arrears, cure, and retention outcomes for current residents from "
             "a 5-year rent ledger, trained on SYNTHETIC data. Reason codes come from "
             "TreeSHAP (model) or transparent weights (heuristic fallback). Legacy "

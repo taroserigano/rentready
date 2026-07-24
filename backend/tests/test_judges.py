@@ -63,3 +63,31 @@ def test_judge_suite_skips_without_llm(monkeypatch):
     monkeypatch.setattr(judges, "get_langchain_llm", lambda: None)
     out = judges.run_judge_suite()
     assert out["skipped"] is True
+
+
+# --------------------------- content coalescing -----------------------------
+class _FakeResponse:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeLLM:
+    def __init__(self, content):
+        self._content = content
+
+    def invoke(self, _messages):
+        return _FakeResponse(self._content)
+
+
+def test_invoke_skips_thinking_block_before_text_block():
+    """Extended-thinking responses are a list of content blocks: a
+    {"type": "thinking", ...} block with no "text" key, then the real
+    {"type": "text", "text": "..."} block. A naive str(b) join stringifies the
+    whole thinking-block dict ahead of the JSON, breaking _first_json_obj."""
+    llm = _FakeLLM([
+        {"type": "thinking", "thinking": "reasoning...", "signature": "abc123"},
+        {"type": "text", "text": '{"score": 4, "reason": "ok"}'},
+    ])
+    raw = judges._invoke(llm, "sys", "human")
+    assert raw == '{"score": 4, "reason": "ok"}'
+    assert judges._first_json_obj(raw) == {"score": 4, "reason": "ok"}

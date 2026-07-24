@@ -18,7 +18,17 @@ _NO_TEMPERATURE_MODELS = {"claude-sonnet-5"}
 
 def anthropic_chat_kwargs(model: str) -> dict:
     """Extra ChatAnthropic kwargs for `model`, minus any it has deprecated."""
-    kwargs: dict = {"max_tokens": 1024}
+    kwargs: dict = {
+        "max_tokens": 1024,
+        # Every LLM-backed route runs synchronously in a FastAPI request
+        # thread; ChatAnthropic's own default timeout is otherwise the
+        # Anthropic SDK's (several minutes), so a stalled call — a network
+        # hang, a corporate TLS proxy hiccup — ties up a worker thread far
+        # longer than any caller will wait. 30s is generous for one
+        # completion but keeps a hang bounded and turned into a normal
+        # "unavailable" fallback instead.
+        "timeout": 30.0,
+    }
     if model not in _NO_TEMPERATURE_MODELS:
         kwargs["temperature"] = 0.0
     return kwargs

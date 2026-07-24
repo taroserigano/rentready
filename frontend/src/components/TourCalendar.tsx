@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { Slot, TourBooking } from "../types";
 
 interface TourCalendarProps {
@@ -65,31 +66,41 @@ export function TourCalendar({
   selectedSlotId,
   days = 7,
 }: TourCalendarProps) {
-  // Build the ordered list of day keys: today .. today + days - 1.
-  const today = new Date();
-  const keys: string[] = [];
-  for (let i = 0; i < days; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    keys.push(dayKey(d));
-  }
+  // Cheap on every render, and gives the memo below an explicit dependency
+  // for "today" — recomputing once when the calendar date actually rolls
+  // over, instead of freezing on whatever day the component first mounted.
+  const todayKey = dayKey(new Date());
 
-  // Bucket slots + bookings by their calendar day.
-  const byDay = new Map<string, Item[]>();
-  for (const k of keys) byDay.set(k, []);
-  for (const s of slots) {
-    const k = s.start.slice(0, 10);
-    if (byDay.has(k)) byDay.get(k)!.push({ kind: "slot", start: s.start, slot: s });
-  }
-  for (const b of bookings) {
-    if (b.status !== "booked") continue;
-    const k = b.start.slice(0, 10);
-    if (byDay.has(k))
-      byDay.get(k)!.push({ kind: "booking", start: b.start, booking: b });
-  }
-  for (const k of keys) {
-    byDay.get(k)!.sort((a, z) => a.start.localeCompare(z.start));
-  }
+  // Bucket slots + bookings by their calendar day. Memoized so an unrelated
+  // re-render of the Tours page (e.g. a toast elsewhere) doesn't redo this
+  // date math — only slots/bookings/days/todayKey changing does.
+  const { keys, byDay } = useMemo(() => {
+    // Build the ordered list of day keys: today .. today + days - 1.
+    const today = fromKey(todayKey);
+    const keys: string[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      keys.push(dayKey(d));
+    }
+
+    const byDay = new Map<string, Item[]>();
+    for (const k of keys) byDay.set(k, []);
+    for (const s of slots) {
+      const k = s.start.slice(0, 10);
+      if (byDay.has(k)) byDay.get(k)!.push({ kind: "slot", start: s.start, slot: s });
+    }
+    for (const b of bookings) {
+      if (b.status !== "booked") continue;
+      const k = b.start.slice(0, 10);
+      if (byDay.has(k))
+        byDay.get(k)!.push({ kind: "booking", start: b.start, booking: b });
+    }
+    for (const k of keys) {
+      byDay.get(k)!.sort((a, z) => a.start.localeCompare(z.start));
+    }
+    return { keys, byDay };
+  }, [slots, bookings, days, todayKey]);
 
   const hasAny = slots.length > 0 || bookings.length > 0;
   if (!hasAny) {

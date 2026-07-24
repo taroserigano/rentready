@@ -46,11 +46,15 @@ _RRF_K = 60
 # Chroma / LlamaIndex plumbing
 # ---------------------------------------------------------------------------
 @lru_cache(maxsize=1)
-def _chroma_collection():
+def _chroma_client():
     import chromadb
 
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    return client.get_or_create_collection(COLLECTION)
+    return chromadb.PersistentClient(path=str(CHROMA_DIR))
+
+
+@lru_cache(maxsize=1)
+def _chroma_collection():
+    return _chroma_client().get_or_create_collection(COLLECTION)
 
 
 @lru_cache(maxsize=1)
@@ -80,16 +84,25 @@ def count() -> int:
 # Ingestion (idempotent)
 # ---------------------------------------------------------------------------
 def ingest_all() -> dict:
-    """Ingest every property's lease sections. Idempotent: if the collection is
-    already populated we skip re-ingesting."""
+    """Ingest every property's lease sections. Idempotent: skips re-ingesting
+    when the collection already holds the CURRENT expected chunk count. If a
+    lease section was added/removed since the collection was built, the count
+    no longer matches -- the stale collection is wiped and rebuilt so the new
+    content is never silently missing from retrieval."""
+    props = graph.load_properties()
+    expected = len(props) * leases.SECTION_COUNT
     existing = count()
-    if existing > 0:
+    if existing == expected and existing > 0:
         return {"indexed": existing, "skipped": True, "collection": COLLECTION}
 
     from llama_index.core.schema import TextNode
 
+    if existing:
+        _chroma_client().delete_collection(COLLECTION)
+        _chroma_collection.cache_clear()
+        _index.cache_clear()
+
     nodes = []
-    props = graph.load_properties()
     for prop in props:
         pid = prop.get("id", "")
         pname = prop.get("name", "")

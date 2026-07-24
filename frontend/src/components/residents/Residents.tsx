@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Info, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Cpu, Info, Link2, Search, X } from "lucide-react";
 import { getResidentModelCard, getResidentProperties, listPropertyResidents } from "../../api";
 import type {
   PropertyResidentRollup,
@@ -12,11 +12,21 @@ import { ResidentDetail } from "./ResidentDetail";
 import { ResidentModelCard } from "./ResidentModelCard";
 import { PropertyHealthRanking } from "./PropertyHealthRanking";
 import { ResidentsChat } from "./ResidentsChat";
+import { Badge } from "../Badge";
+import { TechBadge } from "../TechBadge";
 import { BAND_LABEL, BAND_TONE, churnTone, pct, usd } from "./residentsTone";
+
+/** "xgboost" -> "XGBoost", "heuristic" -> "Heuristic". */
+function techLabel(modelType?: string): string {
+  if (!modelType) return "Heuristic";
+  if (modelType.toLowerCase() === "xgboost") return "XGBoost";
+  if (modelType.toLowerCase() === "histgb") return "HistGradientBoosting";
+  return modelType.charAt(0).toUpperCase() + modelType.slice(1);
+}
 
 const ROW_CAP = 25;
 
-type SortKey = "name" | "unit" | "tenure" | "late" | "arrears" | "churn" | "serious" | "balance";
+type SortKey = "name" | "unit" | "tenure" | "late" | "latecount" | "arrears" | "churn" | "serious" | "balance";
 type BandFilter = "all" | RiskBand;
 
 const BAND_FILTERS: { key: BandFilter; label: string }[] = [
@@ -40,21 +50,25 @@ const SortHeader = memo(function SortHeader({
   sortKey,
   sortAsc,
   onToggle,
+  hint,
 }: {
   label: string;
   keyName: SortKey;
   sortKey: SortKey;
   sortAsc: boolean;
   onToggle: (key: SortKey) => void;
+  /** Quick one-line description shown as a hover tooltip. */
+  hint?: string;
 }) {
   const active = sortKey === keyName;
   return (
-    <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"}>
+    <th aria-sort={active ? (sortAsc ? "ascending" : "descending") : "none"} title={hint}>
       <button
         type="button"
         className="linklike icon-line"
         style={{ color: active ? "var(--text)" : "inherit", fontWeight: "inherit" }}
         onClick={() => onToggle(keyName)}
+        title={hint}
       >
         {label}
         {active && (sortAsc ? <ArrowUp size={12} aria-hidden /> : <ArrowDown size={12} aria-hidden />)}
@@ -71,9 +85,11 @@ const SortHeader = memo(function SortHeader({
 export function Residents({
   initialPropertyId,
   initialResidentId,
+  health,
 }: {
   initialPropertyId?: string;
   initialResidentId?: string;
+  health?: Record<string, unknown> | null;
 }) {
   const [propOptions, setPropOptions] = useState<ResidentPropertyOption[] | null>(null);
   const [residents, setResidents] = useState<ResidentRow[] | null>(null);
@@ -180,6 +196,7 @@ export function Residents({
         case "name": return r.name;
         case "unit": return r.unit_id;
         case "tenure": return r.tenure_months;
+        case "latecount": return r.late_payments_12mo;
         case "arrears": return r.expected_arrears;
         case "churn": return r.churn_probability ?? -1;
         case "serious": return r.serious_probability;
@@ -215,8 +232,21 @@ export function Residents({
   return (
     <div className="app">
       <header>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h1 style={{ margin: 0 }}>Residents</h1>
+          {card && (
+            <span
+              className={`badge icon-line tone-${card.source === "model" ? "info" : "warn"}`}
+              title={
+                card.source === "model"
+                  ? "Scored by a trained model — click the info icon for details"
+                  : "No trained model loaded — falling back to the transparent heuristic"
+              }
+            >
+              <Cpu size={12} aria-hidden />
+              {techLabel(card.model_type)}
+            </span>
+          )}
           {card && (
             <button
               type="button"
@@ -228,6 +258,12 @@ export function Residents({
               <Info size={16} aria-hidden />
             </button>
           )}
+          <TechBadge
+            icon={Link2}
+            label="LangChain"
+            title="The chat rail's explanations are synthesized through a LangChain-wrapped Claude client."
+          />
+          <Badge on={!!health?.anthropic_key_set} label="Claude" tone="violet" />
         </div>
         <p>
           A decision-support view of forward-looking risk across current residents — to focus
@@ -374,16 +410,17 @@ export function Residents({
               <table className="table rows-clickable">
                 <thead>
                   <tr>
-                    <SortHeader label="Resident" keyName="name" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Unit" keyName="unit" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Tenure" keyName="tenure" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Late next Q" keyName="late" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <th>Band</th>
-                    <SortHeader label="Exp. balance" keyName="arrears" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Churn" keyName="churn" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Serious" keyName="serious" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <SortHeader label="Balance" keyName="balance" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-                    <th>Top driver</th>
+                    <SortHeader label="Resident" keyName="name" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Resident name" />
+                    <SortHeader label="Unit" keyName="unit" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Unit number" />
+                    <SortHeader label="Tenure" keyName="tenure" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="How long they've lived here, in months" />
+                    <SortHeader label="Late next quarter" keyName="late" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Predicted chance of any late payment in the next quarter" />
+                    <th title="Risk band for the late-payment prediction: Low, Moderate, or Elevated">Band</th>
+                    <SortHeader label="Late payments (12 months)" keyName="latecount" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Actual number of late payments in the past 12 months (from the rent ledger)" />
+                    <SortHeader label="Expected balance" keyName="arrears" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Predicted balance owed at the end of next quarter" />
+                    <SortHeader label="Churn" keyName="churn" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Predicted chance of non-renewal (shown only when the lease ends within the horizon)" />
+                    <SortHeader label="Serious" keyName="serious" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Predicted chance of a serious delinquency: 30+ days late or a full month in arrears" />
+                    <SortHeader label="Balance" keyName="balance" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} hint="Current outstanding balance owed today" />
+                    <th title="The biggest factor behind this resident's risk estimate">Top driver</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -395,10 +432,13 @@ export function Residents({
                     >
                       <td style={{ fontWeight: 600 }}>{r.name}</td>
                       <td className="secondary">{r.unit_id}</td>
-                      <td>{r.tenure_months} mo</td>
+                      <td>{r.tenure_months} months</td>
                       <td>{pct(r.late_probability)}</td>
                       <td>
                         <span className={`badge tone-${BAND_TONE[r.late_band]}`}>{BAND_LABEL[r.late_band]}</span>
+                      </td>
+                      <td className={r.late_payments_12mo > 0 ? undefined : "secondary"}>
+                        {r.late_payments_12mo} {r.late_payments_12mo === 1 ? "time" : "times"}
                       </td>
                       <td>{usd(r.expected_arrears)}</td>
                       <td>{r.churn_probability == null ? <span className="muted">n/a</span> : pct(r.churn_probability)}</td>

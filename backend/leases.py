@@ -134,6 +134,36 @@ def _sec_occupancy(p) -> str:
     )
 
 
+# Property types where units share walls/floors with neighbors, as opposed to
+# a standalone House — used only to word the noise section's framing.
+_MULTI_UNIT_TYPES = {
+    "apartment", "condo", "loft", "townhome", "townhouse", "duplex", "studio",
+}
+
+
+def _sec_noise(p) -> str:
+    ptype = str(p.get("property_type", "")).lower()
+    setting = (
+        "shared walls, floors, and common areas with neighboring units"
+        if ptype in _MULTI_UNIT_TYPES
+        else "close proximity to neighboring properties"
+    )
+    return (
+        f"Tenant shall not create or permit any noise, disturbance, or nuisance "
+        f"that unreasonably interferes with the quiet enjoyment of other "
+        f"residents or neighbors, given the Premises' {setting}. QUIET HOURS are "
+        f"10:00 PM to 8:00 AM daily, during which loud music, television, "
+        f"amplified sound, parties, and other disruptive noise are prohibited. "
+        f"Reasonable household noise at other hours is permitted, but repeated "
+        f"or substantiated complaints of excessive noise, disorderly conduct, or "
+        f"nuisance behavior — whether from Tenant, occupants, or guests — "
+        f"constitute a breach of this Lease and may result in a written warning "
+        f"followed by termination for repeated violations. Landlord may enforce "
+        f"this section based on written complaints from neighbors or its agents' "
+        f"own observation."
+    )
+
+
 def _sec_pets(p) -> str:
     if not p.get("pets_allowed"):
         return (
@@ -333,13 +363,14 @@ def _sec_governing(p) -> str:
     )
 
 
-# Ordered (title, renderer) — exactly 18 sections, matching the contract.
+# Ordered (title, renderer) — exactly 19 sections, matching the contract.
 _SECTION_SPECS = [
     ("Parties & Premises", _sec_parties),
     ("Term", _sec_term),
     ("Rent", _sec_rent),
     ("Security Deposit", _sec_deposit),
     ("Occupancy & Guests", _sec_occupancy),
+    ("Noise, Quiet Hours & Nuisance", _sec_noise),
     ("Pets", _sec_pets),
     ("Parking", _sec_parking),
     ("Utilities", _sec_utilities),
@@ -354,6 +385,10 @@ _SECTION_SPECS = [
     ("Renter's Insurance", _sec_insurance),
     ("Governing Law", _sec_governing),
 ]
+
+# Public so knowledge.py can detect a stale ingested index (built when a
+# section was added/removed) without reaching into a private name.
+SECTION_COUNT = len(_SECTION_SPECS)
 
 
 def lease_sections(prop: dict) -> list[tuple[str, str]]:

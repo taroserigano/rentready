@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Cpu } from "lucide-react";
 import type {
   ApplicantProfile,
   ApplicantSummary,
@@ -19,6 +20,7 @@ import { DecisionBar, STATUS_LABEL, STATUS_TONE } from "./DecisionBar";
 import { StrengthCard } from "./StrengthCard";
 import { RiskCard } from "./risk/RiskCard";
 import { Avatar } from "./Avatar";
+import { TechBadge } from "./TechBadge";
 
 function errText(e: unknown): string {
   // fetch throws TypeError when the server is unreachable.
@@ -138,6 +140,13 @@ export function ApplicantsDirectory({
       <header>
         <h1>Saved applicants</h1>
         <p>Re-open an earlier application or delete ones you no longer need.</p>
+        <div className="badges">
+          <TechBadge
+            icon={Cpu}
+            label="XGBoost"
+            title="Each applicant's late-payment risk badge is scored by a trained XGBoost model with TreeSHAP reason codes."
+          />
+        </div>
       </header>
 
       <div className="card">

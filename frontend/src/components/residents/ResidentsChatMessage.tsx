@@ -34,6 +34,10 @@ function intentLabel(intent: string): string {
       return "Retention";
     case "property_health":
       return "Property health";
+    case "at_risk_residents":
+      return "At-risk residents";
+    case "late_forecast":
+      return "Late-payment forecast";
     case "compare":
       return "Comparison";
     case "governance":

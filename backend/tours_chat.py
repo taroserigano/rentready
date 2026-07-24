@@ -106,10 +106,11 @@ def _parse_time_token(text: str) -> int | None:
     Handles "5pm", "5 pm", "10am", "2:30pm", "17:00", "noon", "midnight".
     """
     t = text.lower()
-    if "noon" in t and "afternoon" not in t.replace("noon", "afternoon", 0):
-        # plain "noon"
-        if re.search(r"\bnoon\b", t):
-            return 12 * 60
+    # \bnoon\b already can't match inside "afternoon" (no word boundary
+    # between "after" and "noon"), so a standalone "noon" is unambiguous even
+    # when "afternoon" also appears in the same message.
+    if re.search(r"\bnoon\b", t):
+        return 12 * 60
     if re.search(r"\bmidnight\b", t):
         return 0
     m = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t)
@@ -438,11 +439,23 @@ def _last_user_message(req: TourChatRequest) -> str:
 
 
 def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatResponse:
-    last_user = _last_user_message(req)
-    property_id = req.property_id
+    """Runs the flow through a tiny compiled LangGraph: a `resolve_property`
+    node, then a conditional edge to either END (property missing) or the
+    `run_flow` node covering everything else. The two nodes are exactly the
+    functions below -- the graph is orchestration, not new logic."""
+    import tours_graph
 
+    return tours_graph.run(_resolve_property, _run_flow, req, state, now)
+
+
+def _resolve_property(
+    req: TourChatRequest, state: ChatState
+) -> tuple[dict | None, TourChatResponse | None]:
+    """First step of the flow: pick out the property. Returns
+    ``(prop, early_response)`` -- exactly one of the two is non-None."""
+    property_id = req.property_id
     if not property_id:
-        return TourChatResponse(
+        return None, TourChatResponse(
             reply="Happy to set up a tour! Which property would you like to see?",
             proposed_slots=[],
             booking=None,
@@ -452,7 +465,7 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
 
     prop = _property(property_id)
     if prop is None:
-        return TourChatResponse(
+        return None, TourChatResponse(
             reply="I couldn't find that property. Could you pick one from the "
             "listings and I'll find open tour times?",
             proposed_slots=[],
@@ -460,7 +473,20 @@ def _handle(req: TourChatRequest, state: ChatState, now: datetime) -> TourChatRe
             state=ChatState(phase="greeting", prospect_name=state.prospect_name),
             source="rules",
         )
-    area = (prop.get("neighborhood") or {}).get("name", "")
+    return prop, None
+
+
+def _run_flow(
+    req: TourChatRequest, state: ChatState, now: datetime, prop: dict
+) -> TourChatResponse:
+    """Everything after the property is resolved: cancellation, slot
+    selection, phase transitions, propose/book."""
+    last_user = _last_user_message(req)
+    property_id = req.property_id
+    # "area" is really the property's own id -- every property has exactly
+    # one dedicated agent (tours._SEED_AGENTS), so eligibility is keyed 1:1 to
+    # the property rather than shared across a neighborhood.
+    area = prop.get("id", "")
     property_name = prop.get("name", property_id)
 
     # ---- Cancelling an existing booking ---------------------------------

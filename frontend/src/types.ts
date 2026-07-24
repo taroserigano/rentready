@@ -175,6 +175,11 @@ export interface Source {
   section?: string;
   /** Property this source belongs to (enables deep-linking to the lease). */
   property_id?: string;
+  /** This source's original [n] citation number in the answer's prose —
+   * sources are pre-filtered to what the answer actually cites, so this can
+   * skip positions (e.g. only [1] and [3] survived); use it, not array index,
+   * when labeling the entry in a rendered citation list. */
+  cite?: number;
 }
 
 /**
@@ -491,6 +496,27 @@ export interface RiskConfusion {
   actual_ontime: { pred_late: number; pred_ontime: number };
 }
 
+/**
+ * GET /risk/model-card. Typed loosely and rendered defensively — it's
+ * best-effort, like the Residents model card.
+ */
+export interface RiskModelCard {
+  name?: string;
+  version?: string;
+  trained_at?: string;
+  /** e.g. "xgboost" when a trained model is in play, "heuristic" otherwise. */
+  model_type?: string;
+  description?: string;
+  intended_use?: string;
+  features?: string[];
+  excluded?: RiskExcludedField[];
+  metrics?: Record<string, number>;
+  bands?: RiskBandRange[];
+  limitations?: string[];
+  source?: string;
+  [k: string]: unknown;
+}
+
 export interface RiskCalibrationBin {
   bin: number;
   predicted: number;
@@ -750,6 +776,8 @@ export interface ResidentRow {
   serious_probability: number;
   serious_band: RiskBand;
   current_balance: number;
+  /** Historical count of late payments in the trailing 12 months. */
+  late_payments_12mo: number;
   /** Strongest driver label for a compact table cell. */
   top_driver: string;
 }
@@ -951,6 +979,8 @@ export type ResidentChatIntent =
   | "cure"
   | "retention"
   | "property_health"
+  | "at_risk_residents"
+  | "late_forecast"
   | "compare"
   | "governance"
   | "general";
@@ -1062,6 +1092,8 @@ export interface ResidentModelCard {
   dgp_version?: string;
   generated_at?: string;
   trained_at?: string;
+  /** e.g. "xgboost" when the bundle is trained, "heuristic" otherwise. */
+  model_type?: string;
   description?: string;
   intended_use?: string;
   /** Keyed by target name: late / arrears / churn / serious. */

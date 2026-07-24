@@ -69,6 +69,26 @@ def get_langchain_graph():
         return None
 
 
+def run_read_only_cypher(cypher: str, params: dict | None = None) -> list[dict]:
+    """Execute LLM-generated Cypher (graph_ask) under a real read-only
+    transaction, enforced by the Neo4j SERVER itself — not just a client-side
+    keyword check. ``routing_=RoutingControl.READ`` opens a read-mode
+    transaction; Neo4j rejects any write clause inside one (including a write
+    hidden behind an APOC procedure name that a keyword blocklist would miss)
+    with a ``Neo.ClientError.Statement.AccessMode`` error, which callers
+    should treat the same as any other "couldn't run that query" failure.
+    """
+    from neo4j import RoutingControl
+
+    records, _, _ = _driver().execute_query(
+        cypher,
+        params or {},
+        database_=settings.neo4j_database,
+        routing_=RoutingControl.READ,
+    )
+    return [r.data() for r in records]
+
+
 @lru_cache(maxsize=1)
 def is_available() -> bool:
     """True if Neo4j is reachable.

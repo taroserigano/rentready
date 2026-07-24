@@ -87,7 +87,8 @@ def init_db() -> None:
             """
         )
         # Tour Scheduler: leasing agents who run tours. `areas` is JSON text
-        # (list of neighborhood names); [] means the agent covers all areas.
+        # (list of property ids the agent is dedicated to, normally exactly
+        # one); [] means the agent covers all properties.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tour_agents (
@@ -279,11 +280,30 @@ def list_applicants() -> list:
 
 
 def delete_applicant(applicant_id: str) -> bool:
+    """Delete the applicant row plus what's clearly THEIR data (reviewer
+    decisions about them). ``tour_bookings`` are a leasing agent's real
+    calendar entries, not applicant-owned — the booking itself stays, only the
+    now-dangling applicant link is cleared so it stops 404ing when looked up
+    by applicant id. ``prod_events``/``feedback`` are aggregate telemetry (the
+    monitoring dashboard's historical charts), so they're deliberately left
+    alone rather than corrupting that history.
+
+    The uploaded PDF and RAG index for this applicant are cleaned up by the
+    caller (see main.py) — this function only owns the SQL rows."""
     with _conn() as conn:
         cur = conn.execute(
             "DELETE FROM applicants WHERE id = ?", (applicant_id,)
         )
-        return cur.rowcount > 0
+        deleted = cur.rowcount > 0
+        if deleted:
+            conn.execute(
+                "DELETE FROM decisions WHERE applicant_id = ?", (applicant_id,)
+            )
+            conn.execute(
+                "UPDATE tour_bookings SET applicant_id = '' WHERE applicant_id = ?",
+                (applicant_id,),
+            )
+        return deleted
 
 
 # ---------------------------------------------------------------------------

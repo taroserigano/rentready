@@ -79,6 +79,69 @@ def test_apply_happy_path_creates_applicant(client):
     assert any(row["id"] == aid for row in store.list_applicants())
 
 
+def test_upload_rejects_oversized_file(client, monkeypatch):
+    """Regression: /upload had no size cap at all — a large POST could be
+    read fully into memory before any validation ran."""
+    from settings import settings
+
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+    oversized = b"%PDF-1.4\n" + b"0" * (2 * 1024 * 1024)  # 2MB > the 1MB test cap
+    resp = client.post(
+        "/upload", files={"file": ("big.pdf", oversized, "application/pdf")}
+    )
+    assert resp.status_code == 413
+
+
+def test_recommend_failure_is_still_logged_to_monitoring(client, monkeypatch):
+    """Regression: /recommend only called store.log_event AFTER a successful
+    result, so an exception mid-request skipped it entirely — a real outage
+    produced zero monitoring signal instead of a visible spike."""
+    import graphrag
+
+    resp = client.post("/apply", json=STRONG.model_dump())
+    aid = resp.json()["applicant_id"]
+
+    def _boom(profile, explain=True):
+        raise RuntimeError("simulated graphrag failure")
+
+    monkeypatch.setattr(graphrag, "recommend", _boom)
+    before = len(store.recent_events(limit=10_000))
+
+    # TestClient re-raises unhandled exceptions rather than returning a 500
+    # response (a real ASGI server would 500 the client) — either way, the
+    # point under test is that log_event fires before the error propagates.
+    with pytest.raises(RuntimeError, match="simulated graphrag failure"):
+        client.get(f"/recommend/{aid}")
+
+    events = store.recent_events(limit=10_000)
+    assert len(events) == before + 1
+    logged = events[0]
+    assert logged["endpoint"] == "recommend"
+    assert logged["applicant_id"] == aid
+    assert logged["source"] == "error"
+
+
+def test_delete_applicant_removes_uploaded_pdf_from_disk(client):
+    """Regression: DELETE /applicants/{id} only removed the DB row, leaving
+    the uploaded/generated PDF orphaned on disk indefinitely."""
+    from settings import UPLOAD_DIR
+
+    resp = client.post("/apply", json=STRONG.model_dump())
+    aid = resp.json()["applicant_id"]
+    pdf_path = UPLOAD_DIR / f"{aid}.pdf"
+    if resp.json()["has_pdf"]:
+        assert pdf_path.exists()
+
+    del_resp = client.delete(f"/applicants/{aid}")
+    assert del_resp.status_code == 200
+    assert del_resp.json() == {"deleted": aid}
+    assert not pdf_path.exists()
+    assert store.get_profile(aid) is None
+
+    # Deleting an already-deleted (or unknown) id 404s.
+    assert client.delete(f"/applicants/{aid}").status_code == 404
+
+
 def test_apply_rejects_zero_rent(client):
     bad = STRONG.model_copy(update={"desired_rent": 0})
     resp = client.post("/apply", json=bad.model_dump())

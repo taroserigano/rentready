@@ -51,12 +51,13 @@ def _first_no_pets():
 # ---------------------------------------------------------------------------
 # 1. Lease-section generation is consistent with the structured facts
 # ---------------------------------------------------------------------------
-def test_lease_sections_are_18_titled_sections():
+def test_lease_sections_are_19_titled_sections():
     prop = load_properties()[0]
     sections = leases.lease_sections(prop)
-    assert len(sections) == 18
+    assert len(sections) == 19
     titles = [t for t, _ in sections]
     assert "Rent" in titles and "Pets" in titles and "Subletting & Assignment" in titles
+    assert "Noise, Quiet Hours & Nuisance" in titles
     assert all(text.strip() for _, text in sections)
 
 
@@ -86,7 +87,7 @@ def test_lease_pet_policy_reflects_pets_allowed():
 def test_lease_markdown_renders():
     md = leases.lease_markdown(load_properties()[0])
     assert md.startswith("# Residential Lease Agreement")
-    assert "## 6. Pets" in md
+    assert "## 7. Pets" in md
 
 
 # ---------------------------------------------------------------------------
@@ -109,10 +110,22 @@ def test_lease_markdown_renders():
         ("Compare homes in Zilker with a gym", "compare"),
         ("List the most affordable studios", "compare"),
         ("pet friendly under $1500", "compare"),
+        # Regression: "Is there" reads like a singular/scoped question, but a
+        # price ceiling + bedroom count are unambiguous catalog-search signals
+        # that must win over the singular-phrasing veto.
+        ("Is there a 2-bedroom under $2000 pet-friendly place downtown?", "compare"),
+        ("Is there a studio under $1500?", "compare"),
     ],
 )
 def test_router_classification(question, expected):
     assert concierge.route(question) == expected
+
+
+def test_singular_phrasing_with_only_weak_filters_stays_scoped():
+    # Pets/area alone (no price ceiling or bedroom count) are weak enough
+    # signals that "is there"/"does it" phrasing still reads as a question
+    # about one already-scoped place, not a catalog search.
+    assert concierge.route("Is there parking near this place?") == "property"
 
 
 # ---------------------------------------------------------------------------

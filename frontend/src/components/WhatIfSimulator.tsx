@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, SlidersHorizontal, Target } from "lucide-react";
 import type { ApplicantProfile, GoalSeekResult, SimulateResponse } from "../types";
 import { goalSeek, simulate } from "../api";
@@ -13,7 +13,16 @@ function money(n: number): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
-function SliderRow({
+// Module-level (not an inline arrow in JSX) so the credit-score SliderRow
+// gets a referentially-stable `format` prop too, matching money() — needed
+// for the memo() below to actually skip the other two rows while dragging one.
+function asString(n: number): string {
+  return String(n);
+}
+
+/* memo()'d: dragging one slider re-renders WhatIfSimulator on every tick; this
+ * keeps the other two SliderRows from re-rendering along with it. */
+const SliderRow = memo(function SliderRow({
   label,
   min,
   max,
@@ -61,7 +70,7 @@ function SliderRow({
       />
     </label>
   );
-}
+});
 
 export function WhatIfSimulator({
   profile,
@@ -187,7 +196,7 @@ export function WhatIfSimulator({
               step={5}
               value={credit}
               base={baseCredit}
-              format={(n) => String(n)}
+              format={asString}
               onChange={setCredit}
             />
           </div>

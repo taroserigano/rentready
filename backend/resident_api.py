@@ -97,6 +97,7 @@ def _score_row(resident: dict, pred: dict | None = None) -> tuple[ResidentRow, d
         serious_probability=float(serious.get("probability") or 0.0),
         serious_band=serious.get("band", "low"),
         current_balance=round(float(feats.get("current_balance", 0.0)), 2),
+        late_payments_12mo=int(round(float(feats.get("late_count_12mo", 0.0)))),
         top_driver=residents_risk.heuristic_top_driver(feats),
     )
 
@@ -118,7 +119,6 @@ def _score_many(residents: list) -> tuple[list, list, str]:
     guarded so one bad record never sinks the batch."""
     rows: list = []
     aggs: list = []
-    source = "heuristic"
     # One VECTORIZED model pass over the whole batch (one call per head, not one
     # per resident) — the fast path. Reason codes are skipped for bulk.
     try:
@@ -127,6 +127,12 @@ def _score_many(residents: list) -> tuple[list, list, str]:
         )
     except Exception:  # noqa: BLE001 — fall back to per-resident inside the loop
         preds = [None] * len(residents or [])
+    # Tracked from what actually happened THIS request (each head's own
+    # "source" from predict_bulk/predict_resident), not a static "did the
+    # bundle load" check — predict_bulk degrades per-head, so some heads can
+    # fall back to heuristic even while the bundle is loaded and "trained".
+    any_model = False
+    any_heuristic = False
     for r, pred in zip(residents or [], preds):
         try:
             row, agg = _score_row(r, pred)
@@ -134,11 +140,27 @@ def _score_many(residents: list) -> tuple[list, list, str]:
             aggs.append(agg)
         except Exception as exc:  # noqa: BLE001 — skip a bad row, never fail the batch
             print(f"resident_api: scoring {r.get('resident_id')} failed ({type(exc).__name__}: {exc}).")
-    # One status read tells us whether the trained bundle is in play.
-    try:
-        source = "model" if residents_risk.status().get("trained") else "heuristic"
-    except Exception:  # noqa: BLE001
+            continue
+        for head_name in ("late", "arrears", "churn", "serious"):
+            head_source = ((pred or {}).get(head_name) or {}).get("source")
+            if head_source == "model":
+                any_model = True
+            elif head_source == "heuristic":
+                any_heuristic = True
+    if any_heuristic:
+        # Any head that fell back is enough to disqualify the "model" label —
+        # claiming "model" when even one displayed number came from the
+        # heuristic would be the exact mislabeling this is fixing.
         source = "heuristic"
+    elif any_model:
+        source = "model"
+    else:
+        # Nothing was actually scored (empty batch) — nothing to observe, so
+        # fall back to whether the bundle loaded at all.
+        try:
+            source = "model" if residents_risk.status().get("trained") else "heuristic"
+        except Exception:  # noqa: BLE001
+            source = "heuristic"
     return rows, aggs, source
 
 

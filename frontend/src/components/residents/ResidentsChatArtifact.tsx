@@ -9,7 +9,7 @@ import type {
 import { RiskGauge } from "../risk/RiskGauge";
 import { ReasonCodes } from "../risk/ReasonCodes";
 import { ResidentFamilies } from "./ResidentFamilies";
-import { HealthList } from "./PropertyHealthRanking";
+import { HealthList, HealthRow } from "./PropertyHealthRanking";
 import { formatProbRange, headLabel, usd } from "./residentsTone";
 
 /**
@@ -129,14 +129,22 @@ export const ResidentsChatArtifact = memo(function ResidentsChatArtifact({
 }) {
   if (artifact == null) return null;
 
-  // 1) Property-health ranking (array or wrapped).
+  // 1) Property-health ranking (array or wrapped). A single-item list is a
+  // scoped "how healthy is THIS property" answer, not a ranking — render it
+  // as one card with no rank number, instead of implying it's "#1".
   const health = asHealthList(artifact);
   if (health) {
     return (
       <div style={{ marginTop: 10 }}>
-        <div className="eyebrow">Property health</div>
+        <div className="eyebrow">
+          {health.length === 1 ? "Property health" : "Property health ranking"}
+        </div>
         <div style={{ marginTop: 6 }}>
-          <HealthList items={health} onSelect={onSelectProperty} limit={10} />
+          {health.length === 1 ? (
+            <HealthRow item={health[0]} onSelect={onSelectProperty} />
+          ) : (
+            <HealthList items={health} onSelect={onSelectProperty} limit={10} />
+          )}
         </div>
       </div>
     );

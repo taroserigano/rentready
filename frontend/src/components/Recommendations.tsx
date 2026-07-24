@@ -144,7 +144,7 @@ export function Recommendations({
         )}
       </div>
       <p className="muted">
-        via GraphRAG · graph: {data.graph_backend} · ranked by: {data.source}
+        via GraphRAG · Graph DB: {data.graph_backend} · ranked by: {data.source}
         {data.relaxed && " · budget relaxed to show options"}
         {sort !== "recommended" && " · reordered for display; ranking unchanged"}
       </p>
