@@ -122,7 +122,7 @@ LLM tier (Claude as judge + RAGAS):
 The deterministic tier runs in CI on every push and **fails the build on
 regression**. The LLM-as-judge actually caught a real bug — recommendation
 explanations were hallucinating amenities (groundedness 0.30) until we fed the
-judge and the explainer the same facts (0.93). See [EVALUATION.md](EVALUATION.md).
+judge and the explainer the same facts (0.93). See [EVALUATION.md](docs/EVALUATION.md).
 
 ## Key design decision
 
@@ -224,7 +224,7 @@ flowchart LR
 ```
 
 For the full request-lifecycle sequence diagrams (recommend, graph-ask,
-tour booking) and the Neo4j data model, see [ARCHITECTURE.md](ARCHITECTURE.md).
+tour booking) and the Neo4j data model, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quickstart
 
