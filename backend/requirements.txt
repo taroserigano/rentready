@@ -41,6 +41,15 @@ langgraph==0.2.76
 flashrank==0.2.10
 rapidfuzz==3.11.0
 
+# Risk/Residents models (risk.py, residents_risk.py) -- XGBoost heads with a
+# HistGradientBoosting (scikit-learn) per-head fallback. Previously installed
+# transitively (pulled in by another dep's own scikit-learn/joblib pin) rather
+# than pinned here, which silently broke a from-scratch install (xgboost isn't
+# anyone's transitive dependency, so it was simply missing).
+xgboost==3.2.0
+scikit-learn==1.9.0
+joblib==1.5.3
+
 # Tracing + evaluation
 langsmith==0.2.10
 arize-phoenix==7.3.2

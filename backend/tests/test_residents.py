@@ -918,8 +918,13 @@ def test_portfolio_late_forecast_matches_sum_of_bulk_predictions():
 
 
 def test_late_forecast_rejects_unsupported_head():
-    with pytest.raises(ValueError):
-        rr.property_late_forecast(rr.RESIDENT_PROPERTY_IDS[0], head="not_a_real_head")
+    # property_late_forecast never raises (guarded), but an unsupported head
+    # is still rejected internally -- caught and degraded to the safe-empty
+    # shape rather than silently returning a wrong number.
+    pid = rr.RESIDENT_PROPERTY_IDS[0]
+    fc = rr.property_late_forecast(pid, head="not_a_real_head")
+    assert fc == {"property_id": pid, "resident_count": 0, "expected": 0.0,
+                  "interval": [0.0, 0.0], "top_contributors": []}
 
 
 def test_property_late_forecast_unknown_property_is_empty():

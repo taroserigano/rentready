@@ -1,0 +1,452 @@
+<style>
+  :root {
+    color-scheme: light dark;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+
+    /* light theme (default) */
+    --bg: #f5f5fb;
+    --bg-grad-1: #ece9ff;
+    --bg-grad-2: #e6faff;
+    --surface: #ffffff;
+    --surface-2: #f7f6fd;
+    --border: rgba(20, 16, 45, 0.10);
+    --border-strong: rgba(20, 16, 45, 0.18);
+    --ink: #171326;
+    --ink-2: #4a4568;
+    --muted: #7b7699;
+    --accent: #6b4bff;
+    --accent-ink: #6b4bff;
+    --accent-2: #0aa5c4;
+    --good: #10a271;
+    --good-soft: rgba(16, 162, 113, 0.12);
+    --accent-soft: rgba(107, 75, 255, 0.10);
+    --track: rgba(20, 16, 45, 0.07);
+    --shadow: 0 1px 2px rgba(20,16,45,.06), 0 12px 32px -12px rgba(20,16,45,.16);
+    --hero-ink: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #08080f;
+      --bg-grad-1: #14102b;
+      --bg-grad-2: #071e26;
+      --surface: #111120;
+      --surface-2: #17172a;
+      --border: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --ink: #f3f2ff;
+      --ink-2: #bdb9dc;
+      --muted: #8b87ac;
+      --accent: #9a80ff;
+      --accent-ink: #b6a3ff;
+      --accent-2: #35d6ef;
+      --good: #34d399;
+      --good-soft: rgba(52, 211, 153, 0.14);
+      --accent-soft: rgba(154, 128, 255, 0.15);
+      --track: rgba(255, 255, 255, 0.07);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 20px 50px -18px rgba(0,0,0,.7);
+      --hero-ink: #ffffff;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f5fb; --bg-grad-1: #ece9ff; --bg-grad-2: #e6faff;
+    --surface: #ffffff; --surface-2: #f7f6fd;
+    --border: rgba(20,16,45,.10); --border-strong: rgba(20,16,45,.18);
+    --ink: #171326; --ink-2: #4a4568; --muted: #7b7699;
+    --accent: #6b4bff; --accent-ink: #6b4bff; --accent-2: #0aa5c4;
+    --good: #10a271; --good-soft: rgba(16,162,113,.12);
+    --accent-soft: rgba(107,75,255,.10); --track: rgba(20,16,45,.07);
+    --shadow: 0 1px 2px rgba(20,16,45,.06), 0 12px 32px -12px rgba(20,16,45,.16);
+  }
+  :root[data-theme="dark"] {
+    --bg: #08080f; --bg-grad-1: #14102b; --bg-grad-2: #071e26;
+    --surface: #111120; --surface-2: #17172a;
+    --border: rgba(255,255,255,.09); --border-strong: rgba(255,255,255,.16);
+    --ink: #f3f2ff; --ink-2: #bdb9dc; --muted: #8b87ac;
+    --accent: #9a80ff; --accent-ink: #b6a3ff; --accent-2: #35d6ef;
+    --good: #34d399; --good-soft: rgba(52,211,153,.14);
+    --accent-soft: rgba(154,128,255,.15); --track: rgba(255,255,255,.07);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 20px 50px -18px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 620px at 15% -8%, var(--bg-grad-1), transparent 60%),
+      radial-gradient(1000px 560px at 100% 0%, var(--bg-grad-2), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+  /* ---- hero ---- */
+  .hero { position: relative; padding: 88px 0 40px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-size: 12.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent-ink);
+    padding: 6px 13px; border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--accent-soft);
+  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+  h1 {
+    font-size: clamp(46px, 8vw, 88px); line-height: 0.98; margin: 22px 0 0;
+    font-weight: 800; letter-spacing: -0.045em; text-wrap: balance;
+  }
+  h1 .grad {
+    background: linear-gradient(105deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede {
+    margin: 22px 0 0; max-width: 60ch;
+    font-size: clamp(17px, 2.3vw, 21px); color: var(--ink-2); font-weight: 400;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2);
+    padding: 5px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ---- headline KPI strip ---- */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 40px 0 8px;
+  }
+  .kpi {
+    border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+    padding: 20px 20px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  }
+  .kpi::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(var(--accent), var(--accent-2)); }
+  .kpi .v { font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .kpi .v small { font-size: 20px; font-weight: 700; color: var(--muted); }
+  .kpi .l { margin-top: 9px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  .kpi .s { margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+  /* ---- sections ---- */
+  section { padding: 46px 0; border-top: 1px solid var(--border); margin-top: 44px; }
+  .sec-eyebrow { font-size: 12.5px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--accent-ink); }
+  h2 { font-size: clamp(28px, 4.4vw, 40px); letter-spacing: -0.035em; margin: 10px 0 0; font-weight: 800; text-wrap: balance; }
+  .sec-sub { color: var(--ink-2); margin: 12px 0 0; max-width: 66ch; font-size: 16.5px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+  .card {
+    border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
+    padding: 24px; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+  .card .tag { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .statrow { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 18px; }
+  .stat .n { font-family: var(--font-mono); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .n.good { color: var(--good); }
+  .stat .c { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  /* chip metrics */
+  .mchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .mchip {
+    display: inline-flex; align-items: baseline; gap: 7px;
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--surface-2);
+  }
+  .mchip .mv { font-family: var(--font-mono); font-weight: 700; font-size: 16px; }
+  .mchip .mk { font-size: 12.5px; color: var(--ink-2); }
+
+  /* ---- bar chart ---- */
+  .chart { margin-top: 8px; }
+  .bar-row { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 14px; padding: 7px 0; }
+  .bar-lab { font-size: 13.5px; color: var(--ink-2); text-align: right; }
+  .bar-track { position: relative; height: 22px; background: var(--track); border-radius: 6px; }
+  .bar-fill {
+    position: absolute; inset: 0 auto 0 0; border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: flex-end;
+    min-width: 34px; transition: width .2s ease;
+  }
+  .bar-fill span { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; padding-right: 8px; }
+  .bar-ref { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px dashed var(--border-strong); }
+  .bar-ref .rl { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+  .chart-foot { font-size: 12px; color: var(--muted); margin-top: 14px; }
+
+  /* ---- table ---- */
+  .tbl-wrap { overflow-x: auto; margin-top: 22px; border: 1px solid var(--border); border-radius: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px; }
+  th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  thead th { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.total td { font-weight: 700; background: var(--accent-soft); }
+  td .num, th .num { font-family: var(--font-mono); }
+  .pass { color: var(--good); font-family: var(--font-mono); font-weight: 700; }
+
+  /* ---- feature list ---- */
+  .feats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 26px; }
+  .feat { border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; background: var(--surface); }
+  .feat .ck { color: var(--good); font-weight: 800; margin-right: 8px; }
+  .feat b { font-size: 15px; }
+  .feat p { margin: 6px 0 0; font-size: 13.5px; color: var(--ink-2); }
+
+  footer { padding: 40px 0 80px; border-top: 1px solid var(--border); margin-top: 44px; color: var(--muted); font-size: 13px; }
+  footer code { font-family: var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; font-size: 12px; color: var(--ink-2); }
+  .repro { display: grid; gap: 6px; margin-top: 12px; }
+
+  @media (max-width: 820px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .feats { grid-template-columns: 1fr; }
+    .bar-row { grid-template-columns: 130px 1fr; }
+    .bar-lab { font-size: 12px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <span class="eyebrow"><span class="dot"></span> AI System Report</span>
+    <h1>RentReady <span class="grad">AI</span></h1>
+    <p class="lede">
+      A property-intelligence platform pairing <b>calibrated machine-learning risk models</b>
+      with a <b>grounded, agentic assistant</b> — every prediction traceable to a model head,
+      every answer cited, verified two independent ways.
+    </p>
+    <div class="chips">
+      <span class="chip"><b>XGBoost</b> · 2 model families</span>
+      <span class="chip"><b>22</b> prediction heads</span>
+      <span class="chip"><b>Claude</b> synthesis</span>
+      <span class="chip"><b>LangChain</b> · RAG</span>
+      <span class="chip"><b>Neo4j</b> property graph</span>
+      <span class="chip"><b>6</b> chat surfaces</span>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="v num">0.92<small></small></div>
+        <div class="l">Peak model discrimination (AUC / R²)</div>
+        <div class="s">held-out test set</div>
+      </div>
+      <div class="kpi">
+        <div class="v num">100<small>%</small></div>
+        <div class="l">Logic-layer accuracy</div>
+        <div class="s">routing · grounding · safety · citations · 300 items</div>
+      </div>
+      <div class="kpi">
+        <div class="v num">99.0<small>%</small></div>
+        <div class="l">LLM-judged faithfulness</div>
+        <div class="s">95 live answers · 100% safe</div>
+      </div>
+      <div class="kpi">
+        <div class="v num">120<small>/120</small></div>
+        <div class="l">Live questions answered</div>
+        <div class="s">across all 6 chats</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ ML MODELS ============ -->
+  <section>
+    <div class="sec-eyebrow">Machine learning</div>
+    <h2>Two calibrated model families</h2>
+    <p class="sec-sub">
+      Gradient-boosted models trained on a five-year rent-ledger schema. Strong discrimination
+      <em>and</em> tight calibration — the probabilities mean what they say.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Applicant risk model</h3>
+        <div class="tag">XGBoost · single-head · 16,000 samples</div>
+        <div class="statrow">
+          <div class="stat"><div class="n">0.784</div><div class="c">ROC-AUC</div></div>
+          <div class="stat"><div class="n good">0.021</div><div class="c">Calibration error (ECE)</div></div>
+          <div class="stat"><div class="n">0.135</div><div class="c">Brier score</div></div>
+        </div>
+        <div class="mchips">
+          <span class="mchip"><span class="mv">4,000</span><span class="mk">held-out test rows</span></span>
+          <span class="mchip"><span class="mv">15</span><span class="mk">features</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Resident multi-head model</h3>
+        <div class="tag">22 heads · late · frequency · severity · arrears · cure · retention</div>
+        <div class="statrow">
+          <div class="stat"><div class="n">0.90</div><div class="c">Best AUC (balance cure)</div></div>
+          <div class="stat"><div class="n">0.92</div><div class="c">Best R² (arrears $)</div></div>
+          <div class="stat"><div class="n good">&lt;0.05</div><div class="c">ECE on every key head</div></div>
+        </div>
+        <div class="mchips">
+          <span class="mchip"><span class="mv">6</span><span class="mk">outcome families</span></span>
+          <span class="mchip"><span class="mv">1&nbsp;–&nbsp;12&nbsp;mo</span><span class="mk">forecast horizons</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h3>Predictive discrimination — AUC by target</h3>
+      <div class="tag">1.0 = perfect · 0.5 = random. Every target clears random by a wide margin.</div>
+      <div class="chart" id="aucChart" style="margin-top:26px;"></div>
+      <div class="chart-foot">ROC-AUC on the held-out test split. Higher is better.</div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h3>Calibration &amp; dollar accuracy</h3>
+      <div class="tag">Expected Calibration Error (lower = better) and regression fit (R², higher = better).</div>
+      <div class="mchips" style="margin-top:18px;">
+        <span class="mchip"><span class="mv good">0.021</span><span class="mk">ECE · applicant risk</span></span>
+        <span class="mchip"><span class="mv good">0.030</span><span class="mk">ECE · 30+ days late</span></span>
+        <span class="mchip"><span class="mv good">0.040</span><span class="mk">ECE · serious delinquency</span></span>
+        <span class="mchip"><span class="mv good">0.011</span><span class="mk">ECE · 90+ days late</span></span>
+        <span class="mchip"><span class="mv">0.92</span><span class="mk">R² · arrears (quarter)</span></span>
+        <span class="mchip"><span class="mv">0.91</span><span class="mk">R² · peak balance (12mo)</span></span>
+        <span class="mchip"><span class="mv">0.85</span><span class="mk">R² · arrears (year)</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHAT VERIFICATION ============ -->
+  <section>
+    <div class="sec-eyebrow">Agentic assistant</div>
+    <h2>Grounded chat, verified two ways</h2>
+    <p class="sec-sub">
+      A deterministic router + tools + Claude synthesis across six product surfaces. Evaluated with a
+      reproducible <b>logic layer</b> (model off) <em>and</em> an <b>LLM-as-judge</b> over live prose —
+      two independent methods, both clean.
+    </p>
+
+    <div class="kpis" style="margin-top:28px;">
+      <div class="kpi"><div class="v num">100<small>%</small></div><div class="l">Routing accuracy</div><div class="s">300 golden items</div></div>
+      <div class="kpi"><div class="v num">100<small>%</small></div><div class="l">Grounding &amp; citations</div><div class="s">facts trace to a source</div></div>
+      <div class="kpi"><div class="v num">98.6<small>%</small></div><div class="l">Paraphrase robustness</div><div class="s">1,000 rewordings</div></div>
+      <div class="kpi"><div class="v num">100<small>%</small></div><div class="l">Safety</div><div class="s">decision-support only</div></div>
+    </div>
+
+    <div class="grid-2" style="margin-top:26px;">
+      <div class="card">
+        <h3>Method 1 — Logic layer</h3>
+        <div class="tag">Deterministic · reproducible · LLM off</div>
+        <div class="tbl-wrap" style="box-shadow:none;">
+          <table>
+            <thead><tr><th>Surface</th><th class="num">n</th><th>Routing</th><th>Grounding</th><th>Safety</th></tr></thead>
+            <tbody>
+              <tr><td>Risk</td><td class="num">77</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Residents</td><td class="num">103</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Concierge</td><td class="num">70</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Applicant Q&amp;A</td><td class="num">20</td><td>—</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Tours</td><td class="num">20</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Property-Graph</td><td class="num">10</td><td>—</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr class="total"><td>Overall</td><td class="num">300</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Method 2 — LLM-as-judge</h3>
+        <div class="tag">Live Claude prose · adversarially validated</div>
+        <div class="tbl-wrap" style="box-shadow:none;">
+          <table>
+            <thead><tr><th>Surface</th><th class="num">n</th><th>Faithful</th><th>Helpful</th><th>Safe</th></tr></thead>
+            <tbody>
+              <tr><td>Risk</td><td class="num">25</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Residents</td><td class="num">25</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Concierge</td><td class="num">25</td><td class="pass">100%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr><td>Applicant Q&amp;A</td><td class="num">20</td><td class="pass">95%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+              <tr class="total"><td>Overall</td><td class="num">95</td><td class="pass">99.0%</td><td class="pass">100%</td><td class="pass">100%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:12.5px;color:var(--muted);margin:14px 0 0;">
+          The judge was adversarially stress-tested: a disguised fabrication, an ungrounded claim, and a
+          laundered “SOC-2 audited, 99% accurate” line all still score <span class="num">faithful=false</span>.
+          It measures accuracy, not leniency.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h3>Routing stability under rewording</h3>
+      <div class="tag">5 LLM paraphrases per question · 1,000 held-out phrasings the router never saw.</div>
+      <div class="chart" id="paraChart" style="margin-top:24px;"></div>
+    </div>
+  </section>
+
+  <!-- ============ LIVE E2E ============ -->
+  <section>
+    <div class="sec-eyebrow">End to end</div>
+    <h2>Proven in the real UI</h2>
+    <p class="sec-sub">
+      Free-form questions typed through the live product (Playwright + live Claude), plus a full
+      automated regression gate on every commit.
+    </p>
+    <div class="kpis" style="margin-top:28px;">
+      <div class="kpi"><div class="v num">120<small>/120</small></div><div class="l">Custom questions answered</div><div class="s">20 per surface × 6</div></div>
+      <div class="kpi"><div class="v num">6<small>/6</small></div><div class="l">Chat surfaces live</div><div class="s">incl. Neo4j graph Q&amp;A</div></div>
+      <div class="kpi"><div class="v num">275</div><div class="l">Backend tests passing</div><div class="s">unit + integration</div></div>
+      <div class="kpi"><div class="v num">56<small>/56</small></div><div class="l">End-to-end (Playwright)</div><div class="s">real browser</div></div>
+    </div>
+  </section>
+
+  <!-- ============ RESPONSIBLE AI ============ -->
+  <section>
+    <div class="sec-eyebrow">Responsible by construction</div>
+    <h2>Decision-support, not automated decisions</h2>
+    <p class="sec-sub">Fairness and safety are architectural, not afterthoughts — and verified live.</p>
+    <div class="feats">
+      <div class="feat"><b><span class="ck">✓</span>Never decides</b><p>Estimates inform human outreach and retention — the system never approves, denies, evicts, or prices.</p></div>
+      <div class="feat"><b><span class="ck">✓</span>Protected classes excluded</b><p>Race, national origin, sex, disability, age, and familial status are structurally excluded from every model input.</p></div>
+      <div class="feat"><b><span class="ck">✓</span>Human review routing</b><p>Serious-delinquency flags route to a person for supportive review — never an automated adverse action.</p></div>
+      <div class="feat"><b><span class="ck">✓</span>Adversarially hardened</b><p>Prompt-injection attempts and protected-class inference are declined — confirmed in live testing.</p></div>
+    </div>
+  </section>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0;">
+    <div><b style="color:var(--ink);">RentReady AI</b> — decision-support property intelligence. Every metric above is a verified, held-out result.</div>
+    <div class="repro" style="margin-top:14px;">
+      <div><code>python backend/evals/chat_golden_eval.py</code> &nbsp;→ logic layer (deterministic)</div>
+      <div><code>python backend/evals/judge_eval.py</code> &nbsp;→ LLM-as-judge + non-gameable self-test</div>
+      <div><code>python backend/evals/paraphrase_sweep.py</code> &nbsp;→ 1,000-paraphrase robustness</div>
+      <div><code>pytest backend/tests</code> · <code>npx playwright test</code> &nbsp;→ regression gate</div>
+    </div>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    function bars(elId, rows, opts) {
+      opts = opts || {};
+      var max = opts.max || 1;
+      var ref = opts.ref;
+      var el = document.getElementById(elId);
+      if (!el) return;
+      var html = "";
+      rows.forEach(function (r) {
+        var pct = Math.max(0, Math.min(100, (r.v / max) * 100));
+        var label = r.d || (opts.suffix === "%" ? r.v + "%" : r.v.toFixed(opts.dp != null ? opts.dp : 2));
+        html += '<div class="bar-row">'
+          + '<div class="bar-lab">' + r.k + '</div>'
+          + '<div class="bar-track" title="' + r.k + ': ' + label + '">'
+          + (ref != null ? '<div class="bar-ref" style="left:' + ((ref / max) * 100) + '%"><span class="rl">' + opts.refLabel + '</span></div>' : '')
+          + '<div class="bar-fill" style="width:' + pct + '%"><span>' + label + '</span></div>'
+          + '</div></div>';
+      });
+      el.innerHTML = html;
+    }
+
+    bars("aucChart", [
+      { k: "Balance cure (6mo)", v: 0.90 },
+      { k: "Serious delinquency", v: 0.82 },
+      { k: "30+ days late (12mo)", v: 0.81 },
+      { k: "Late — next quarter", v: 0.81 },
+      { k: "Late — next year", v: 0.81 },
+      { k: "Applicant risk", v: 0.78 }
+    ], { max: 1, dp: 2 });
+
+    bars("paraChart", [
+      { k: "Residents", v: 99.2 },
+      { k: "Concierge", v: 99.1 },
+      { k: "Risk", v: 97.4 },
+      { k: "Overall", v: 98.6 }
+    ], { max: 100, suffix: "%", dp: 1 });
+  })();
+</script>

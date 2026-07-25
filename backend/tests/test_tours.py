@@ -516,19 +516,32 @@ def test_chat_cancel_existing_booking(db):
         ),
         now=MON,
     )
-    assert r2.state.phase == "greeting"
-    assert "cancelled" in r2.reply.lower()
+    # Matching an email is enough to surface the booking, but not enough to
+    # cancel it outright -- must be confirmed first.
+    assert r2.state.phase == "awaiting_cancel_confirm"
+    assert store.get_booking(booking["id"])["status"] == "booked"
+    assert "cancel it" in r2.reply.lower()
+
+    r3 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="yes")],
+            property_id="PROP-002", state=r2.state,
+        ),
+        now=MON,
+    )
+    assert r3.state.phase == "greeting"
+    assert "cancelled" in r3.reply.lower()
     assert store.get_booking(booking["id"])["status"] == "cancelled"
 
 
-def test_chat_cancel_with_email_in_same_message(db):
+def test_chat_cancel_declined_leaves_booking_intact(db):
     booking = store.book_tour(
         property_id="PROP-002", property_name="Riverside Lofts",
         agent_id="AGENT-01", agent_name="Maria Lopez",
         start="2026-07-27T09:00:00", end="2026-07-27T09:30:00",
         prospect_name="Alex Kim", prospect_email="alex.kim@example.com",
     )
-    r = tours_chat.handle(
+    r1 = tours_chat.handle(
         TourChatRequest(
             messages=[ChatMessage(
                 role="user",
@@ -538,8 +551,48 @@ def test_chat_cancel_with_email_in_same_message(db):
         ),
         now=MON,
     )
-    assert r.state.phase == "greeting"
-    assert "cancelled" in r.reply.lower()
+    assert r1.state.phase == "awaiting_cancel_confirm"
+
+    r2 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="no, never mind")],
+            property_id="PROP-002", state=r1.state,
+        ),
+        now=MON,
+    )
+    assert r2.state.phase == "greeting"
+    assert store.get_booking(booking["id"])["status"] == "booked"
+
+
+def test_chat_cancel_with_email_in_same_message(db):
+    booking = store.book_tour(
+        property_id="PROP-002", property_name="Riverside Lofts",
+        agent_id="AGENT-01", agent_name="Maria Lopez",
+        start="2026-07-27T09:00:00", end="2026-07-27T09:30:00",
+        prospect_name="Alex Kim", prospect_email="alex.kim@example.com",
+    )
+    r1 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(
+                role="user",
+                content="please cancel my reservation, my email is alex.kim@example.com",
+            )],
+            property_id="PROP-002",
+        ),
+        now=MON,
+    )
+    assert r1.state.phase == "awaiting_cancel_confirm"
+    assert store.get_booking(booking["id"])["status"] == "booked"
+
+    r2 = tours_chat.handle(
+        TourChatRequest(
+            messages=[ChatMessage(role="user", content="yes, cancel it")],
+            property_id="PROP-002", state=r1.state,
+        ),
+        now=MON,
+    )
+    assert r2.state.phase == "greeting"
+    assert "cancelled" in r2.reply.lower()
     assert store.get_booking(booking["id"])["status"] == "cancelled"
 
 

@@ -58,7 +58,9 @@ class Settings(BaseSettings):
     datadog_api_key: str = ""
     datadog_site: str = "datadoghq.com"
 
-    # Neo4j
+    # Neo4j (local dev only — this default matches the standalone instance
+    # this app expects on localhost. If Neo4j is ever exposed beyond
+    # localhost, override NEO4J_PASSWORD via env instead of relying on this.)
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_username: str = "neo4j"
     neo4j_password: str = "rentready123"
@@ -76,6 +78,12 @@ class Settings(BaseSettings):
     # Upload cap for /upload's PDF (real applications run a few pages; this is
     # generous headroom while still bounding memory/disk on one request).
     max_upload_mb: int = 20
+
+    # CORS: comma-separated origins, or "*" (default -- fine for local dev,
+    # where the frontend's dev-server origin varies by port). Set explicitly
+    # to the real frontend origin(s) for any non-localhost deployment, e.g.
+    #   CORS_ALLOWED_ORIGINS=https://rentready.example.com
+    cors_allowed_origins: str = "*"
 
     @property
     def has_anthropic(self) -> bool:

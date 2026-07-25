@@ -78,13 +78,17 @@ export function SkeletonCard({
   title,
   lines = 3,
   block,
+  minHeight,
 }: {
   title: string;
   lines?: number;
   block?: number;
+  /** Forces the same floor height as the real card it stands in for, so a
+   * loading->loaded swap doesn't resize (and reflow) whatever's around it. */
+  minHeight?: number;
 }) {
   return (
-    <div className="card" aria-hidden>
+    <div className="card" aria-hidden style={minHeight ? { minHeight } : undefined}>
       <h2 style={{ opacity: 0.5 }}>{title}</h2>
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className={`skel skel-line${i === lines - 1 ? " sm" : ""}`} />

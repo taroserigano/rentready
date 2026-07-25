@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Database, FileText, Sparkles } from "lucide-react";
 import type { AskResponse } from "../types";
 import { Feedback } from "./Feedback";
 import { Markdown } from "./Markdown";
 
 interface Msg {
+  /** Stable id (not derived from text) so feedback can target this exact
+   * message even when two answers share a common prefix. */
+  id: number;
   who: "user" | "bot";
   text: string;
   res?: AskResponse;
@@ -63,7 +66,7 @@ function BotAnswer({
               </button>
             )}
             <span style={{ marginLeft: "auto" }}>
-              <Feedback applicantId={applicantId} target="ask" itemId={msg.text.slice(0, 40)} />
+              <Feedback applicantId={applicantId} target="ask" itemId={String(msg.id)} />
             </span>
           </div>
           {showCites && sources.length > 0 && (
@@ -92,20 +95,32 @@ export function Chat({
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const idRef = useRef(0);
+  // Guards against updating state after the applicant-detail view (or this
+  // chat) unmounts while `onAsk` is still in flight.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   async function send(q: string) {
     q = q.trim();
     if (!q || busy) return;
-    setMessages((m) => [...m, { who: "user", text: q }]);
+    setMessages((m) => [...m, { id: ++idRef.current, who: "user", text: q }]);
     setInput("");
     setBusy(true);
     try {
       const res = await onAsk(q);
-      setMessages((m) => [...m, { who: "bot", text: res.answer, res }]);
+      if (!aliveRef.current) return;
+      setMessages((m) => [...m, { id: ++idRef.current, who: "bot", text: res.answer, res }]);
     } catch (err) {
-      setMessages((m) => [...m, { who: "bot", text: `Error: ${err}` }]);
+      if (!aliveRef.current) return;
+      setMessages((m) => [...m, { id: ++idRef.current, who: "bot", text: `Error: ${err}` }]);
     } finally {
-      setBusy(false);
+      if (aliveRef.current) setBusy(false);
     }
   }
 
@@ -113,11 +128,11 @@ export function Chat({
     <div className="card">
       <h2>5. Ask about this application</h2>
       <div aria-live="polite">
-        {messages.map((m, i) =>
+        {messages.map((m) =>
           m.who === "bot" ? (
-            <BotAnswer key={i} msg={m} applicantId={applicantId} />
+            <BotAnswer key={m.id} msg={m} applicantId={applicantId} />
           ) : (
-            <div key={i} className="chat-msg user">
+            <div key={m.id} className="chat-msg user">
               {m.text}
             </div>
           ),

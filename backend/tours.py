@@ -255,6 +255,17 @@ def open_slots(
                 candidate_starts.setdefault(s, e)
             day += timedelta(days=1)
 
+    # Tracks intervals already assigned to each agent BY THIS CALL, in
+    # addition to `bookings` (real, already-persisted bookings). Only needed
+    # when duration_min > step_min: candidate slots for one agent can then
+    # overlap each other (e.g. 60-min tours on a 30-min step), and
+    # `agent_free` alone -- checking only `bookings` -- would let the same
+    # agent be assigned to two overlapping proposed slots in one response.
+    # A no-op with the default equal duration/step, where slots never overlap.
+    assigned_here: dict[str, list[tuple[datetime, datetime]]] = {
+        a["id"]: [] for a in eligible
+    }
+
     results: list[OpenSlot] = []
     for start in sorted(candidate_starts):
         end = candidate_starts[start]
@@ -275,11 +286,13 @@ def open_slots(
             for a in eligible
             if _agent_window_covers(windows_by_agent.get(a["id"], []), start, end)
             and agent_free(a["id"], start, end, bookings)
+            and not any(overlaps(start, end, s, e) for s, e in assigned_here[a["id"]])
         ]
         if not free_here:
             continue
         chosen = assign_agent(free_here, load_by_agent)
         load_by_agent[chosen["id"]] += 1
+        assigned_here[chosen["id"]].append((start, end))
         results.append(
             OpenSlot(
                 property_id=property_id,

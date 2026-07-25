@@ -175,7 +175,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
   return (
     <div className="card">
       <div className="rec-head">
-        <h2 style={{ margin: 0 }}>Risk what-if</h2>
+        <h2 style={{ margin: 0 }}>Risk What-If</h2>
         <button
           className="btn-small btn-ghost icon-line"
           style={{ marginLeft: "auto" }}
@@ -285,7 +285,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
                   )}
                 </div>
                 <div>
-                  <div className="eyebrow">Key factors</div>
+                  <div className="eyebrow">Key Factors</div>
                   {result ? (
                     <ReasonCodes codes={result.reason_codes} />
                   ) : (

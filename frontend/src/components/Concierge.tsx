@@ -416,6 +416,11 @@ export function Concierge({
   const [lease, setLease] = useState<LeaseTarget | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Aborts any in-flight stream when the component unmounts, so navigating
+  // away mid-answer doesn't leave the request running and patching state
+  // that's no longer displayed.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   // Property catalog for the scope selector.
   useEffect(() => {
@@ -470,6 +475,9 @@ export function Concierge({
       history,
     };
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       await conciergeAskStream(request, {
         onMeta: (meta) =>
@@ -503,11 +511,15 @@ export function Concierge({
               ? { ...m.res, source, sources: sources ?? m.res.sources }
               : m.res,
           })),
-      });
+      }, controller.signal);
     } catch {
+      // Aborted on unmount — don't fall back or touch state, there's nothing
+      // to update anymore.
+      if (controller.signal.aborted) return;
       // Streaming failed — fall back to the non-streaming endpoint.
       try {
         const res = await conciergeAsk(request);
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({
           ...m,
           text: res.answer,
@@ -515,6 +527,7 @@ export function Concierge({
           res,
         }));
       } catch (e) {
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({
           ...m,
           text: `Sorry — ${errText(e)}`,
@@ -522,7 +535,7 @@ export function Concierge({
         }));
       }
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   });
 
@@ -542,11 +555,13 @@ export function Concierge({
   return (
     <div className="app app-ask">
       <header>
-        <h1>Ask</h1>
+        <h1>Lease Q&A</h1>
         <p>
-          Chat with a grounded assistant about any home's rent, amenities, and
-          lease terms — every answer cites the actual listing or lease, and you
-          can compare homes side by side.
+          Lease Agreement Q&A, powered by GraphRAG (property facts from a
+          graph database) and document RAG (lease terms retrieved from the
+          actual lease text). Chat about any home's rent, amenities, and lease
+          terms — every answer cites the actual listing or lease, and you can
+          compare homes side by side.
         </p>
         <div className="badges">
           <TechBadge

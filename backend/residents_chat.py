@@ -102,6 +102,18 @@ _PROPERTY_HEALTH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "How is late-payment / delinquency risk SPREAD across the portfolio" — a
+# distribution question best answered by the portfolio health ranking (every
+# property scored), so it routes to property_health rather than deflecting to
+# "general". Requires a risk/late/payment word AND a spread/distribution word,
+# so it never swallows a "which residents are most at risk" resident ranking.
+_RISK_DISTRIBUTION_RE = re.compile(
+    r"(?:how|where|what)\b[^?.]{0,30}\b(?:risk|late|payment|paying|delinquen\w*|arrears)\b"
+    r"[^?.]{0,30}\b(?:spread|distribut\w*|concentrat\w*|split|dispersed?|vary|varies|range)\b|"
+    r"\b(?:spread|distribution|breakdown)\b[^?.]{0,25}\b(?:risk|late|payment|delinquen\w*)\b",
+    re.IGNORECASE,
+)
+
 # Portfolio-wide resident ranking: "which residents are most at risk", "who is
 # behind on rent", "riskiest residents" -- distinct from property_health (which
 # ranks PROPERTIES). Without this, these phrasings fell through to "general"
@@ -123,7 +135,13 @@ _AT_RISK_RESIDENTS_RE = re.compile(
     r"(?:which|what|who|whom|show me|list|give me|tell me|identify|find|name|rank)\b.{0,25}\b"
     + _SUBJECTS + r"\b.{0,45}"
     r"(?:at risk|risk|behind|late|delinquent|owe|owed|owes|owing|arrears|balance|"
-    r"outstanding|debt|churn|renew|fall|miss|slip|shaky|trouble)|"
+    r"outstanding|debt|churn|renew|fall|miss|slip|shaky|trouble|"
+    # Outreach / prioritisation phrasings — "which residents need outreach first",
+    # "who should I prioritise". Deliberately NOT "check-in"/"follow-up" on
+    # their own -- those are common substrings of unrelated ops questions
+    # ("move-in check-in", "maintenance follow-up") with no risk word nearby,
+    # so bare matches misrouted them into the risk ranking.
+    r"outreach|reach out|prioriti|proactive)|"
     r"\b" + _SUBJECTS + r"\b.{0,20}(?:most|highest|greatest|biggest)\b.{0,10}\brisk|"
     # "riskiest / high-risk / shakiest <subject>" (risk word BEFORE the subject).
     r"(?:riskiest|highest[\s-]?risk|high[\s-]?risk|most (?:at[\s-]?risk|likely)|shakiest)\s+"
@@ -147,6 +165,42 @@ _AT_RISK_RESIDENTS_RE = re.compile(
 # question, silently wrong rather than merely incomplete.
 _CHURN_METRIC_CUE = re.compile(
     r"\b(churn\w*|renew\w*|non[\s-]?renew\w*|retention)\b", re.IGNORECASE
+)
+
+# "Healthiest / lowest-risk" direction cue — flips an at-risk ranking to show
+# the SAFEST residents/units first ("which apartments are healthiest") instead
+# of the most-at-risk. Without it, a "healthiest" question would list the
+# riskiest residents — the opposite of what was asked.
+_HEALTHIEST_DIR_CUE = re.compile(
+    r"\b(healthiest|lowest[\s-]?risk|least (?:at[\s-]?risk|risky|likely)|"
+    r"safest|strongest|best[\s-]?performing|on[\s-]?track|doing (?:the )?best|"
+    # Bare "best"/"top" -- _UNIT_RANK_IN_PROPERTY_RE treats these as ranking
+    # triggers too ("which apartments are the best/top ones"); without also
+    # recognizing them here, that question would rank correctly but flip the
+    # header/order to riskiest-first -- the opposite of what was asked.
+    r"top|best)\b",
+    re.IGNORECASE,
+)
+
+# Within-property unit/apartment ranking. When ONE property is selected,
+# "which apartments are healthiest / riskiest / need attention" ranks the UNITS
+# INSIDE that property — a resident-roster ranking, not a property-vs-property
+# ranking — so it must beat _PROPERTY_HEALTH_RE (which ranks properties). Gated
+# on a selected property in route(); portfolio scope still routes property_health.
+_UNIT_RANK_IN_PROPERTY_RE = re.compile(
+    r"("
+    r"(?:healthiest|unhealthiest|riskiest|highest[\s-]?risk|lowest[\s-]?risk|"
+    r"safest|best|worst|top|bottom)\b[^?.]{0,20}\b(?:apartments?|units?|homes?)|"
+    r"(?:apartments?|units?|homes?)\b[^?.]{0,12}"
+    r"(?:healthiest|unhealthiest|riskiest|highest[\s-]?risk|lowest[\s-]?risk|"
+    r"safest|best|worst|top|bottom|at[\s-]?risk|need attention)"
+    # Excludes facilities/amenity questions that happen to use the same
+    # adjectives right after the subject ("apartments have the best
+    # amenities/view/parking") -- those aren't a risk ranking at all.
+    r"(?!\s+(?:amenit\w*|appliance\w*|finish\w*|view\w*|kitchen\w*|"
+    r"floor\s?plans?|parking\s?spots?|location\w*))"
+    r")",
+    re.IGNORECASE,
 )
 
 # Compare: this resident vs their property vs the portfolio.
@@ -368,10 +422,20 @@ def route(question: str, resident_id: str | None = None, property_id: str | None
         return "governance"
     if _CONFIDENCE_RE.search(q):
         return "confidence"
+    # A single property is selected and the question ranks UNITS within it
+    # ("which apartments are healthiest / most at risk") — that is a unit/
+    # resident ranking, not a property-vs-property ranking, so it must be caught
+    # before property_health and routed to the resident-roster handler.
+    if property_id and not resident_id and _UNIT_RANK_IN_PROPERTY_RE.search(q):
+        return "at_risk_residents"
     if _PROPERTY_HEALTH_RE.search(q):
         return "property_health"
     if not resident_id and _AT_RISK_RESIDENTS_RE.search(q):
         return "at_risk_residents"
+    # "How is late-payment risk spread across the portfolio" — answer from the
+    # portfolio ranking (all properties scored) instead of deflecting to general.
+    if _RISK_DISTRIBUTION_RE.search(q):
+        return "property_health"
     if _COMPARE_RE.search(q):
         return "compare"
     if _CURE_RE.search(q):
@@ -1598,6 +1662,9 @@ class _ResidentPlan:
         case stays consistent with the /residents table."""
         self.intent = "at_risk_residents"
         metric = "churn" if _CHURN_METRIC_CUE.search(q) else "late"
+        # "Healthiest / lowest-risk" questions rank the SAFEST first; every other
+        # phrasing ("need outreach", "most at risk") ranks the riskiest first.
+        healthiest = bool(_HEALTHIEST_DIR_CUE.search(q))
         scored: list = []
         try:
             residents = residents_risk.load_residents()
@@ -1610,6 +1677,7 @@ class _ResidentPlan:
                 scored.append({
                     "resident_id": r.get("resident_id", ""),
                     "name": r.get("name", ""),
+                    "unit_id": r.get("unit_id", ""),
                     "property_name": _property_name(r.get("property_id", "")),
                     "probability": float(head.get("probability") or 0.0),
                     "band": head.get("band", "low"),
@@ -1617,7 +1685,8 @@ class _ResidentPlan:
                         feats, head="churn" if metric == "churn" else "late_3m"
                     ),
                 })
-            scored.sort(key=lambda x: x["probability"], reverse=True)
+            # Same scored set either way — only the sort direction flips.
+            scored.sort(key=lambda x: x["probability"], reverse=not healthiest)
         except Exception as exc:  # noqa: BLE001
             print(f"residents_chat: at_risk_residents failed ({type(exc).__name__}: {exc}).")
             scored = []
@@ -1633,18 +1702,24 @@ class _ResidentPlan:
             return
 
         scope_txt = f"at {top[0]['property_name']}" if self.property_id else "across the portfolio"
+        rank_word = "Lowest-risk (healthiest)" if healthiest else "Highest"
+
+        def _who(t: dict) -> str:
+            return f"{t['name']} (unit {t['unit_id']}, {t['property_name']})" if t.get("unit_id") \
+                else f"{t['name']} ({t['property_name']})"
+
         if metric == "churn":
-            header = f"Highest churn-risk residents {scope_txt} (of {len(scored)} scored)"
+            header = f"{rank_word} churn-risk residents {scope_txt} (of {len(scored)} scored)"
             lines = [
-                f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance "
+                f"{i + 1}. {_who(t)} — {_pct(t['probability'])} chance "
                 f"of non-renewal (churn) for leases ending within 6 months "
                 f"({t['band']} band). Top driver: {t['top_driver']}."
                 for i, t in enumerate(top)
             ]
         else:
-            header = f"Highest late-payment-risk residents {scope_txt} (of {len(scored)} scored)"
+            header = f"{rank_word} late-payment-risk residents {scope_txt} (of {len(scored)} scored)"
             lines = [
-                f"{i + 1}. {t['name']} ({t['property_name']}) — {_pct(t['probability'])} chance "
+                f"{i + 1}. {_who(t)} — {_pct(t['probability'])} chance "
                 f"of paying late in the next year ({t['band']} band). Top driver: {t['top_driver']}."
                 for i, t in enumerate(top)
             ]

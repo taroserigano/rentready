@@ -234,6 +234,28 @@ def book(req: BookTourRequest) -> dict:
     return {"ok": True, "booking": booking}
 
 
+def _redact_other_prospects(rows: list, email: str | None, applicant_id: str | None) -> list:
+    """Blank out contact info (email/phone/applicant_id) on any row that isn't
+    the caller's own booking. A property_id-scoped listing (the staff console)
+    needs name/time/agent to manage the schedule, but has no business handing
+    back every OTHER prospect's contact info in bulk — property ids are public,
+    so "requires property_id" alone doesn't stop a stranger from harvesting
+    contact info for a property they merely know the id of. Only a row that
+    matches the caller's own email/applicant_id filter is trusted to be theirs,
+    and keeps its real contact fields."""
+    q_email = (email or "").strip().lower()
+    q_applicant = (applicant_id or "").strip()
+    out = []
+    for r in rows:
+        is_own = (q_email and (r.get("prospect_email") or "").strip().lower() == q_email) or (
+            q_applicant and (r.get("applicant_id") or "").strip() == q_applicant
+        )
+        if not is_own:
+            r = {**r, "prospect_email": "", "prospect_phone": "", "applicant_id": ""}
+        out.append(r)
+    return out
+
+
 @router.get("/tours")
 def list_tours(
     email: str = Query(None),
@@ -241,16 +263,23 @@ def list_tours(
     property_id: str = Query(None),
     status: str = Query(None),
 ) -> dict:
-    """Bookings, soonest first. Default (no filters): all status=='booked'."""
+    """Bookings for one property/prospect, soonest first. Requires at least one
+    of property_id/email/applicant_id — an unscoped call would dump every
+    prospect's name/email/phone across the whole portfolio. Contact info
+    (email/phone/applicant_id) is further redacted on any row that isn't the
+    caller's own booking — see _redact_other_prospects."""
+    if not any([email, applicant_id, property_id]):
+        raise HTTPException(
+            422, "Provide at least one of property_id, email, or applicant_id."
+        )
     effective_status = status
-    if not any([email, applicant_id, property_id, status]):
-        effective_status = "booked"
     rows = store.list_bookings(
         status=effective_status,
         property_id=property_id,
         email=email,
         applicant_id=applicant_id,
     )
+    rows = _redact_other_prospects(rows, email, applicant_id)
     tours_out = [_augment(TourBooking(**r)) for r in rows]
     store.log_event(endpoint="tours_list", meta={"total": len(tours_out)})
     return {"tours": tours_out, "total": len(tours_out)}
@@ -272,8 +301,25 @@ def calendar_ics(booking_id: str) -> Response:
 
 @router.delete("/tours/{booking_id}")
 def cancel(booking_id: str) -> dict:
-    """Cancel a booking (frees the slot). 404 if unknown."""
-    if store.get_booking(booking_id) is None:
+    """Cancel a booking (frees the slot). 404 if unknown.
+
+    Security model, given this app has no login/session system anywhere: a
+    booking_id ("TOUR-" + 12 hex chars, 48 bits) is a high-entropy capability
+    token, not a guessable sequence. The only ways to learn one are (a) being
+    the person who booked it (it's returned directly in POST /tours/book's
+    response) or (b) the property-scoped GET /tours listing used by the
+    internal staff console -- which no longer echoes back OTHER prospects'
+    contact info (see _redact_other_prospects), so knowing a property_id alone
+    no longer lets a stranger harvest a specific person's booking to target.
+    An earlier version of this endpoint additionally required the caller to
+    supply the booking's own email/applicant_id as "proof" -- that check was
+    circular (GET returned exactly the value DELETE demanded) and, once the
+    redaction above closed the real leak, would have broken the legitimate
+    staff-console cancel flow (which has no session to prove identity with
+    either). Removed rather than kept as security theater.
+    """
+    row = store.get_booking(booking_id)
+    if row is None:
         raise HTTPException(404, "Unknown booking id.")
     store.cancel_booking(booking_id)
     store.log_event(endpoint="tours_cancel", meta={"booking_id": booking_id})

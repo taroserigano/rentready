@@ -487,11 +487,13 @@ export async function conciergeAskStream(
     history?: { role: string; content: string }[];
   },
   handlers: ConciergeStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${BASE}/concierge/ask/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new Error(`stream failed: ${res.status}`);
@@ -554,12 +556,15 @@ export async function runConciergeEval(
   );
 }
 
-/** Last persisted concierge-eval result, or null if it's never been run. */
+/** Last persisted concierge-eval result, or null if it's never been run.
+ * The backend returns 200 with `{}` for "never run" — only that empty shape
+ * maps to null; a real server error still throws instead of looking like
+ * "never run". */
 export async function getConciergeEvalLatest(): Promise<ConciergeEvalResult | null> {
-  const res = await fetch(`${BASE}/evals/concierge/latest`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as ConciergeEvalResult | null;
-  return data && typeof data.n === "number" ? data : null;
+  const data = await json<Partial<ConciergeEvalResult>>(
+    await fetch(`${BASE}/evals/concierge/latest`),
+  );
+  return typeof data.n === "number" ? (data as ConciergeEvalResult) : null;
 }
 
 // --- Resident Late-Payment Risk (decision-support) -------------------------
@@ -593,12 +598,15 @@ export async function runRiskEval(): Promise<RiskEvalResult> {
   return json(await fetch(`${BASE}/evals/risk/run`, { method: "POST" }));
 }
 
-/** Last persisted risk-eval result, or null if it's never been run. */
+/** Last persisted risk-eval result, or null if it's never been run. The
+ * backend returns 200 with `{}` for "never run" — only that empty shape maps
+ * to null; a real server error still throws instead of looking like "never
+ * run". */
 export async function getRiskEvalLatest(): Promise<RiskEvalResult | null> {
-  const res = await fetch(`${BASE}/evals/risk/latest`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as RiskEvalResult | null;
-  return data && typeof data.n === "number" ? data : null;
+  const data = await json<Partial<RiskEvalResult>>(
+    await fetch(`${BASE}/evals/risk/latest`),
+  );
+  return typeof data.n === "number" ? (data as RiskEvalResult) : null;
 }
 
 // --- Risk Chat Agent -------------------------------------------------------
@@ -639,11 +647,13 @@ export interface RiskChatStreamHandlers {
 export async function askRiskChatStream(
   input: RiskChatRequest,
   handlers: RiskChatStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${BASE}/risk/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new Error(`stream failed: ${res.status}`);
@@ -791,11 +801,13 @@ export interface ResidentChatStreamHandlers {
 export async function askResidentChatStream(
   input: ResidentChatRequest,
   handlers: ResidentChatStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${BASE}/residents/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new Error(`stream failed: ${res.status}`);

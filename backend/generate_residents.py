@@ -324,12 +324,15 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
     for m in range(gen_months):
         period_date = _add_months(first_month, m)
         seasonal = _SEASONAL if period_date.month in (12, 1) else 0.0
+        # Snapshot before this iteration overwrites prev_trouble below -- both
+        # z and z_sev need "was the PRIOR month also trouble," not this one.
+        prev_trouble_lastmonth = prev_trouble
         z = (
             c_late
             + _W_REL * (1.0 - rel)
             + _W_BURDEN * (burden - 0.30)
             + _W_UNSTABLE * unstable
-            + _RHO * prev_trouble
+            + _RHO * prev_trouble_lastmonth
             + seasonal
             + shock[m]
         )
@@ -352,7 +355,7 @@ def _simulate(meta: dict, c_late: float, c_sev: float) -> dict:
                 c_sev
                 + _WS_REL * (1.0 - rel)
                 + _WS_BURDEN * (burden - 0.30)
-                + 0.4 * _RHO * prev_trouble
+                + 0.4 * _RHO * prev_trouble_lastmonth
                 + shock[m]
             )
             severe = meta["u_sev"][m] < _sigmoid(z_sev)
@@ -447,12 +450,15 @@ def _simulate_future(meta: dict, balance: float, recent_trouble_decay: float,
     for j in range(FUTURE_MONTHS):
         period_date = _add_months(snapshot, j + 1)
         seasonal = _SEASONAL if period_date.month in (12, 1) else 0.0
+        # Snapshot before this iteration overwrites recent_trouble_decay below
+        # -- z_sev needs the carried-in (pre-this-month) decay value too.
+        recent_trouble_decay_lastmonth = recent_trouble_decay
         z = (
             c_late
             + _W_REL * (1.0 - rel)
             + _W_BURDEN * (burden - 0.30)
             + _W_UNSTABLE * unstable
-            + _RHO * recent_trouble_decay
+            + _RHO * recent_trouble_decay_lastmonth
             + seasonal
             + fshock[j]
         )
@@ -473,7 +479,7 @@ def _simulate_future(meta: dict, balance: float, recent_trouble_decay: float,
                 c_sev
                 + _WS_REL * (1.0 - rel)
                 + _WS_BURDEN * (burden - 0.30)
-                + 0.4 * _RHO * recent_trouble_decay
+                + 0.4 * _RHO * recent_trouble_decay_lastmonth
                 + fshock[j]
             )
             severe = meta["f_u_sev"][j] < _sigmoid(z_sev)

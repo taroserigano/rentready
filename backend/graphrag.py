@@ -492,8 +492,9 @@ def graph_ask(question: str) -> dict:
         try:
             rows = graph.run_read_only_cypher(cypher, params)
         except Exception as exc:  # noqa: BLE001
+            print(f"graphrag: template query failed ({type(exc).__name__}: {exc}).")
             return {
-                "answer": f"Couldn't run that query: {exc}",
+                "answer": "Couldn't run that query against the property graph.",
                 "cypher": _display_cypher(cypher, params),
                 "source": "rules",
                 "graph": None,
@@ -552,7 +553,13 @@ def graph_ask(question: str) -> dict:
     try:
         rows = graph.run_read_only_cypher(cypher)
     except Exception as exc:  # noqa: BLE001
-        return {"answer": f"Couldn't run that query: {exc}", "cypher": cypher, "source": "rules", "graph": None}
+        print(f"graphrag: generated query failed ({type(exc).__name__}: {exc}).")
+        return {
+            "answer": "Couldn't run that query against the property graph.",
+            "cypher": cypher,
+            "source": "rules",
+            "graph": None,
+        }
 
     try:
         answer = llm.invoke(

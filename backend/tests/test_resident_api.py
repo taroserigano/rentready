@@ -182,6 +182,7 @@ def test_portfolio_summary(client):
     overall = body["overall"]
     assert overall["resident_count"] == body["resident_count"]
     assert 0.0 <= overall["predicted_late_rate"] <= 1.0
+    assert 0.0 <= overall["predicted_late_rate_1m"] <= 1.0
     for band_key in ("late_bands", "serious_bands", "churn_bands"):
         assert set(overall[band_key].keys()) == {
             "low", "medium", "high", "not_applicable"
@@ -209,12 +210,79 @@ def test_property_residents(client, sample_resident):
     assert body["rollup"]["property_id"] == pid
     assert body["rollup"]["resident_count"] == body["count"]
 
+    # The KPI tile's "Predicted late-rate" reads predicted_late_rate_1m (next
+    # MONTH), distinct from the legacy predicted_late_rate (next quarter) --
+    # both are real, differently-scoped numbers, never accidentally equal.
+    assert 0.0 <= body["rollup"]["predicted_late_rate_1m"] <= 1.0
+    assert 0.0 <= body["rollup"]["predicted_late_rate"] <= 1.0
+
+    # Late-payment count breakdown: 4 quarterly checkpoints (q1..q4), each a
+    # genuine trained head — a cumulative-count timeline, so never decreasing.
+    breakdown = body["rollup"]["late_count_breakdown"]
+    assert [p["key"] for p in breakdown] == ["q1", "q2", "q3", "q4"]
+    assert [p["label"] for p in breakdown] == ["Q1", "Q2", "Q3", "Q4"]
+    values = [p["expected"] for p in breakdown]
+    assert values == sorted(values)
+
+    # Expected-arrears breakdown: same 4-quarter shape as late_count_breakdown.
+    # Unlike the late-payment COUNT (which can only accumulate), a balance can
+    # legitimately fall quarter to quarter as residents pay down arrears, so
+    # this one isn't asserted non-decreasing -- just shape and non-negativity.
+    arrears = body["rollup"]["arrears_breakdown"]
+    assert [p["key"] for p in arrears] == ["q1", "q2", "q3", "q4"]
+    assert [p["label"] for p in arrears] == ["Q1", "Q2", "Q3", "Q4"]
+    assert all(p["expected"] >= 0 for p in arrears)
+
+    # Severity-bucket distribution: fixed bucket order, non-negative counts
+    # that add up to the property's resident count (every resident lands in
+    # exactly one worst-delinquency bucket).
+    severity = body["rollup"]["severity_buckets"]
+    assert [b["bucket"] for b in severity] == ["none", "1-29", "30-59", "60-89", "90+"]
+    assert all(b["count"] >= 0 for b in severity)
+    assert sum(b["count"] for b in severity) == body["count"]
+
+    # Horizon forecast: 4 cumulative "late by month T" checkpoints; cumulative
+    # values never decrease, and each incremental (marginal, per-period) value
+    # is non-negative and never exceeds its own cumulative value.
+    horizon = body["rollup"]["horizon_forecast"]
+    assert [p["horizon"] for p in horizon] == ["late_1m", "late_3m", "late_6m", "late_12m"]
+    cum_values = [p["avg_probability"] for p in horizon]
+    assert all(v is not None for v in cum_values)
+    assert cum_values == sorted(cum_values)
+    for p in horizon:
+        assert p["incremental_probability"] is not None
+        assert p["incremental_probability"] >= 0.0
+        assert p["incremental_probability"] <= p["avg_probability"] + 1e-9
+        assert set(p["bands"].keys()) == {"low", "medium", "high", "not_applicable"}
+
 
 def test_property_residents_unknown_property_empty(client):
     body = client.get("/properties/PROP-NOPE/residents").json()
     assert body["count"] == 0
     assert body["residents"] == []
     assert body["rollup"]["resident_count"] == 0
+    assert body["rollup"]["late_count_breakdown"] == [
+        {"key": "q1", "label": "Q1", "expected": 0.0},
+        {"key": "q2", "label": "Q2", "expected": 0.0},
+        {"key": "q3", "label": "Q3", "expected": 0.0},
+        {"key": "q4", "label": "Q4", "expected": 0.0},
+    ]
+    assert body["rollup"]["arrears_breakdown"] == [
+        {"key": "q1", "label": "Q1", "expected": 0.0},
+        {"key": "q2", "label": "Q2", "expected": 0.0},
+        {"key": "q3", "label": "Q3", "expected": 0.0},
+        {"key": "q4", "label": "Q4", "expected": 0.0},
+    ]
+    assert body["rollup"]["severity_buckets"] == [
+        {"bucket": "none", "count": 0},
+        {"bucket": "1-29", "count": 0},
+        {"bucket": "30-59", "count": 0},
+        {"bucket": "60-89", "count": 0},
+        {"bucket": "90+", "count": 0},
+    ]
+    # No residents -> nothing to plot, mirrors late_count_breakdown's own
+    # "[]" contract for the empty-portfolio case.
+    assert body["rollup"]["horizon_forecast"] == []
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import type {
 import { ResidentDetail } from "./ResidentDetail";
 import { HorizonForecastTrend } from "./HorizonForecastTrend";
 import { ArrearsBreakdownChart } from "./ArrearsBreakdownChart";
+import { LateCountBreakdownChart } from "./LateCountBreakdownChart";
 import { SeverityBucketChart } from "./SeverityBucketChart";
 import { ResidentModelCard } from "./ResidentModelCard";
 import { PropertyHealthRanking } from "./PropertyHealthRanking";
@@ -312,77 +313,71 @@ export function Residents({
             })}
           </div>
 
-          {/* KPI tiles */}
+          {/* Predictions — each headline stat sits directly beside its own
+              detail chart, so a metric and its forecast read as one unit
+              instead of a KPI row up top and charts far below. */}
           {kpi && (
-            <div className="stat-grid" style={{ marginTop: 18 }}>
-              <div className="stat-tile">
-                <div className="label">Predicted late-rate</div>
-                <div className="value">{pct(kpi.predicted_late_rate)}</div>
-                <div className="sub">any late payment next quarter</div>
+            <div className="res-pred" style={{ marginTop: 18 }}>
+              {/* Current-state counts — no forecast chart of their own. */}
+              <div className="stat-grid res-count-grid">
+                <div className="stat-tile">
+                  <div className="label">In arrears now</div>
+                  <div className="value warn">{kpi.residents_in_arrears_count ?? 0}</div>
+                  <div className="sub">residents carrying a balance</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="label">Predicted churn risk</div>
+                  <div className="value warn">{kpi.churn_risk_count}</div>
+                  <div className="sub">leases at renewal risk</div>
+                </div>
               </div>
-              <div className="stat-tile">
-                <div className="label">Expected arrears</div>
-                {kpi.arrears_breakdown && kpi.arrears_breakdown.length === 4 ? (
-                  <>
-                    <div className="qtr-arrears">
-                      {kpi.arrears_breakdown.map((q) => (
-                        <div
-                          key={q.key}
-                          className="qtr-arrears-row"
-                          title={`${q.label}: projected total balance at the end of this quarter`}
-                        >
-                          <span className="qtr-arrears-q">{q.label}</span>
-                          <span className="qtr-arrears-v">{usd(q.expected)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="sub">projected end-of-quarter total, next 4 quarters</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="value">{usd(kpi.total_expected_arrears)}</div>
-                    <div className="sub">total projected next quarter</div>
-                  </>
-                )}
-              </div>
-              <div className="stat-tile">
-                <div className="label">Late payments (12mo)</div>
-                <div className="value">{(kpi.expected_late_count_12m ?? 0).toFixed(1)}</div>
-                <div className="sub">expected total, next 12 months</div>
-              </div>
-              <div className="stat-tile">
-                <div className="label">In arrears now</div>
-                <div className="value warn">{kpi.residents_in_arrears_count ?? 0}</div>
-                <div className="sub">residents carrying a balance</div>
-              </div>
-              <div className="stat-tile">
-                <div className="label">Churn risk</div>
-                <div className="value warn">{kpi.churn_risk_count}</div>
-                <div className="sub">leases at renewal risk</div>
-              </div>
-              <div className="stat-tile">
-                <div className="label">Serious flags</div>
-                <div className="value bad">{kpi.serious_flag_count}</div>
-                <div className="sub">routed to human review</div>
-              </div>
-            </div>
-          )}
 
-          {/* Forward-looking trend: avg late-payment probability across 4
-              future horizons, so the prediction is visible without asking chat. */}
-          {kpi?.horizon_forecast && kpi.horizon_forecast.length > 0 && (
-            <HorizonForecastTrend points={kpi.horizon_forecast} />
-          )}
-
-          {/* Arrears (3 independent windows) + worst-delinquency severity —
-              the two other prediction families made visible without chat. */}
-          {kpi && ((kpi.arrears_breakdown?.length ?? 0) > 0 || (kpi.severity_buckets?.length ?? 0) > 0) && (
-            <div className="grid-2col">
-              {kpi.arrears_breakdown && kpi.arrears_breakdown.length > 0 && (
-                <ArrearsBreakdownChart points={kpi.arrears_breakdown} />
+              {/* Late-payment risk: headline + horizon trend. */}
+              {kpi.horizon_forecast && kpi.horizon_forecast.length > 0 && (
+                <div className="res-pred-row">
+                  <div className="stat-tile">
+                    <div className="label">Predicted late-rate</div>
+                    <div className="value">{pct(kpi.predicted_late_rate_1m)}</div>
+                    <div className="sub">any late payment next month</div>
+                  </div>
+                  <HorizonForecastTrend points={kpi.horizon_forecast} />
+                </div>
               )}
+
+              {/* Arrears: headline + 4-quarter forecast. */}
+              {kpi.arrears_breakdown && kpi.arrears_breakdown.length > 0 && (
+                <div className="res-pred-row">
+                  <div className="stat-tile">
+                    <div className="label">Predicted arrears</div>
+                    <div className="value">{usd(kpi.total_expected_arrears)}</div>
+                    <div className="sub">forecast total, next quarter</div>
+                  </div>
+                  <ArrearsBreakdownChart points={kpi.arrears_breakdown} />
+                </div>
+              )}
+
+              {/* Late payments (frequency): headline + 4-quarter forecast. */}
+              {kpi.late_count_breakdown && kpi.late_count_breakdown.length > 0 && (
+                <div className="res-pred-row">
+                  <div className="stat-tile">
+                    <div className="label">Predicted late payments (12mo)</div>
+                    <div className="value">{(kpi.expected_late_count_12m ?? 0).toFixed(1)}</div>
+                    <div className="sub">forecast total, next 12 months</div>
+                  </div>
+                  <LateCountBreakdownChart points={kpi.late_count_breakdown} />
+                </div>
+              )}
+
+              {/* Severity: headline + worst-delinquency distribution. */}
               {kpi.severity_buckets && kpi.severity_buckets.length > 0 && (
-                <SeverityBucketChart buckets={kpi.severity_buckets} />
+                <div className="res-pred-row">
+                  <div className="stat-tile">
+                    <div className="label">Predicted serious flags</div>
+                    <div className="value bad">{kpi.serious_flag_count}</div>
+                    <div className="sub">routed to human review</div>
+                  </div>
+                  <SeverityBucketChart buckets={kpi.severity_buckets} />
+                </div>
               )}
             </div>
           )}

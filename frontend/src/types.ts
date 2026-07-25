@@ -391,6 +391,7 @@ export interface TourBooking {
   prospect_name: string;
   prospect_email: string;
   prospect_phone: string;
+  applicant_id: string;
   status: "booked" | "cancelled";
   /** UTC ISO. */
   created_at: string;
@@ -1042,6 +1043,7 @@ export interface PropertyResidentRollup {
   name?: string;
   resident_count: number;
   predicted_late_rate: number;
+  predicted_late_rate_1m: number;
   total_expected_arrears: number;
   churn_risk_count: number;
   serious_flag_count: number;
@@ -1055,12 +1057,22 @@ export interface PropertyResidentRollup {
   /** Expected total arrears at 3 INDEPENDENT windows — never a timeline
    * (peak can land anywhere in the year, not necessarily at the end). */
   arrears_breakdown?: ArrearsBreakdownPoint[];
+  /** Expected total late-payment COUNT at 4 quarterly checkpoints — a
+   * genuine timeline (each quarter its own trained head), complementary to
+   * the single expected_late_count_12m scalar above. */
+  late_count_breakdown?: LateCountBreakdownPoint[];
   /** Worst-delinquency-bucket distribution across residents (ordinal). */
   severity_buckets?: SeverityBucket[];
   [k: string]: unknown;
 }
 
 export interface ArrearsBreakdownPoint {
+  key: "q1" | "q2" | "q3" | "q4";
+  label: string;
+  expected: number;
+}
+
+export interface LateCountBreakdownPoint {
   key: "q1" | "q2" | "q3" | "q4";
   label: string;
   expected: number;

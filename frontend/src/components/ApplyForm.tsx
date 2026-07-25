@@ -216,9 +216,19 @@ const SAMPLE: FormState = {
   reason_for_moving: "Closer to work",
   landlord_reference: true,
   household_size: "2",
-  desired_move_in: "2026-09-01",
+  // Placeholder only -- overwritten with a real near-future date at prefill
+  // time (see the "Prefill sample" button) so this never goes stale and
+  // trips the "can't be in the past" validation on its own sample data.
+  desired_move_in: "",
   references_count: "2",
 };
+
+/** "YYYY-MM-DD" for `daysAhead` days from today (local time). */
+function nearFutureDateString(daysAhead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toISOString().slice(0, 10);
+}
 
 type Errors = Partial<Record<keyof FormState, string>>;
 
@@ -327,6 +337,10 @@ export function ApplyForm({
   const [formResetKey, setFormResetKey] = useState(0);
 
   function startOver() {
+    // Invalidate any in-flight runFlow() so a still-pending eligibility/
+    // recommendations response can't repopulate the cards after the user
+    // has explicitly cleared them.
+    runIdRef.current++;
     setFormResetKey((k) => k + 1);
     setUpload(null);
     setEligibility(null);
@@ -610,7 +624,7 @@ function ApplicantDetailsForm({
           className="btn-small btn-ghost icon-line"
           style={{ marginLeft: "auto" }}
           onClick={() => {
-            setForm(SAMPLE);
+            setForm({ ...SAMPLE, desired_move_in: nearFutureDateString(45) });
             setErrors({});
           }}
         >

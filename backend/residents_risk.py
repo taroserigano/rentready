@@ -527,7 +527,9 @@ def extract_resident_features(resident, snapshot: date = RESIDENT_SNAPSHOT) -> d
 
     sent = sum(int(e.get("notices_sent", 0)) for e in last24)
     resp = sum(int(e.get("notice_responded", 0)) for e in last24)
-    f["notice_response_rate"] = round(resp / sent, 4) if sent > 0 else _NEUTRAL["notice_response_rate"]
+    f["notice_response_rate"] = (
+        round(_clamp(resp / sent), 4) if sent > 0 else _NEUTRAL["notice_response_rate"]
+    )
     f["notices_sent_12mo"] = float(sum(int(e.get("notices_sent", 0)) for e in last12))
 
     f["maintenance_requests_12mo"] = float(r.get("maintenance_requests_12mo") or 0)
@@ -1179,10 +1181,26 @@ def _predict_survival(spec, features, sub, low, with_reasons=True) -> dict:
 # Serve-time monotone clamps across related heads.
 # --------------------------------------------------------------------------
 def _reband(h: dict, name: str, p: float) -> None:
+    original = h.get("probability")
     h["probability"] = p
     h["band"] = _band(name, p)
     half = (h["range"][1] - h["range"][0]) / 2 if len(h.get("range", [])) == 2 else 0.08
     h["range"] = [round(_clamp(p - half), 4), round(_clamp(p + half), 4)]
+    # The per-feature reason codes were computed for `original`, not `p` -- on
+    # their own they'd describe a different number than what's now shown.
+    # Note the adjustment rather than leaving them silently stale.
+    if (
+        original is not None
+        and isinstance(h.get("reason_codes"), list)
+        and abs(p - original) > 1e-9
+    ):
+        h["reason_codes"] = list(h["reason_codes"]) + [{
+            "feature": "_monotone_adjustment",
+            "label": f"Adjusted from {round(original * 100)}% to keep risk "
+            "consistent across horizons",
+            "direction": "increases" if p > original else "decreases",
+            "contribution": round(p - original, 4),
+        }]
 
 
 def _apply_monotone_clamps(heads: dict) -> None:

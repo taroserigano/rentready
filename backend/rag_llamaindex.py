@@ -141,6 +141,13 @@ def _index():
     )
 
 
+# Bounds the synchronous embedding work one /upload request can trigger. A
+# real application/lease PDF is a handful of pages (well under this); it only
+# bites a pathologically dense or padded upload that's still within
+# settings.max_upload_mb's raw-byte cap.
+MAX_INGEST_CHUNKS = 500
+
+
 def ingest(applicant_id: str, text: str) -> int:
     """Chunk the text, tag each chunk with the applicant id, store it."""
     from llama_index.core import Document
@@ -149,6 +156,12 @@ def ingest(applicant_id: str, text: str) -> int:
     splitter = SentenceSplitter(chunk_size=512, chunk_overlap=64)
     doc = Document(text=text, metadata={"applicant_id": applicant_id})
     nodes = splitter.get_nodes_from_documents([doc])
+    if len(nodes) > MAX_INGEST_CHUNKS:
+        print(
+            f"ingest: {applicant_id} produced {len(nodes)} chunks, "
+            f"truncating to {MAX_INGEST_CHUNKS}."
+        )
+        nodes = nodes[:MAX_INGEST_CHUNKS]
     _index().insert_nodes(nodes)
     return len(nodes)
 

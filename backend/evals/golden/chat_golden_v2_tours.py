@@ -20,7 +20,7 @@ Seed facts these items lean on (all deterministic at that clock):
 
 Phase literals (models.ChatState.phase): greeting, proposing, confirming,
 awaiting_name, awaiting_phone, awaiting_email, booked, no_availability,
-awaiting_cancel_email.
+awaiting_cancel_email, awaiting_cancel_confirm.
 
 Expectations are labeled by what SHOULD happen per the transition logic — NOT by
 running the harness. Mismatches are findings for the fix loop, kept as-is.
@@ -144,8 +144,10 @@ ITEMS = [
         "page": "tours",
         "kind": "stateful",
         "context": "PROP-002",
-        # Cancel the seeded demo booking end-to-end -> back to greeting.
-        "turns": ["cancel my tour booking", "jordan.rivera@example.com"],
+        # Cancel the seeded demo booking end-to-end -> matching email surfaces
+        # the booking for confirmation, then an explicit "yes" cancels it.
+        # (An email match alone no longer cancels outright -- see v2tour-021.)
+        "turns": ["cancel my tour booking", "jordan.rivera@example.com", "yes"],
         "expect_final_phase": "greeting",
         "must_include": ["cancelled"],
         "must_not_include": [],
@@ -156,13 +158,46 @@ ITEMS = [
         "page": "tours",
         "kind": "stateful",
         "context": "PROP-002",
-        # Cancel with the email supplied in the same message -> greeting.
+        # Cancel with the email supplied in the same message -> surfaces the
+        # booking for confirmation; confirming cancels it -> greeting.
         "turns": [
             "please cancel my reservation, my email is jordan.rivera@example.com",
+            "yes, cancel it",
         ],
         "expect_final_phase": "greeting",
         "must_include": ["cancelled"],
         "must_not_include": [],
+        "category": "core",
+    },
+    {
+        "id": "v2tour-021",
+        "page": "tours",
+        "kind": "stateful",
+        "context": "PROP-002",
+        # An email match surfaces the booking but does NOT cancel it outright
+        # -- confirmation is required (closes the "cancel anyone's tour by
+        # guessing their email" gap).
+        "turns": [
+            "please cancel my reservation, my email is jordan.rivera@example.com",
+        ],
+        "expect_final_phase": "awaiting_cancel_confirm",
+        "must_include": ["cancel it"],
+        "must_not_include": ["done", "i've cancelled"],
+        "category": "core",
+    },
+    {
+        "id": "v2tour-022",
+        "page": "tours",
+        "kind": "stateful",
+        "context": "PROP-002",
+        # Declining the confirmation leaves the booking untouched -> greeting.
+        "turns": [
+            "please cancel my reservation, my email is jordan.rivera@example.com",
+            "no, never mind",
+        ],
+        "expect_final_phase": "greeting",
+        "must_include": [],
+        "must_not_include": ["i've cancelled"],
         "category": "core",
     },
     {

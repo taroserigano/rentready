@@ -100,12 +100,18 @@ export function Tours({
     }
   }, []);
 
-  // Booked tours (filtered to the property when one is selected).
+  // Booked tours for the selected property (the API requires a scope filter
+  // — property_id/email/applicant_id — so there's nothing to list until a
+  // property is chosen).
   const loadTours = useCallback(async (pid: string) => {
+    if (!pid) {
+      setTours([]);
+      return;
+    }
     setToursLoading(true);
     setToursError("");
     try {
-      setTours(await listTours(pid ? { property_id: pid } : {}));
+      setTours(await listTours({ property_id: pid }));
     } catch (e) {
       setToursError(errText(e));
       setTours([]);

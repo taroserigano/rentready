@@ -102,7 +102,7 @@ export const RiskChatMessage = memo(function RiskChatMessage({
           {followUps.length > 0 && (
             <>
               <div className="eyebrow" style={{ marginTop: 10 }}>
-                Follow up
+                Follow Up
               </div>
               <div className="chip-row">
                 {followUps.map((q) => (

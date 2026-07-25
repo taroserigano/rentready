@@ -53,6 +53,11 @@ export function ResidentsChat({
   const idRef = useRef(0);
   const prevResident = useRef(residentId);
   const prevProperty = useRef(propertyId);
+  // Aborts any in-flight stream when the component unmounts, so navigating
+  // away mid-answer doesn't leave the request running and patching state
+  // that's no longer displayed.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const who = residentName?.trim() || "this resident";
   const where = propertyName?.trim() || "this property";
@@ -138,6 +143,9 @@ export function ResidentsChat({
       history,
     };
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       await askResidentChatStream(request, {
         onMeta: (meta) =>
@@ -172,21 +180,26 @@ export function ResidentsChat({
               ? { ...m.res, source: source as ResidentChatAnswer["source"] }
               : m.res,
           })),
-      });
+      }, controller.signal);
     } catch {
+      // Aborted on unmount — don't fall back or touch state, there's nothing
+      // to update anymore.
+      if (controller.signal.aborted) return;
       // Streaming failed (transport/unreachable) — fall back to non-streaming.
       try {
         const res = await askResidentChat(request);
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({ ...m, text: res.answer, pending: false, res }));
-      } catch (e) {
+      } catch (e2) {
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({
           ...m,
-          text: `Sorry — ${errText(e)}`,
+          text: `Sorry — ${errText(e2)}`,
           pending: false,
         }));
       }
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   });
 

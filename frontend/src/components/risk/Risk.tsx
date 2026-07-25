@@ -190,7 +190,7 @@ export function Risk({
     <div className="app">
       <header>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <h1 style={{ margin: 0 }}>Late-payment risk</h1>
+          <h1 style={{ margin: 0 }}>Late-Payment Risk</h1>
           {card && (
             <span
               className={`badge icon-line tone-${card.source === "model" ? "info" : "warn"}`}
@@ -262,7 +262,7 @@ export function Risk({
         <>
           <div className="stat-grid" style={{ marginTop: 8 }}>
             <div className="stat-tile">
-              <div className="label">Average risk</div>
+              <div className="label">Average Risk</div>
               <div className="value">
                 {Math.round(list.avg_probability * 100)}%
               </div>
@@ -287,22 +287,24 @@ export function Risk({
             </div>
           </div>
 
+          {/* Ranked Applicants + Late-Payment Risk come FIRST (right after the
+              stat tiles, which never change size) so nothing above them can
+              shift their position when an applicant is clicked. The chat rail
+              below (whose height genuinely varies -- longer names wrap the
+              starter chips differently, "Now asking about X" adds a line to
+              the thread) is placed LAST specifically so its height changes
+              have nothing below them left to push around. */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(280px, 1fr) 1.4fr",
+              gridTemplateColumns: "minmax(320px, 1.1fr) minmax(340px, 1fr)",
               gap: 18,
               marginTop: 18,
               alignItems: "start",
             }}
           >
             <div className="card" style={{ marginTop: 0 }}>
-              <h2>Band distribution</h2>
-              <RiskDistribution rows={list.rows} />
-            </div>
-
-            <div className="card" style={{ marginTop: 0 }}>
-              <h2>Ranked applicants</h2>
+              <h2>Ranked Applicants</h2>
 
               <div
                 style={{
@@ -396,7 +398,7 @@ export function Risk({
                         hint="Predicted probability this applicant pays rent late (decision-support estimate, not a decision)"
                       />
                       <th title="Risk band for the estimate: Low, Moderate, or Elevated">Band</th>
-                      <th title="The biggest factor behind this applicant's risk estimate">Top driver</th>
+                      <th title="The biggest factor behind this applicant's risk estimate">Top Driver</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -454,42 +456,48 @@ export function Risk({
                 </div>
               )}
             </div>
-          </div>
 
-          {selectedId ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1.4fr) minmax(300px, 1fr)",
-                gap: 18,
-                marginTop: 18,
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: 0 }}>
+            {selectedId ? (
+              <div className="risk-detail-col" style={{ display: "grid", gap: 0 }}>
                 <RiskCard key={selectedId} applicantId={selectedId} />
                 <RiskWhatIf
                   key={`whatif-${selectedId}`}
                   applicantId={selectedId}
                 />
               </div>
-              <div className="risk-chat-rail">
-                <RiskChat
-                  applicantId={selectedId}
-                  applicantName={selectedRow?.name}
-                  band={selectedRow?.band}
-                  onSelectApplicant={setSelectedId}
-                />
+            ) : (
+              <div className="card" style={{ marginTop: 0 }}>
+                <h2>Late-Payment Risk</h2>
+                <p className="muted" style={{ margin: 0 }}>
+                  Select an applicant to see their risk detail.
+                </p>
               </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(260px, 1fr) minmax(320px, 1.4fr)",
+              gap: 18,
+              marginTop: 18,
+              alignItems: "start",
+            }}
+          >
+            <div className="card" style={{ marginTop: 0 }}>
+              <h2>Band Distribution</h2>
+              <RiskDistribution rows={list.rows} />
             </div>
-          ) : (
-            <div style={{ marginTop: 18 }}>
+
+            <div className="risk-chat-rail">
               <RiskChat
-                applicantId={null}
+                applicantId={selectedId}
+                applicantName={selectedRow?.name}
+                band={selectedRow?.band}
                 onSelectApplicant={setSelectedId}
               />
             </div>
-          )}
+          </div>
         </>
       )}
 
@@ -498,7 +506,7 @@ export function Risk({
           className="modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Late-payment risk model card and metrics"
+          aria-label="Late-Payment Risk model card and metrics"
           onClick={() => setShowModelCard(false)}
         >
           <div className="modal-panel" onClick={(e) => e.stopPropagation()}>

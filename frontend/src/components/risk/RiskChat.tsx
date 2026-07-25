@@ -49,6 +49,11 @@ export function RiskChat({
   const idRef = useRef(0);
   // Track the applicant the thread is currently seeded to, to detect changes.
   const prevApplicant = useRef(applicantId);
+  // Aborts any in-flight stream when the component unmounts, so navigating
+  // away mid-answer doesn't leave the request running and patching state
+  // that's no longer displayed.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const who = applicantName?.trim() || "this applicant";
   const effectiveScope: Scope = applicantId ? scope : "portfolio";
@@ -116,6 +121,9 @@ export function RiskChat({
       history,
     };
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       await askRiskChatStream(request, {
         // Router pass arrives first: paint the artifact/gauge/reason-codes now,
@@ -149,11 +157,15 @@ export function RiskChat({
             pending: false,
             res: m.res ? { ...m.res, source: source as RiskChatAnswer["source"] } : m.res,
           })),
-      });
+      }, controller.signal);
     } catch {
+      // Aborted on unmount — don't fall back or touch state, there's nothing
+      // to update anymore.
+      if (controller.signal.aborted) return;
       // Streaming failed (transport/unreachable) — fall back to non-streaming.
       try {
         const res = await askRiskChat(request);
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({
           ...m,
           text: res.answer,
@@ -161,6 +173,7 @@ export function RiskChat({
           res,
         }));
       } catch (e) {
+        if (controller.signal.aborted) return;
         patchMsg(botId, (m) => ({
           ...m,
           text: `Sorry — ${errText(e)}`,
@@ -168,7 +181,7 @@ export function RiskChat({
         }));
       }
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   });
 
@@ -177,7 +190,7 @@ export function RiskChat({
   return (
     <div className="card" style={{ marginTop: 0 }}>
       <div className="rec-head">
-        <h2 style={{ margin: 0 }}>Ask about risk</h2>
+        <h2 style={{ margin: 0 }}>Ask About Risk</h2>
       </div>
 
       <div

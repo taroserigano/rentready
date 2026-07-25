@@ -1,0 +1,6 @@
+name: rentready-infra
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: RentReady demo deployment on a single free-tier-eligible EC2 instance.

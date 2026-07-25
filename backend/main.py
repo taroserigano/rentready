@@ -45,16 +45,19 @@ import risk_api
 import residents_risk
 import resident_api
 import monitoring
+from ratelimit import rate_limit_middleware
 from evals import judges
 
 app = FastAPI(title="RentReady API")
 
+_cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(rate_limit_middleware)
 
 TRACING_STATUS: dict = {}
 
@@ -116,12 +119,20 @@ def _process_pdf(pdf_bytes: bytes) -> UploadResponse:
     index it, extract the profile. Saving here (rather than in the caller)
     guarantees the stored PDF is keyed by the SAME applicant id we return, so
     it can be served back at /applicants/{id}/pdf."""
+    if not pdf_bytes.startswith(b"%PDF-"):
+        raise HTTPException(400, "That file doesn't look like a valid PDF.")
+
     applicant_id = uuid.uuid4().hex[:12]
     UPLOAD_DIR.mkdir(exist_ok=True)
     dest = UPLOAD_DIR / f"{applicant_id}.pdf"
     dest.write_bytes(pdf_bytes)
 
-    text = pdf_ingest.extract_text(str(dest))
+    try:
+        text = pdf_ingest.extract_text(str(dest))
+    except Exception as exc:  # noqa: BLE001 - both PDF parsers exhausted
+        dest.unlink(missing_ok=True)
+        print(f"PDF extraction failed ({type(exc).__name__}: {exc}).")
+        raise HTTPException(422, "Could not read that PDF — it may be corrupted.")
     if not text:
         dest.unlink(missing_ok=True)
         raise HTTPException(422, "Could not read any text from that PDF.")

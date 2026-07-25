@@ -38,3 +38,13 @@ frontend/.playwright/
 
 # stale store copy
 chroma_db.bad-readonly/
+
+# Pulumi (infra/) -- local state, secrets passphrase, downloaded SSH key.
+# Pulumi.dev.yaml is also excluded: it holds sshCidr (a real public IP) in
+# plaintext, which shouldn't land in a public repo -- recreate it locally
+# with `pulumi config set sshCidr <your-ip>/32` instead.
+infra/venv/
+infra/.pulumi-passphrase
+infra/*.pem
+infra/Pulumi.*.yaml
+infra/Pulumi.*.yaml.bak

@@ -16,6 +16,7 @@ import { Tours } from "./components/Tours";
 import { Concierge } from "./components/Concierge";
 import { Risk } from "./components/risk/Risk";
 import { Residents } from "./components/residents/Residents";
+import { AiReport } from "./components/AiReport";
 
 type View =
   | "apply"
@@ -27,6 +28,7 @@ type View =
   | "dashboard"
   | "risk"
   | "residents"
+  | "report"
   | "evaluations"
   | "monitoring"
   | "ab"
@@ -34,7 +36,7 @@ type View =
 
 const VIEWS: View[] = [
   "apply", "applicants", "properties", "property", "tours", "ask",
-  "dashboard", "risk", "residents", "evaluations", "monitoring", "ab", "learn",
+  "dashboard", "risk", "residents", "report", "evaluations", "monitoring", "ab", "learn",
 ];
 const VIEW_SET = new Set<string>(VIEWS);
 
@@ -78,6 +80,12 @@ export default function App() {
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null));
   }, []);
+
+  // Every nav-triggered page change starts scrolled to the top, rather than
+  // keeping whatever scroll position the previous page was left at.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   // URL hash is the source of truth: nav clicks set the hash, and this syncs
   // view + deep-link ids on every change (so back/forward and direct links work).
@@ -136,10 +144,11 @@ export default function App() {
       ["applicants", "Applicants"],
       ["properties", "Properties"],
       ["tours", "Tours"],
-      ["ask", "Ask"],
+      ["ask", "Lease Q&A"],
       ["dashboard", "Dashboard"],
       ["risk", "Risk Assessment"],
       ["residents", "Residents"],
+      ["report", "AI Report"],
       ["evaluations", "Evaluations"],
       ["monitoring", "Monitoring"],
       ["ab", "A/B Lab"],
@@ -272,6 +281,15 @@ export default function App() {
     );
   }
 
+  if (view === "report") {
+    return (
+      <>
+        <Nav view={view} setView={navigate} commands={commands} />
+        <AiReport />
+      </>
+    );
+  }
+
   if (view === "evaluations") {
     return (
       <>
@@ -363,10 +381,11 @@ function Nav({
       {tab("applicants", "Applicants")}
       {tab("properties", "Properties")}
       {tab("tours", "Tours")}
-      {tab("ask", "Ask")}
+      {tab("ask", "Lease Q&A")}
       {tab("dashboard", "Dashboard")}
       {tab("risk", "Risk Assessment")}
       {tab("residents", "Residents")}
+      {tab("report", "AI Report")}
       <ThemeToggle />
       {commands && <CommandPalette commands={commands} />}
       <Toaster />

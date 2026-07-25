@@ -20,8 +20,11 @@ deterministic.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
+import secrets
 from datetime import date, datetime, timedelta
 
 import graph
@@ -30,6 +33,21 @@ import tours
 from models import ChatState, Slot, TourBooking, TourChatRequest, TourChatResponse
 
 MAX_PROPOSE = 6
+
+# Signs (booking_id, email) pairs put into ChatState.pending_cancel_sig by
+# _do_cancel, so _do_cancel_confirm can verify a confirmation was actually
+# preceded by a real lookup through this process -- rather than a caller
+# skipping straight to phase="awaiting_cancel_confirm" with a booking_id/email
+# it obtained some other way (there's no server-side session to bind to
+# instead, since ChatState round-trips through the client between turns).
+# Process-local and ephemeral by design: a cancel confirmation is expected to
+# complete within one short conversation, not survive a backend restart.
+_CANCEL_SIG_KEY = secrets.token_bytes(32)
+
+
+def _sign_cancel(booking_id: str, email: str) -> str:
+    msg = f"{booking_id}:{email.strip().lower()}".encode()
+    return hmac.new(_CANCEL_SIG_KEY, msg, hashlib.sha256).hexdigest()
 
 _WEEKDAYS = {
     "monday": 0, "mon": 0,
@@ -493,6 +511,8 @@ def _run_flow(
     # Distinct from is_rejection() (which rejects a proposed slot mid-flow):
     # without this, "cancel my tour booking" fell through to _do_propose and
     # confusingly offered NEW open slots instead of cancelling anything.
+    if state.phase == "awaiting_cancel_confirm":
+        return _do_cancel_confirm(property_name, last_user, state)
     if state.phase == "awaiting_cancel_email":
         return _do_cancel(property_id, property_name, last_user, state)
     if state.phase in (
@@ -732,10 +752,13 @@ def _do_cancel(
     last_user: str,
     state: ChatState,
 ) -> TourChatResponse:
-    """Cancel an existing booking. Needs the booking email to look it up (the
-    chat has no login/session identity); asks for it once, then cancels the
-    soonest match if found. Never invents a booking_id -- always goes through
-    store.list_bookings so it can only cancel a REAL booked tour."""
+    """Start cancelling an existing booking. Needs the booking email to look it
+    up (the chat has no login/session identity); asks for it once, then --
+    rather than cancelling immediately on an email match, which would let
+    anyone who merely knows (or guesses) a prospect's email cancel their real
+    tour in one shot -- surfaces the match and asks for explicit confirmation
+    (see ``_do_cancel_confirm``). Never invents a booking_id -- always goes
+    through store.list_bookings so it can only reference a REAL booked tour."""
     email = extract_email(last_user) or state.prospect_email
     if not email:
         return TourChatResponse(
@@ -764,18 +787,94 @@ def _do_cancel(
         )
 
     soonest = matches[0]  # list_bookings orders soonest-first
-    store.cancel_booking(soonest["id"])
     start = datetime.fromisoformat(soonest["start"])
     extra = (
-        f" You still have {len(matches) - 1} other upcoming tour"
-        f"{'s' if len(matches) - 1 != 1 else ''} booked here — let me know if "
-        "you'd like to cancel those too."
+        f" You'd still have {len(matches) - 1} other upcoming tour"
+        f"{'s' if len(matches) - 1 != 1 else ''} booked here."
         if len(matches) > 1
         else ""
     )
     return TourChatResponse(
+        reply=f"I found a tour of {property_name} on {tours.label(start)} "
+        f"booked under {email}.{extra} Cancel it? (yes/no)",
+        proposed_slots=[],
+        booking=None,
+        state=ChatState(
+            phase="awaiting_cancel_confirm",
+            prospect_email=email,
+            pending_cancel_id=soonest["id"],
+            pending_cancel_sig=_sign_cancel(soonest["id"], email),
+        ),
+        source="rules",
+    )
+
+
+def _do_cancel_confirm(
+    property_name: str,
+    last_user: str,
+    state: ChatState,
+) -> TourChatResponse:
+    """Second half of cancellation: only actually cancels once the user
+    explicitly confirms the specific booking surfaced by ``_do_cancel``.
+
+    Verifies pending_cancel_sig before honoring anything -- without this, a
+    caller could hand-craft a ChatState with phase="awaiting_cancel_confirm"
+    plus a known booking_id/email and skip the real lookup in _do_cancel
+    entirely. The signature can only have been produced by _do_cancel itself,
+    so a mismatch means this confirmation didn't originate from a genuine
+    prior turn."""
+    expected_sig = _sign_cancel(state.pending_cancel_id, state.prospect_email)
+    if not hmac.compare_digest(expected_sig, state.pending_cancel_sig or ""):
+        return TourChatResponse(
+            reply="Let's start that over — what's the email address the tour "
+            "was booked under?",
+            proposed_slots=[],
+            booking=None,
+            state=ChatState(phase="awaiting_cancel_email"),
+            source="rules",
+        )
+    if is_rejection(last_user) and not is_affirmation(last_user):
+        return TourChatResponse(
+            reply="No problem — I've left that tour as-is.",
+            proposed_slots=[],
+            booking=None,
+            state=ChatState(phase="greeting"),
+            source="rules",
+        )
+    if not is_affirmation(last_user):
+        return TourChatResponse(
+            reply="Just to confirm — would you like me to cancel that tour? "
+            "(yes/no)",
+            proposed_slots=[],
+            booking=None,
+            state=state,
+            source="rules",
+        )
+
+    # Re-check the booking is still exactly what was confirmed (still booked,
+    # still under the same email) before mutating anything -- guards against
+    # the booking having been cancelled/changed by someone else meanwhile.
+    row = store.get_booking(state.pending_cancel_id)
+    same_email = (
+        row is not None
+        and (row.get("prospect_email") or "").strip().lower()
+        == state.prospect_email.strip().lower()
+    )
+    if row is None or row.get("status") != "booked" or not same_email:
+        return TourChatResponse(
+            reply="That tour isn't active anymore — let me know if you'd "
+            "like to schedule a new one.",
+            proposed_slots=[],
+            booking=None,
+            state=ChatState(phase="greeting"),
+            source="rules",
+        )
+
+    store.cancel_booking(state.pending_cancel_id)
+    start = datetime.fromisoformat(row["start"])
+    return TourChatResponse(
         reply=f"Done — I've cancelled your tour of {property_name} on "
-        f"{tours.label(start)}.{extra}",
+        f"{tours.label(start)}.",
         proposed_slots=[],
         booking=None,
         state=ChatState(phase="greeting"),

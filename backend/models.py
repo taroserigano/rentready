@@ -221,6 +221,7 @@ class TourBooking(BaseModel):
     prospect_name: str
     prospect_email: str = ""  # "" if unknown
     prospect_phone: str = ""  # "" if unknown
+    applicant_id: str = ""  # "" if the tour wasn't linked to an application
     status: Literal["booked", "cancelled"] = "booked"
     created_at: str  # UTC ISO
     # "Add to Google Calendar" template link (self-contained; no server creds).
@@ -237,13 +238,18 @@ class ChatState(BaseModel):
     phase: Literal[
         "greeting", "proposing", "confirming", "awaiting_name",
         "awaiting_phone", "awaiting_email", "booked", "no_availability",
-        "awaiting_cancel_email",
+        "awaiting_cancel_email", "awaiting_cancel_confirm",
     ] = "greeting"
     prospect_name: str = ""
     prospect_phone: str = ""
     prospect_email: str = ""
     last_proposed: list[Slot] = Field(default_factory=list)
     pending_slot_id: str = ""
+    pending_cancel_id: str = ""
+    # HMAC over (pending_cancel_id, prospect_email), set by tours_chat._do_cancel
+    # and verified by _do_cancel_confirm -- proves the confirmation phase was
+    # actually reached via a real lookup, not forged client-side.
+    pending_cancel_sig: str = ""
 
 
 class TourChatRequest(BaseModel):
@@ -576,6 +582,7 @@ class ResidentRollup(BaseModel):
 
     resident_count: int = 0
     predicted_late_rate: float = 0.0  # mean P(late) next quarter
+    predicted_late_rate_1m: float = 0.0  # mean P(late) next month
     total_expected_arrears: float = 0.0  # sum of expected balances next quarter
     avg_serious_probability: float = 0.0
     churn_eligible_count: int = 0  # leases ending within the churn horizon

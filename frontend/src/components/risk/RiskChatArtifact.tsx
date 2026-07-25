@@ -235,7 +235,7 @@ function RiskComparison({
 
   return (
     <div className="subpanel" style={{ marginTop: 10 }}>
-      <div className="eyebrow">Compared to the portfolio</div>
+      <div className="eyebrow">Compared to the Portfolio</div>
       <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
         <ComparisonBar row={subject} clickable={false} />
         {rows.map((r, i) => (
@@ -281,7 +281,7 @@ export const RiskChatArtifact = memo(function RiskChatArtifact({
     case "reasons":
       return (
         <div style={{ marginTop: 10 }}>
-          <div className="eyebrow">Key factors</div>
+          <div className="eyebrow">Key Factors</div>
           <ReasonCodes codes={artifact.codes} />
         </div>
       );
@@ -302,7 +302,7 @@ export const RiskChatArtifact = memo(function RiskChatArtifact({
             {formatProbRange(result.probability, result.range)}
           </div>
           <div style={{ marginTop: 10 }}>
-            <div className="eyebrow">Key factors</div>
+            <div className="eyebrow">Key Factors</div>
             <ReasonCodes codes={result.reason_codes} />
           </div>
         </div>
@@ -339,7 +339,7 @@ export const RiskChatArtifact = memo(function RiskChatArtifact({
           </div>
           <ChangeList changes={changes} />
           <div style={{ marginTop: 10 }}>
-            <div className="eyebrow">Key factors</div>
+            <div className="eyebrow">Key Factors</div>
             <ReasonCodes codes={result.reason_codes} />
           </div>
         </div>

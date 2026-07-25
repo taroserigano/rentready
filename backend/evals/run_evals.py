@@ -10,6 +10,17 @@ Two tiers:
 Usage:  python backend/evals/run_evals.py
 """
 
+import os
+
+# Isolation: this suite must be reproducible and offline-safe regardless of
+# what a deployed instance's .env points at. Without this, a real
+# DATABASE_URL/VECTOR_PROVIDER=pinecone (e.g. this repo's own .env) makes the
+# RAGAS tier fail with a dimension mismatch against whatever EMBEDDING_BACKEND
+# the caller forced (see `rag_eval.run_isolated`, which inherits this same
+# env into its subprocess) -- same reasoning as chat_golden_eval.py.
+os.environ["DATABASE_URL"] = ""
+os.environ["VECTOR_PROVIDER"] = "chroma"
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path

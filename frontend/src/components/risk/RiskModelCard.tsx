@@ -31,7 +31,7 @@ export function RiskModelCard({ card }: { card: RiskModelCardT }) {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0 }}>Model card — late-payment risk</h2>
+        <h2 style={{ margin: 0 }}>Model Card — Late-Payment Risk</h2>
         <span className="muted" style={{ fontSize: 12 }}>
           {[card.name, card.version && `v${card.version}`, card.source].filter(Boolean).join(" · ")}
         </span>
@@ -51,7 +51,7 @@ export function RiskModelCard({ card }: { card: RiskModelCardT }) {
       )}
 
       <div className="subpanel" style={{ marginTop: 12 }}>
-        <div className="subpanel-title">Intended use</div>
+        <div className="subpanel-title">Intended Use</div>
         <p style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>
           {card.intended_use ??
             "Decision-support for a human reviewer. Estimates from synthetic data help prioritize attention."}
@@ -99,7 +99,7 @@ export function RiskModelCard({ card }: { card: RiskModelCardT }) {
 
       {excluded.length > 0 && (
         <div className="subpanel" style={{ marginTop: 12 }}>
-          <div className="subpanel-title">Structurally excluded ({excluded.length})</div>
+          <div className="subpanel-title">Structurally Excluded ({excluded.length})</div>
           <ul className="reasons" style={{ marginTop: 0 }}>
             {excluded.map((e) => (
               <li key={e.field} style={{ fontSize: 12 }}>

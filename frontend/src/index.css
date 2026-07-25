@@ -607,7 +607,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   { background: transparent; color: var(--text-2); border-color: var(--line-strong); }
 .badge .dot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; flex-shrink: 0; }
 .badge .dot.good { background: var(--good-vibrant); }
-.badge .dot.bad  { background: var(--bad-vibrant); }
+/* Scoped to these service-health badges only (not the shared --bad-vibrant
+   used for genuine errors/high-risk elsewhere): a disconnected integration
+   here (e.g. Neo4j) degrades gracefully to a working in-memory fallback, so
+   amber ("degraded, not broken") reads more honestly than red ("failed"). */
+.badge .dot.bad  { background: var(--warn-vibrant); }
 .badge .dot.blue { background: var(--chart-5); }
 .badge .dot.teal { background: var(--chart-2); }
 
@@ -790,6 +794,48 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--chart-1);
 }
 .arrears-bar-label {
+  font-size: var(--fs-xs); color: var(--muted); margin-top: var(--s-1);
+  text-align: center;
+}
+
+/* ============================================================
+   Late-payment count breakdown (Residents) — 4-bar quarterly
+   timeline, same grammar as the arrears bars above but amber
+   (--chart-3) so the two magnitude charts read as distinct series.
+   ============================================================ */
+
+.late-count-bars {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: var(--s-4) 18px;
+  box-shadow: var(--shadow-card);
+  margin-top: var(--s-4);
+}
+.late-count-bars-head {
+  display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+.late-count-bars-plot {
+  display: flex; align-items: flex-end; gap: var(--s-5);
+  height: 96px;
+}
+.late-count-bar-col {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 1 1 0; height: 100%; cursor: default;
+}
+.late-count-bar-value {
+  font-size: var(--fs-sm); font-weight: var(--w-semi);
+  font-variant-numeric: tabular-nums; color: var(--text);
+  margin-bottom: 4px;
+}
+.late-count-bar-track {
+  flex: 1 1 auto; width: 100%; max-width: 56px;
+  display: flex; align-items: flex-end;
+}
+.late-count-bar-fill {
+  width: 100%; min-height: 3px; border-radius: 4px 4px 0 0;
+  background: var(--chart-3);
+}
+.late-count-bar-label {
   font-size: var(--fs-xs); color: var(--muted); margin-top: var(--s-1);
   text-align: center;
 }
@@ -1658,6 +1704,40 @@ ul.reasons {
   gap: var(--s-3);
 }
 
+/* Residents KPI row: 6 tiles pinned to 3 columns (2 rows) instead of
+   auto-fit's single wide row on desktop. */
+.res-kpi-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 720px) {
+  .res-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .res-kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Residents predictions: each headline stat paired beside its detail chart.
+   ============================================================ */
+.res-pred { display: flex; flex-direction: column; gap: var(--s-4); }
+.res-count-grid { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+/* One family per row: a compact headline stat + its forecast chart. */
+.res-pred-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 250px) 1fr;
+  gap: var(--s-4);
+  align-items: stretch;
+}
+/* Charts keep a top margin for the old stacked layout — remove it inside a
+   pair so the stat and its chart align as a single row. */
+.res-pred-row > * { margin-top: 0; }
+.res-pred-row > .stat-tile {
+  display: flex; flex-direction: column; justify-content: center;
+}
+@media (max-width: 760px) {
+  .res-pred-row { grid-template-columns: 1fr; }
+  .res-count-grid { grid-template-columns: 1fr; }
+}
+
 /* muted micro heading for note lists ("Judge notes", case lists) */
 .note-title {
   margin: 0 0 var(--s-2);
@@ -2451,6 +2531,14 @@ button:active:not(:disabled),
   overflow: auto;
 }
 
+/* RiskCard renders its own root .card with the default top margin (correct
+   when it's stacked under another card, as in Apply/Applicants). In the Risk
+   page's side-by-side grid it's the first thing in its column, so that
+   margin would sit it lower than the card next to it -- zero it here. */
+.risk-detail-col > .card:first-child {
+  margin-top: 0;
+}
+
 /* ============================================================
    Ask (Concierge) — starter tiles, chat bubbles/avatars,
    lease-viewer tabs + PDF pane. Deliberately single-column, no
@@ -2710,16 +2798,16 @@ button:active:not(:disabled),
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   grid-auto-rows: 1fr; /* every row the same height, so cards match across rows */
-  gap: var(--s-2);
+  gap: var(--s-5) var(--s-6); /* row / column — roomier so cards aren't cramped */
   padding-bottom: var(--s-2);
 }
 .res-prop-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   text-align: left;
   min-width: 150px;
-  padding: 10px 14px;
+  padding: 16px 18px;
   border-radius: var(--r-md);
   border: 1px solid var(--line-strong);
   background: var(--panel-2);
@@ -2887,6 +2975,12 @@ button:active:not(:disabled),
   border-color: var(--accent);
   background: var(--hover);
 }
+
+/* Model-card modal: the card IS the panel's content surface, so drop its
+   standalone top margin (which left a strip inside the panel's rounded top)
+   and keep the header row clear of the absolutely-positioned close button. */
+.modal-panel > .card { margin-top: 0; }
+.modal-panel > .card > :first-child { padding-right: 44px; }
 
 /* 60-month heatmap: 12 columns (one year per row) */
 .pay-grid {

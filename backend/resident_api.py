@@ -169,6 +169,9 @@ def _score_row(resident: dict, pred: dict | None = None) -> tuple[ResidentRow, d
     feats = residents_risk.extract_resident_features(resident)
 
     late = pred.get("late") or {}
+    # Unlike "late" (a top-level legacy alias for late_3m), "late_1m" has no
+    # such alias -- it only lives under the nested per-head "heads" dict.
+    late_1m = (pred.get("heads") or {}).get("late_1m") or {}
     arrears = pred.get("arrears") or {}
     churn = pred.get("churn") or {}
     serious = pred.get("serious") or {}
@@ -198,6 +201,7 @@ def _score_row(resident: dict, pred: dict | None = None) -> tuple[ResidentRow, d
     agg = {
         "property_id": row.property_id,
         "late_prob": row.late_probability,
+        "late_1m_prob": float(late_1m.get("probability") or 0.0),
         "late_band": row.late_band,
         "expected_arrears": row.expected_arrears,
         "churn_band": churn_band,
@@ -265,6 +269,7 @@ def _rollup(aggs: list) -> dict:
     serious_bands = BandDistribution()
     churn_bands = BandDistribution()
     late_sum = 0.0
+    late_1m_sum = 0.0
     serious_sum = 0.0
     arrears_sum = 0.0
     churn_eligible = 0
@@ -273,6 +278,7 @@ def _rollup(aggs: list) -> dict:
 
     for a in aggs:
         late_sum += a["late_prob"]
+        late_1m_sum += a["late_1m_prob"]
         serious_sum += a["serious_prob"]
         arrears_sum += a["expected_arrears"]
         setattr(late_bands, a["late_band"], getattr(late_bands, a["late_band"], 0) + 1)
@@ -289,6 +295,7 @@ def _rollup(aggs: list) -> dict:
     return {
         "resident_count": n,
         "predicted_late_rate": round(late_sum / n, 4) if n else 0.0,
+        "predicted_late_rate_1m": round(late_1m_sum / n, 4) if n else 0.0,
         "total_expected_arrears": round(arrears_sum, 2),
         "avg_serious_probability": round(serious_sum / n, 4) if n else 0.0,
         "churn_eligible_count": churn_eligible,

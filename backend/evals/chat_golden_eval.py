@@ -31,6 +31,18 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+# print_report() emits a plain emoji when nothing is flagged (see below), which
+# 400s -- no, UnicodeEncodeErrors -- on Windows consoles still defaulting to
+# cp1252. Reconfigure eagerly rather than relying on a caller-set
+# PYTHONIOENCODING (CI sets it; a local `python evals/chat_golden_eval.py`
+# invocation on Windows previously did not, and the crash only ever surfaced
+# on a fully clean run -- i.e. never, until the eval actually got fixed).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 os.environ.setdefault("EMBEDDING_BACKEND", "hash")
 # This script isolates itself onto a throwaway store.DB_PATH (see
 # _run_stateful below); without also forcing DATABASE_URL off, that override
@@ -38,6 +50,13 @@ os.environ.setdefault("EMBEDDING_BACKEND", "hash")
 # deployed instance (store.py prefers Postgres over DB_PATH when set), and
 # every "isolated" run here would actually hit the shared production DB.
 os.environ["DATABASE_URL"] = ""
+# Same reasoning for the vector store: a real VECTOR_PROVIDER=pinecone (e.g.
+# this repo's own .env) paired with the forced hash embedder above is a real
+# dimension mismatch (this repo's shared Pinecone index is 384-dim; hash
+# produces 512-dim) that makes every "ask" (PDF Q&A) query degrade to
+# "fully degraded" and fail every grounding check -- not a real quality
+# regression, just an unisolated eval hitting the wrong backend.
+os.environ["VECTOR_PROVIDER"] = "chroma"
 
 BACKEND = Path(__file__).resolve().parent.parent
 if str(BACKEND) not in sys.path:
@@ -47,6 +66,7 @@ import concierge  # noqa: E402
 import graph  # noqa: E402
 import graphrag  # noqa: E402
 import llm as _llm  # noqa: E402
+import pdf_ingest  # noqa: E402
 import rag_llamaindex  # noqa: E402
 import residents_chat  # noqa: E402
 import risk_chat  # noqa: E402
@@ -55,6 +75,8 @@ import tours  # noqa: E402
 import tours_chat  # noqa: E402
 from datetime import datetime  # noqa: E402
 from models import ChatMessage, ChatState, TourChatRequest  # noqa: E402
+
+APPLICATIONS_DIR = BACKEND.parent / "data" / "applications"
 
 # Fixed clock for the stateful tours flow (matches the tours test-suite anchor).
 _TOURS_NOW = datetime(2026, 7, 20, 8, 0, 0)
@@ -120,14 +142,33 @@ def load_golden() -> list[dict]:
 # Per-page adapters: resolve the symbolic context and call route()/answer().
 # ---------------------------------------------------------------------------
 _PRIMARY_APPLICANT: str | None = None
+# The "ask" golden set (chat_golden_v2_ask.py) is hand-authored against Sam
+# Patel's application verbatim -- see that file's docstring for the exact
+# retrieved-chunk text every must_include fact was checked against.
+_PRIMARY_APPLICANT_SLUG = "sam-patel"
 
 
 def _primary_applicant() -> str | None:
+    """Deterministically ingest the golden set's fixture applicant (idempotent
+    -- same stable id every run) rather than reading store.list_applicants()[0]:
+    that used to return whatever applicant happened to be first in the real,
+    shared rentready.db, which silently broke every grounding check whenever a
+    different applicant was uploaded first in some earlier session.
+
+    Both the RAG index (for the "ask" page) AND the store row + extracted
+    profile (for the "risk" page, which loads the profile to score) are needed
+    -- ingesting only the former looks fine for "ask" but makes risk_chat find
+    no applicant at all and degrade for every risk item that shares this same
+    primary-applicant resolution."""
     global _PRIMARY_APPLICANT
     if _PRIMARY_APPLICANT is None:
-        apps = store.list_applicants()
-        _PRIMARY_APPLICANT = apps[0]["id"] if apps else ""
-    return _PRIMARY_APPLICANT or None
+        applicant_id = f"eval-{_PRIMARY_APPLICANT_SLUG}"
+        text = pdf_ingest.extract_text(str(APPLICATIONS_DIR / f"{_PRIMARY_APPLICANT_SLUG}.pdf"))
+        chunks = rag_llamaindex.ingest(applicant_id, text)
+        profile = rag_llamaindex.extract_profile(text)
+        store.save_applicant(applicant_id, profile, chunks)
+        _PRIMARY_APPLICANT = applicant_id
+    return _PRIMARY_APPLICANT
 
 
 def _resolve(page: str, context):

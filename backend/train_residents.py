@@ -272,8 +272,12 @@ def _train_multiclass(head, feats, labels, splits, seed) -> dict:
     n_class = head["num_class"] or len(rr.DELINQ_BUCKETS)
     X_tr, y_tr = _matrix(feats, labels, head, tr)
     X_te, y_te = _matrix(feats, labels, head, te)
-    # Ensure every class is represented so predict_proba has n_class columns in order.
-    X_all, y_all = _matrix(feats, labels, head, tr | cal | te)
+    # Ensure every class is represented so predict_proba has n_class columns in
+    # order. Backfill only from tr|cal -- NEVER te, or a class-backfill row
+    # could be trained on and evaluated on, inflating that fold's reported
+    # test metrics. If a class only exists in the held-out test set, it's
+    # simply not backfilled (same as if no row for it existed anywhere).
+    X_all, y_all = _matrix(feats, labels, head, tr | cal)
     present = set(int(v) for v in y_tr)
     extra_rows, extra_lab = [], []
     for c in range(n_class):

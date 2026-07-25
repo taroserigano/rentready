@@ -4,6 +4,7 @@ import { getRisk } from "../../api";
 import type { RiskResult } from "../../types";
 import { RiskGauge } from "./RiskGauge";
 import { ReasonCodes } from "./ReasonCodes";
+import { SkeletonCard } from "../Loading";
 import {
   BAND_LABEL,
   BAND_TONE,
@@ -38,6 +39,10 @@ export function RiskDisclaimer({
     </p>
   );
 }
+
+// Shared floor height for both the loaded card and its loading skeleton (see
+// below) -- keeps the panel from resizing when switching applicants.
+const CARD_MIN_HEIGHT = 500;
 
 type RiskCardProps = {
   sectionNumber?: string;
@@ -78,27 +83,30 @@ export function RiskCard(props: RiskCardProps) {
   if (error) {
     return (
       <div className="card">
-        <h2>{sectionNumber ? `${sectionNumber} ` : ""}Late-payment risk</h2>
+        <h2>{sectionNumber ? `${sectionNumber} ` : ""}Late-Payment Risk</h2>
         <div className="error">{error}</div>
       </div>
     );
   }
   if (!result) {
     if (!selfFetch) return null;
+    // Matches CARD_MIN_HEIGHT below so switching applicants doesn't
+    // collapse-then-expand this panel (and yank the rest of the page's
+    // layout around) while the new score loads.
     return (
-      <div className="card">
-        <h2>{sectionNumber ? `${sectionNumber} ` : ""}Late-payment risk</h2>
-        <p className="muted" style={{ margin: 0 }}>
-          Scoring…
-        </p>
-      </div>
+      <SkeletonCard
+        title={`${sectionNumber ? `${sectionNumber} ` : ""}Late-Payment Risk`}
+        lines={1}
+        block={230}
+        minHeight={CARD_MIN_HEIGHT}
+      />
     );
   }
 
   const tone = BAND_TONE[result.band];
 
   return (
-    <div className="card">
+    <div className="card" style={{ minHeight: CARD_MIN_HEIGHT }}>
       <div
         style={{
           display: "flex",
@@ -109,7 +117,8 @@ export function RiskCard(props: RiskCardProps) {
       >
         <div>
           <h2 style={{ marginBottom: 4 }}>
-            {sectionNumber ? `${sectionNumber} ` : ""}Late-payment risk
+            {sectionNumber ? `${sectionNumber} ` : ""}Late-Payment Risk
+            {result.name ? ` — ${result.name}` : ""}
           </h2>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
             Advisory estimate — <strong>routes Elevated cases to human review</strong>,
@@ -163,7 +172,7 @@ export function RiskCard(props: RiskCardProps) {
           </div>
         </div>
         <div>
-          <div className="eyebrow">Key factors</div>
+          <div className="eyebrow">Key Factors</div>
           <ReasonCodes codes={result.reason_codes} />
         </div>
       </div>
