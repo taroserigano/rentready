@@ -15,6 +15,10 @@ unstructured[md]==0.16.11
 # which avoids LlamaIndex's hard-coded Anthropic model allow-list.
 llama-index-core==0.12.10
 llama-index-llms-langchain==0.6.1
+# NOTE: this (and sentence-transformers below) pulls in torch. The default
+# torch wheel bundles ~3GB of NVIDIA CUDA libraries. On a CPU-only host install
+# the CPU build first so they're never downloaded -- infra/deploy.sh does this:
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 llama-index-embeddings-huggingface==0.4.0
 llama-index-vector-stores-chroma==0.4.1
 llama-index-vector-stores-pinecone==0.4.5

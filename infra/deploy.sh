@@ -68,7 +68,21 @@ scp -i "$KEY" -o StrictHostKeyChecking=no "$TARBALL" "ec2-user@$HOST:/tmp/deploy
   echo "==> Backend deps"
   cd /opt/rentready/backend
   uv venv --python 3.11 .venv >/dev/null 2>&1 || true
+
+  # torch arrives TRANSITIVELY (sentence-transformers, llama-index HF
+  # embeddings). Its default wheel bundles ~3GB of NVIDIA CUDA libraries that a
+  # t3.micro can never use and never even maps into memory -- the deployed
+  # config is EMBEDDING_BACKEND=hash, so torch is never imported at all.
+  # Install the CPU-only build FIRST so the CUDA variant is never downloaded;
+  # requirements.txt then sees torch as already satisfied. Keeps the HuggingFace
+  # embedder available if the setting is ever flipped, at 1/5 the disk.
+  uv pip install -q --python .venv/bin/python \
+    torch --index-url https://download.pytorch.org/whl/cpu
   uv pip install -q -r requirements.txt --python .venv/bin/python
+
+  # The wheel cache can outgrow the venv itself (~7GB) on a 30GB free-tier
+  # volume, and everything in it is re-downloadable.
+  uv cache clean >/dev/null 2>&1 || true
 
   echo "==> Frontend build"
   cd /opt/rentready/frontend

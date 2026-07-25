@@ -14,6 +14,12 @@ import pulumi_tls as tls
 
 config = pulumi.Config()
 instance_type = config.get("instanceType") or "t3.micro"
+# Optional address for alarm notifications. AWS's always-free tier covers 10
+# CloudWatch alarms and 1,000 SNS email notifications/month, so this costs
+# nothing. Left unset, the alarms are still created (and visible in the
+# console) but nothing is emailed:
+#   pulumi config set alertEmail you@example.com
+alert_email = config.get("alertEmail")
 # No safe default here on purpose -- an open (0.0.0.0/0) SSH rule is a real
 # security risk, so this must be set explicitly:
 #   pulumi config set sshCidr <your-public-ip>/32
@@ -87,6 +93,15 @@ instance = aws.ec2.Instance(
         volume_size=30,  # GB -- the AL2023 AMI's snapshot requires >= 30GB;
         # this is exactly the free-tier EBS allowance, not a GB over it.
         volume_type="gp3",
+        # Encryption-at-rest with the default AWS-managed key costs NOTHING
+        # extra, but it cannot be applied to an existing volume -- turning it on
+        # REPLACES the instance. Gated behind a flag so it can't surprise an
+        # unrelated `pulumi up`:
+        #     pulumi config set --bool encryptRootVolume true
+        # Expect ~5 min downtime on the next up, after which re-run
+        # infra/deploy.sh and re-issue TLS (`pulumi stack output
+        # tlsSetupCommand`) -- the cert lives on the replaced disk.
+        encrypted=config.get_bool("encryptRootVolume") or False,
     ),
     tags={"Name": "rentready-demo"},
 )
@@ -96,6 +111,84 @@ eip = aws.ec2.Eip(
     instance=instance.id,
     domain="vpc",
     tags={"Name": "rentready-demo"},
+)
+
+# --- Monitoring & self-healing (all inside the AWS always-free tier) ---------
+# 10 CloudWatch alarms and 1,000 SNS email notifications/month are always free,
+# and EC2 alarm recover/reboot actions cost nothing. Uses only the built-in EC2
+# metrics -- deliberately NOT the CloudWatch agent, because collecting memory
+# and disk requires a daemon whose own footprint matters on a 1GB instance.
+alerts = aws.sns.Topic("rentready-alerts", name="rentready-alerts")
+
+if alert_email:
+    aws.sns.TopicSubscription(
+        "rentready-alerts-email",
+        topic=alerts.arn,
+        protocol="email",
+        endpoint=alert_email,  # AWS emails a one-time confirmation link
+    )
+
+_alarm_dims = {"InstanceId": instance.id}
+
+# A FAILED SYSTEM CHECK is AWS-side (host/network); recovery migrates the
+# instance to healthy hardware, keeping the instance id, EIP and EBS volume.
+aws.cloudwatch.MetricAlarm(
+    "rentready-system-check",
+    name="rentready-system-check-failed",
+    namespace="AWS/EC2",
+    metric_name="StatusCheckFailed_System",
+    dimensions=_alarm_dims,
+    statistic="Maximum",
+    comparison_operator="GreaterThanOrEqualToThreshold",
+    threshold=1,
+    period=60,
+    evaluation_periods=2,
+    alarm_description="EC2 system status check failed -- auto-recovering the instance.",
+    alarm_actions=[
+        pulumi.Output.concat("arn:aws:automate:", aws.get_region().name, ":ec2:recover"),
+        alerts.arn,
+    ],
+    treat_missing_data="missing",
+)
+
+# A FAILED INSTANCE CHECK is guest-side (kernel panic, exhausted memory,
+# unreachable network stack) -- a reboot is the correct remedy. This is the
+# alarm that covers the OOM risk on a 1GB box without needing an agent.
+aws.cloudwatch.MetricAlarm(
+    "rentready-instance-check",
+    name="rentready-instance-check-failed",
+    namespace="AWS/EC2",
+    metric_name="StatusCheckFailed_Instance",
+    dimensions=_alarm_dims,
+    statistic="Maximum",
+    comparison_operator="GreaterThanOrEqualToThreshold",
+    threshold=1,
+    period=60,
+    evaluation_periods=3,
+    alarm_description="EC2 instance status check failed -- rebooting.",
+    alarm_actions=[
+        pulumi.Output.concat("arn:aws:automate:", aws.get_region().name, ":ec2:reboot"),
+        alerts.arn,
+    ],
+    treat_missing_data="missing",
+)
+
+# Sustained high CPU on a 1 vCPU burstable instance means credits are draining
+# and latency is already degraded. Notify only -- never auto-act on load.
+aws.cloudwatch.MetricAlarm(
+    "rentready-cpu-high",
+    name="rentready-cpu-high",
+    namespace="AWS/EC2",
+    metric_name="CPUUtilization",
+    dimensions=_alarm_dims,
+    statistic="Average",
+    comparison_operator="GreaterThanThreshold",
+    threshold=90,
+    period=300,
+    evaluation_periods=3,  # ~15 minutes sustained
+    alarm_description="CPU above 90% for ~15 minutes on a 1 vCPU instance.",
+    alarm_actions=[alerts.arn],
+    treat_missing_data="missing",
 )
 
 pulumi.export("publicIp", eip.public_ip)
