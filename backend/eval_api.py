@@ -7,11 +7,12 @@ Tiers:
     they call Claude. They skip cleanly when no key is configured.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 import store
+from admin_auth import require_admin
 from evals import (
     ab,
     concierge_eval,
@@ -23,7 +24,12 @@ from evals import (
     run_evals,
 )
 
-router = APIRouter(prefix="/evals", tags=["evaluations"])
+# Developer tooling: these walk golden sets through Claude and /ragas forks a
+# subprocess, so an anonymous caller could run up the bill and OOM the box.
+# require_admin 404s public callers unless ADMIN_TOKEN is configured.
+router = APIRouter(
+    prefix="/evals", tags=["evaluations"], dependencies=[Depends(require_admin)]
+)
 
 SUITES = [
     {

@@ -383,9 +383,23 @@ export function ApplyForm({
       <div>
         <div className="card">
           <h2>1. Upload application</h2>
+          {/* Keyboard-operable: this is step 1 of the primary journey, and the
+              hidden file input (`.dropzone input { display: none }`) is out of
+              the tab order and the a11y tree, so without this the whole upload
+              path was mouse-only. */}
           <div
             className="dropzone"
+            role="button"
+            tabIndex={0}
+            aria-label="Upload a rental application PDF — activate to browse for a file, or drop one here"
+            aria-disabled={loading || undefined}
             onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -397,8 +411,12 @@ export function ApplyForm({
               ref={fileRef}
               type="file"
               accept="application/pdf"
+              tabIndex={-1}
               onChange={(e) => {
                 const f = e.target.files?.[0];
+                // Clear the value so re-picking the SAME file after "Start
+                // over" still fires change (otherwise nothing happens).
+                e.target.value = "";
                 if (f) handleFile(f);
               }}
             />
@@ -420,7 +438,7 @@ export function ApplyForm({
         onSubmit={(profile) => runFlow(() => applyForm(profile))}
       />
 
-      {error && <div className="error" style={{ marginTop: 18 }}>{error}</div>}
+      {error && <div className="error" role="alert" style={{ marginTop: 18 }}>{error}</div>}
 
       <div ref={resultsRef}>
         {upload && (

@@ -46,7 +46,7 @@ export function TourList({
 
       {loading && <p className="muted">Loading tours…</p>}
       {!loading && error && (
-        <div className="error" style={{ marginTop: 0 }}>
+        <div className="error" role="alert" style={{ marginTop: 0 }}>
           {error}
         </div>
       )}

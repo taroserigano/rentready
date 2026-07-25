@@ -18,7 +18,15 @@ import { PropertyHealthRanking } from "./PropertyHealthRanking";
 import { ResidentsChat } from "./ResidentsChat";
 import { Badge } from "../Badge";
 import { TechBadge } from "../TechBadge";
-import { BAND_LABEL, BAND_TONE, churnTone, pct, usd } from "./residentsTone";
+import { RiskDisclaimer } from "../risk/RiskCard";
+import {
+  BAND_LABEL,
+  BAND_TONE,
+  RESIDENT_DISCLAIMER,
+  churnTone,
+  pct,
+  usd,
+} from "./residentsTone";
 
 /** "xgboost" -> "XGBoost", "heuristic" -> "Heuristic". */
 function techLabel(modelType?: string): string {
@@ -275,6 +283,10 @@ export function Residents({
         </p>
       </header>
 
+      {/* Mandatory decision-support framing (resident wording). Was defined in
+          residentsTone.ts but referenced only by a unit test. */}
+      <RiskDisclaimer variant="banner" text={RESIDENT_DISCLAIMER} />
+
       {loading && (
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>Scoring residents…</p>
@@ -283,7 +295,7 @@ export function Residents({
 
       {!loading && error && (
         <div className="card">
-          <div className="error">{error}</div>
+          <div className="error" role="alert">{error}</div>
           <button className="btn-small btn-ghost" style={{ marginTop: 12 }} onClick={load}>
             Retry
           </button>
@@ -472,9 +484,21 @@ export function Residents({
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
+                    // Keyboard-operable: row selection is the only path to the
+                    // resident detail pane and the chat rail's scope.
                     <tr
                       key={r.resident_id}
                       onClick={() => setSelectedResident(r.resident_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedResident(r.resident_id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={selectedResident === r.resident_id}
+                      aria-label={`Select ${r.name}, unit ${r.unit_id} — ${Math.round(r.late_probability * 100)}% late-payment risk next quarter`}
                       style={selectedResident === r.resident_id ? { background: "var(--panel2)" } : undefined}
                     >
                       <td style={{ fontWeight: 600 }}>{r.name}</td>

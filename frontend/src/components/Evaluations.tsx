@@ -307,7 +307,7 @@ function ConciergeEvals() {
         </button>
       </div>
       {error && (
-        <div className="error" style={{ marginTop: 10 }}>
+        <div className="error" role="alert" style={{ marginTop: 10 }}>
           {error}
         </div>
       )}
@@ -489,7 +489,7 @@ function RiskEvals() {
         </button>
       </div>
       {error && (
-        <div className="error" style={{ marginTop: 10 }}>
+        <div className="error" role="alert" style={{ marginTop: 10 }}>
           {error}
         </div>
       )}

@@ -139,7 +139,7 @@ export function Dashboard({ health }: { health?: Record<string, unknown> | null 
 
       {!loading && error && (
         <div className="card">
-          <div className="error">{error}</div>
+          <div className="error" role="alert">{error}</div>
           <button className="btn-small btn-ghost" onClick={load} style={{ marginTop: 12 }}>
             Retry
           </button>

@@ -3,8 +3,11 @@
 DECISION-SUPPORT ONLY. This produces an estimated probability that a resident
 pays rent late, from a model trained on SYNTHETIC data, to help a *person*
 review an application. It never approves, denies, prices, or conditions a
-lease, and it never uses race, national origin, sex, familial status,
-disability, age, or location.
+lease. No protected attribute (race, national origin, sex, familial status,
+disability, age) and no location field is a model input — see
+EXCLUDED_FEATURES. Note the honest caveat: dollar-denominated features can
+still carry residual property-scale information, so fairness is verified by
+SLICING rather than by the absence of a column alone.
 
 The public entrypoint is ``predict(profile) -> dict`` (the ``RiskResult``
 shape). It NEVER raises: an XGBoost artifact is used when present, otherwise a
@@ -204,6 +207,17 @@ def _confidence(profile: ApplicantProfile, f: dict) -> str:
     if profile.employment_length_months is None:
         missing += 1
     return "low" if missing >= 1 else "high"
+
+
+# Keep calibrated probabilities strictly inside (0, 1). See the call site in
+# score() -- isotonic calibration saturates to exactly 0.0/1.0 outside its
+# fitted range, and "100% certain to pay late" is not a defensible output for
+# a decision-support estimate. Same epsilon as residents_risk._clamp_prob.
+_PROB_EPS = 0.01
+
+
+def _clamp_prob(p) -> float:
+    return min(1.0 - _PROB_EPS, max(_PROB_EPS, float(p)))
 
 
 # --------------------------------------------------------------------------
@@ -422,7 +436,14 @@ def predict(profile: ApplicantProfile, applicant_id: str = "", name: str = "") -
             import pandas as pd
 
             row = pd.DataFrame([[features[k] for k in FEATURE_ORDER]], columns=FEATURE_ORDER)
-            p = float(bundle["calibrated_model"].predict_proba(row)[0][1])
+            # Clamp away from 0/1: isotonic calibration is a step function and
+            # returns EXACTLY 0.0 or 1.0 for raw scores past the range it was
+            # fitted on. Serving 1.0 tells a reviewer an applicant is CERTAIN
+            # to pay late, which no calibrated model can support -- and this is
+            # reachable in practice (a low-credit, high-burden profile scored
+            # exactly 1.0 on the live deployment). Mirrors residents_risk's
+            # _clamp_prob so both models behave the same way.
+            p = _clamp_prob(bundle["calibrated_model"].predict_proba(row)[0][1])
             reasons = _model_reason_codes(bundle, features)
             if reasons is None:  # no booster -> heuristic explanation
                 _, contribs = _heuristic(profile)
@@ -496,7 +517,7 @@ def status() -> dict:
                 "source": "heuristic",
                 "model_type": "heuristic",
                 "features": len(FEATURE_ORDER),
-                "artifact": str(ARTIFACT_PATH),
+                "artifact": ARTIFACT_PATH.name,
             }
         return {
             "trained": True,
@@ -507,7 +528,7 @@ def status() -> dict:
             "metrics": bundle.get("metrics", {}),
             "dgp_version": bundle.get("dgp_version"),
             "generated_at": bundle.get("generated_at"),
-            "artifact": str(ARTIFACT_PATH),
+            "artifact": ARTIFACT_PATH.name,
         }
     except Exception as exc:  # noqa: BLE001
         return {"trained": False, "source": "heuristic", "model_type": "heuristic",

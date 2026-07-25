@@ -1144,11 +1144,32 @@ export interface ResidentModelCard {
   model_type?: string;
   description?: string;
   intended_use?: string;
-  /** Keyed by target name: late / arrears / churn / serious. */
-  targets?: Record<string, ResidentTargetCard>;
+  /** LEGACY. The backend returns this as a LIST of target NAMES
+   * (["late","arrears",...]), not a keyed map of cards — so it can't be
+   * rendered as target panels. Per-head detail lives on `heads` below. */
+  targets?: Record<string, ResidentTargetCard> | string[];
+  /** Per-head registry entry, incl. held-out metrics and honesty flags. */
+  heads?: ResidentHeadCard[];
   excluded?: RiskExcludedField[];
   limitations?: string[];
   source?: string;
+  [k: string]: unknown;
+}
+
+/** One entry of the multi-head catalog, as returned by /residents/model-card. */
+export interface ResidentHeadCard {
+  name: string;
+  family?: string;
+  kind?: string;
+  /** What the head predicts, in words. */
+  label_window?: string;
+  /** Honest prose on how learnable this head is (e.g. "LOW-POWER: very rare,
+   * treat as directional only"). */
+  learnable?: string;
+  /** True when the head is statistically weak (rare event / wide CI). */
+  low_confidence?: boolean;
+  features?: string[];
+  metrics?: Record<string, number>;
   [k: string]: unknown;
 }
 

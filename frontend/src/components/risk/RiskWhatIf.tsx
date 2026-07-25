@@ -203,7 +203,7 @@ export function RiskWhatIf({ applicantId }: { applicantId: string }) {
             </p>
           )}
 
-          {!loading && error && <div className="error">{error}</div>}
+          {!loading && error && <div className="error" role="alert">{error}</div>}
 
           {!loading && !error && profile && (
             <>

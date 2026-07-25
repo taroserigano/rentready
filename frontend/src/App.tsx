@@ -1,22 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Sun, Moon, KeyRound } from "lucide-react";
 import { getHealth, getSamples, type Sample } from "./api";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Toaster } from "./components/Toaster";
-import { Evaluations } from "./components/Evaluations";
-import { Monitoring } from "./components/Monitoring";
-import { ABLab } from "./components/ABLab";
-import { Learn } from "./components/Learn";
-import { ApplyForm } from "./components/ApplyForm";
-import { ApplicantsDirectory } from "./components/ApplicantsDirectory";
-import { PropertyBrowser } from "./components/PropertyBrowser";
-import { Dashboard } from "./components/Dashboard";
-import { PropertyPage } from "./components/PropertyPage";
-import { Tours } from "./components/Tours";
-import { Concierge } from "./components/Concierge";
-import { Risk } from "./components/risk/Risk";
-import { Residents } from "./components/residents/Residents";
-import { AiReport } from "./components/AiReport";
+
+// Route-level code splitting. Every view was statically imported before, so the
+// first paint of Apply pulled recharts (97kB gz) + framer-motion (42kB gz) and
+// the four retired views (15kB gz) it never renders.
+const lz = <K extends string>(k: K, f: () => Promise<Record<K, React.ComponentType<any>>>) =>
+  lazy(() => f().then((m) => ({ default: m[k] })));
+
+const Evaluations = lz("Evaluations", () => import("./components/Evaluations"));
+const Monitoring = lz("Monitoring", () => import("./components/Monitoring"));
+const ABLab = lz("ABLab", () => import("./components/ABLab"));
+const Learn = lz("Learn", () => import("./components/Learn"));
+const ApplyForm = lz("ApplyForm", () => import("./components/ApplyForm"));
+const ApplicantsDirectory = lz("ApplicantsDirectory", () => import("./components/ApplicantsDirectory"));
+const PropertyBrowser = lz("PropertyBrowser", () => import("./components/PropertyBrowser"));
+const Dashboard = lz("Dashboard", () => import("./components/Dashboard"));
+const PropertyPage = lz("PropertyPage", () => import("./components/PropertyPage"));
+const Tours = lz("Tours", () => import("./components/Tours"));
+const Concierge = lz("Concierge", () => import("./components/Concierge"));
+const Risk = lz("Risk", () => import("./components/risk/Risk"));
+const Residents = lz("Residents", () => import("./components/residents/Residents"));
+const AiReport = lz("AiReport", () => import("./components/AiReport"));
 
 type View =
   | "apply"
@@ -195,150 +202,93 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [samples]);
 
+  // ONE shell for every view: a skip link, the nav, and a <main> landmark.
+  // Previously each of the 14 branches returned its own <Nav/> + bare view with
+  // no landmark and no skip link, so a screen-reader user had to tab the 9-item
+  // nav on every page with no way past it.
+  let page: ReactNode;
   if (view === "applicants") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <ApplicantsDirectory onViewRisk={goToRisk} />
-      </>
+    page = <ApplicantsDirectory onViewRisk={goToRisk} />;
+  } else if (view === "properties") {
+    page = <PropertyBrowser onOpenListing={goToProperty} health={health} />;
+  } else if (view === "property" && propertyId) {
+    page = (
+      <PropertyPage
+        propertyId={propertyId}
+        onBack={() => navigate("properties")}
+        onApply={() => navigate("apply")}
+        onBookTour={goToTours}
+        onAsk={goToAsk}
+      />
     );
-  }
-
-  if (view === "properties") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <PropertyBrowser onOpenListing={goToProperty} health={health} />
-      </>
+  } else if (view === "ask") {
+    page = (
+      <Concierge
+        initialPropertyId={askPropertyId ?? undefined}
+        onViewProperty={goToProperty}
+        health={health}
+      />
     );
-  }
-
-  if (view === "property" && propertyId) {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <PropertyPage
-          propertyId={propertyId}
-          onBack={() => navigate("properties")}
-          onApply={() => navigate("apply")}
-          onBookTour={goToTours}
-          onAsk={goToAsk}
-        />
-      </>
+  } else if (view === "tours") {
+    page = <Tours initialPropertyId={tourPropertyId ?? undefined} health={health} />;
+  } else if (view === "dashboard") {
+    page = <Dashboard health={health} />;
+  } else if (view === "risk") {
+    page = <Risk initialApplicantId={riskApplicantId ?? undefined} health={health} />;
+  } else if (view === "residents") {
+    page = (
+      <Residents
+        initialPropertyId={residentPropertyId ?? undefined}
+        initialResidentId={residentId ?? undefined}
+        health={health}
+      />
     );
-  }
-
-  if (view === "ask") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Concierge
-          initialPropertyId={askPropertyId ?? undefined}
-          onViewProperty={goToProperty}
-          health={health}
-        />
-      </>
-    );
-  }
-
-  if (view === "tours") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Tours initialPropertyId={tourPropertyId ?? undefined} health={health} />
-      </>
-    );
-  }
-
-  if (view === "dashboard") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Dashboard health={health} />
-      </>
-    );
-  }
-
-  if (view === "risk") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Risk initialApplicantId={riskApplicantId ?? undefined} health={health} />
-      </>
-    );
-  }
-
-  if (view === "residents") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Residents
-          initialPropertyId={residentPropertyId ?? undefined}
-          initialResidentId={residentId ?? undefined}
-          health={health}
-        />
-      </>
-    );
-  }
-
-  if (view === "report") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <AiReport />
-      </>
-    );
-  }
-
-  if (view === "evaluations") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Evaluations />
-      </>
-    );
-  }
-
-  if (view === "monitoring") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Monitoring />
-      </>
-    );
-  }
-
-  if (view === "ab") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <ABLab />
-      </>
-    );
-  }
-
-  if (view === "learn") {
-    return (
-      <>
-        <Nav view={view} setView={navigate} commands={commands} />
-        <Learn setView={navigate} />
-      </>
-    );
-  }
-
-  // Default / fallback (unmatched hash, or `property` with no id yet): Apply —
-  // upload a PDF or fill in details manually; every downstream result card
-  // (eligibility, risk, recommendations, chat) lives on this one page.
-  return (
-    <>
-      <Nav view={view} setView={navigate} commands={commands} />
+  } else if (view === "report") {
+    page = <AiReport />;
+  } else if (view === "evaluations") {
+    page = <Evaluations />;
+  } else if (view === "monitoring") {
+    page = <Monitoring />;
+  } else if (view === "ab") {
+    page = <ABLab />;
+  } else if (view === "learn") {
+    page = <Learn setView={navigate} />;
+  } else {
+    // Default / fallback (unmatched hash, or `property` with no id yet): Apply —
+    // upload a PDF or fill in details manually; every downstream result card
+    // (eligibility, risk, recommendations, chat) lives on this one page.
+    page = (
       <ApplyForm
         health={health}
         initialSampleSlug={applySampleSlug ?? undefined}
         onOpenRisk={goToRisk}
         onViewListing={goToProperty}
       />
+    );
+  }
+
+  return (
+    <>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <Nav view={view} setView={navigate} commands={commands} />
+      <main id="main-content">
+        {/* Views are code-split (React.lazy), so a fallback is required. */}
+        <Suspense fallback={<ViewFallback />}>{page}</Suspense>
+      </main>
     </>
+  );
+}
+
+/** Placeholder while a lazily-loaded view's chunk is fetched. */
+function ViewFallback() {
+  return (
+    <div className="app">
+      <div className="card">
+        <p className="muted" style={{ margin: 0 }} role="status">
+          Loading…
+        </p>
+      </div>
+    </div>
   );
 }
 

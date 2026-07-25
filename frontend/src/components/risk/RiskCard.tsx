@@ -34,8 +34,10 @@ export function RiskDisclaimer({
   }
 
   return (
+    // `text` (not RISK_DISCLAIMER) -- hardcoding it here meant the resident
+    // variant of this copy could never render even when passed in.
     <p className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
-      {RISK_DISCLAIMER}
+      {text}
     </p>
   );
 }
@@ -84,7 +86,7 @@ export function RiskCard(props: RiskCardProps) {
     return (
       <div className="card">
         <h2>{sectionNumber ? `${sectionNumber} ` : ""}Late-Payment Risk</h2>
-        <div className="error">{error}</div>
+        <div className="error" role="alert">{error}</div>
       </div>
     );
   }
@@ -210,6 +212,8 @@ export function RiskCard(props: RiskCardProps) {
         </p>
       )}
 
+      {/* Inline footnote on every card, as riskTone.ts documents. */}
+      <RiskDisclaimer variant="inline" />
     </div>
   );
 }

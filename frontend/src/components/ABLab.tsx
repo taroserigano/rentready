@@ -63,7 +63,7 @@ export function ABLab() {
             Pick two different variants to compare.
           </p>
         )}
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
         {busy && (
           <p className="muted" style={{ marginTop: 10 }}>
             Generating explanations with both variants and grading each with the

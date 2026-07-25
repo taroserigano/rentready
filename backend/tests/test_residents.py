@@ -413,12 +413,58 @@ def test_excluded_features_documented_on_model_card():
 
 
 def test_reason_codes_cite_only_allowed_features():
+    """No reason code may cite a feature outside the allowed contract.
+
+    Internal, non-feature markers are permitted but MUST be underscore-prefixed
+    so they can never be confused with a real input. Today that's
+    ``_monotone_adjustment``, which the serve-time horizon clamp appends to
+    explain a probability it revised (see _reband) -- deliberate transparency,
+    not a feature leak. The point of this test is that nothing PROTECTED or
+    otherwise excluded sneaks in, which the prefix rule preserves.
+    """
     pred = rr.predict_resident(BAD)
     superset = set(rr.FEATURE_ORDER_ARREARS) | set(rr.FEATURE_ORDER_CHURN)
+    excluded = {e["field"] for e in rr.EXCLUDED_FEATURES}
     for h in pred["heads"].values():
         for rc_item in h.get("reason_codes", []):
-            assert rc_item["feature"] in superset
+            feat = rc_item["feature"]
+            if feat.startswith("_"):
+                # An internal marker: must not name an excluded field, and
+                # must still be a well-formed reason code.
+                assert feat.lstrip("_") not in excluded
+            else:
+                assert feat in superset
+            assert feat not in excluded
             assert rc_item["direction"] in ("increases", "decreases")
+
+
+def test_calibrated_probabilities_are_never_exactly_0_or_1():
+    """Isotonic calibration is a step function and returns EXACTLY 0.0/1.0 for
+    raw scores beyond the range it was fitted on. Serving that verbatim made
+    the Residents chat state "next year 100%" as a certainty about a person,
+    and a saturated run also forced the horizon clamp to fire. Whether a given
+    trained bundle saturates is luck, so the clamp is enforced at serve time.
+    """
+    residents = [BAD, CLEAN] + rr.load_residents()[:15]
+    for res in residents:
+        pred = rr.predict_resident(res, with_reasons=False)
+        for name, h in pred["heads"].items():
+            p = h.get("probability")
+            if p is None:
+                continue
+            assert 0.0 < p < 1.0, f"{name} served a degenerate probability {p}"
+
+
+def test_bulk_and_single_agree_on_the_probability_clamp():
+    """Both scoring paths apply the same clamp -- if only one did, the same
+    resident would score differently depending on which endpoint was hit."""
+    residents = rr.load_residents()[:10]
+    heads = ["late_1m", "late_3m", "late_6m", "late_12m"]
+    bulk = rr.predict_bulk(residents, heads=heads)
+    for res, b in zip(residents, bulk):
+        single = rr.predict_resident(res, with_reasons=False, heads=heads)
+        for name in heads:
+            assert b["heads"][name]["probability"] == single["heads"][name]["probability"]
 
 
 # ===========================================================================

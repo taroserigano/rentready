@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="muted" style={{ marginTop: 8 }}>
               The page hit an unexpected error. Reloading usually clears it.
             </p>
-            <div className="error" style={{ marginTop: 12 }}>
+            <div className="error" role="alert" style={{ marginTop: 12 }}>
               {this.state.error.message}
             </div>
             <button

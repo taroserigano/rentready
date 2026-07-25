@@ -1027,6 +1027,21 @@ def _head_reasons(name, features, fo, booster, with_reasons) -> list:
     return _reason_codes(contribs, features, fo)
 
 
+# Isotonic regression is a step function fitted on the calibration split, so
+# for any raw score at or beyond the extremes it observed it returns EXACTLY
+# 0.0 or 1.0. Serving those verbatim is indefensible for decision-support: the
+# Residents chat rendered "next year 100%" as a certainty about a real person,
+# and a saturated run of 1.0s also made the horizon monotone-clamp fire, which
+# both injected a synthetic reason code and desynced the grounding checker.
+# Whether a given trained bundle saturates is luck, so clamp at serve time.
+_PROB_EPS = 0.01  # inside [1%, 99%] -- 0.005 still ROUNDS to "100%" on screen
+
+
+def _clamp_prob(p: float) -> float:
+    """Keep a calibrated probability strictly inside (0, 1)."""
+    return min(1.0 - _PROB_EPS, max(_PROB_EPS, float(p)))
+
+
 def _predict_classifier(spec, features, sub, low, with_reasons=True) -> dict:
     name, fo, kind = spec["name"], spec["feature_order"], spec["kind"]
     edge_half = 0.08
@@ -1039,7 +1054,9 @@ def _predict_classifier(spec, features, sub, low, with_reasons=True) -> dict:
             source, model_type = "model", sub.get("model_type", "xgboost")
             if kind == "multiclass":
                 return _multiclass_payload(spec, proba, reasons, low, source, model_type)
-            return _binary_payload(spec, float(proba[1]), reasons, low, edge_half, source, model_type)
+            return _binary_payload(
+                spec, _clamp_prob(proba[1]), reasons, low, edge_half, source, model_type
+            )
         except Exception as exc:  # noqa: BLE001 — degrade to heuristic
             print(f"residents_risk: {name} model predict failed ({type(exc).__name__}: {exc}); heuristic.")
     val, contribs = _heuristic_head(name, features)
@@ -1404,7 +1421,14 @@ def predict_bulk(residents: list, snapshot: date = RESIDENT_SNAPSHOT,
                     elif kind == "multiclass":
                         vals = sub["calibrated_model"].predict_proba(X)
                     else:
-                        vals = sub["calibrated_model"].predict_proba(X)[:, 1]
+                        # Same isotonic-saturation clamp as the single-resident
+                        # path (_clamp_prob) -- the two must agree or bulk and
+                        # single scoring would disagree for the same resident.
+                        vals = np.clip(
+                            sub["calibrated_model"].predict_proba(X)[:, 1],
+                            _PROB_EPS,
+                            1.0 - _PROB_EPS,
+                        )
                     batched[name] = (sub, vals)
                     continue
                 except Exception as exc:  # noqa: BLE001 — this head degrades to heuristic
@@ -2020,13 +2044,13 @@ def status() -> dict:
         ]
         if bundle is None:
             return {"trained": False, "source": "heuristic", "schema": BUNDLE_SCHEMA,
-                    "heads": head_specs, "targets": list(TARGETS), "artifact": str(ARTIFACT_PATH)}
+                    "heads": head_specs, "targets": list(TARGETS), "artifact": ARTIFACT_PATH.name}
         return {
             "trained": True, "source": "model", "schema": BUNDLE_SCHEMA,
             "heads": head_specs, "targets": list(TARGETS),
             "metrics": {h["name"]: bundle.get("heads", {}).get(h["name"], {}).get("metrics", {}) for h in HEADS},
             "dgp_version": bundle.get("dgp_version"), "seed": bundle.get("seed"),
-            "generated_at": bundle.get("generated_at"), "artifact": str(ARTIFACT_PATH),
+            "generated_at": bundle.get("generated_at"), "artifact": ARTIFACT_PATH.name,
         }
     except Exception as exc:  # noqa: BLE001
         return {"trained": False, "source": "heuristic", "error": type(exc).__name__}

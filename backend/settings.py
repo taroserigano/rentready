@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     # generous headroom while still bounding memory/disk on one request).
     max_upload_mb: int = 20
 
+    # Shared secret for administrative routes (/evals/*, /seed-graph) -- see
+    # admin_auth.py. Empty means "local callers only, public callers get 404",
+    # which is the safe default for a public deployment that never sets it.
+    admin_token: str = ""
+
     # CORS: comma-separated origins, or "*" (default -- fine for local dev,
     # where the frontend's dev-server origin varies by port). Set explicitly
     # to the real frontend origin(s) for any non-localhost deployment, e.g.

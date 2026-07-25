@@ -285,7 +285,7 @@ export function PropertyPage({
       )}
       {!loading && error && (
         <div className="card">
-          <div className="error" style={{ marginTop: 0 }}>
+          <div className="error" role="alert" style={{ marginTop: 0 }}>
             {error}
           </div>
         </div>

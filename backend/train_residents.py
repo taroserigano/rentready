@@ -21,6 +21,18 @@ filters to its non-None / eligible rows). Heads are fit in PARALLEL (threads).
 feature_order, or a required kind key drifts from the code contract.
 
 Run:  python train_residents.py   |   python -m train_residents
+
+IMPORTANT -- retraining invalidates the Residents golden set. ``evals/
+gen_residents_ask_dataset.py`` bakes the model's OWN formatted numbers into each
+item's ``must_include`` (e.g. "72%"), so a retrained model makes
+``test_residents_ask_eval.py`` fail on ~half the set with a grounding mismatch
+that looks alarming but is only staleness. Always follow a retrain with:
+
+    EMBEDDING_BACKEND=hash python backend/evals/gen_residents_ask_dataset.py
+
+Also note training is NOT bit-reproducible despite the fixed seed (XGBoost is
+multithreaded), so metrics move by ~0.01-0.05 AUC/R^2 between runs on identical
+inputs. Treat a single run's numbers as a sample, not a fingerprint.
 """
 
 import os
@@ -122,26 +134,74 @@ def _clf_metrics(y_true, p) -> dict:
             out["pr_auc"] = None
         out["brier"] = round(float(brier_score_loss(y_true, p)), 4)
         out["ece"] = round(_ece(y_true, p), 4)
+        # Predict-the-base-rate everywhere: AUC 0.5 by definition, but its
+        # Brier score is the number a real model must beat. On a very rare
+        # event this baseline is already near-perfect by Brier/ECE, which is
+        # exactly why a low ECE on such a head is NOT evidence of skill.
+        if len(y_true):
+            base = np.full(len(y_true), float(np.mean(y_true)))
+            out["baseline_rate_brier"] = round(float(brier_score_loss(y_true, base)), 4)
     except Exception:  # noqa: BLE001
         out["auc"] = out.get("auc")
     return out
 
 
-def _reg_metrics(y_true, pred, lo, hi) -> dict:
+def _persistence_baseline(head, feature_order, X_te):
+    """"Nothing changes" predictor for a head, or None if there isn't one.
+
+    For the balance/arrears family the trivial forecast is today's balance --
+    which is itself an input feature, so we can read it straight out of the
+    test matrix. Beating it is the bar those heads have to clear; the reported
+    R^2 alone can't show that.
+    """
+    if head["family"] != "arrears" or not len(X_te):
+        return None
+    try:
+        return np.asarray(X_te)[:, feature_order.index("current_balance")]
+    except (ValueError, IndexError):
+        return None
+
+
+def _reg_metrics(y_true, pred, lo, hi, baseline=None) -> dict:
+    """Held-out regression metrics, plus NAIVE BASELINES for context.
+
+    An R^2 of 0.9 on a zero-inflated dollar target is not self-evidently good:
+    much of it can come from separating the mass at zero, which a trivial
+    persistence rule ("next quarter's balance == today's balance") already
+    does. Reporting the baselines next to the model is what makes the model's
+    number interpretable -- without them a reader has no way to tell skill
+    from the target's own autocorrelation.
+
+    ``baseline`` is the persistence predictor (usually ``current_balance``)
+    where one is meaningful; ``baseline_mean_r2`` is always reported.
+    """
     from sklearn.metrics import mean_absolute_error, r2_score
 
     y_true = np.asarray(y_true, dtype=float)
     pred = np.asarray(pred, dtype=float)
     rmse = float(np.sqrt(np.mean((y_true - pred) ** 2))) if len(y_true) else 0.0
     coverage = float(np.mean((y_true >= np.asarray(lo)) & (y_true <= np.asarray(hi)))) if len(y_true) else 0.0
-    return {
+    varied = len(set(np.round(y_true, 3))) > 1
+    out = {
         "mae": round(float(mean_absolute_error(y_true, pred)), 2) if len(y_true) else 0.0,
         "rmse": round(rmse, 2),
-        "r2": round(float(r2_score(y_true, pred)), 4) if len(set(np.round(y_true, 3))) > 1 else None,
+        "r2": round(float(r2_score(y_true, pred)), 4) if varied else None,
         "pi_coverage": round(coverage, 4),
         "n_test": int(len(y_true)),
         "target_mean": round(float(np.mean(y_true)), 2) if len(y_true) else 0.0,
     }
+    # Predict-the-mean: R^2 is 0 by construction, but MAE is a real yardstick.
+    if len(y_true):
+        mean_pred = np.full_like(y_true, float(np.mean(y_true)))
+        out["baseline_mean_mae"] = round(float(mean_absolute_error(y_true, mean_pred)), 2)
+    # Persistence: the number to beat for any balance-style target.
+    if baseline is not None and len(y_true):
+        b = np.asarray(baseline, dtype=float)
+        if b.shape == y_true.shape:
+            out["baseline_persist_mae"] = round(float(mean_absolute_error(y_true, b)), 2)
+            if varied:
+                out["baseline_persist_r2"] = round(float(r2_score(y_true, b)), 4)
+    return out
 
 
 def _multiclass_metrics(y_true, proba, n_class) -> dict:
@@ -354,7 +414,11 @@ def _train_regression(head, feats, labels, splits, seed) -> dict:
         "feature_order": list(fo), "model_type": model_type,
         "n_train": int(len(X_tr)),
         "residual_quantiles": [round(q_lo, 3), round(q_hi, 3)],
-        "metrics": _reg_metrics(y_te, pred_te, lo, hi) if len(X_te) else {"n_test": 0},
+        "metrics": (
+            _reg_metrics(y_te, pred_te, lo, hi, baseline=_persistence_baseline(head, fo, X_te))
+            if len(X_te)
+            else {"n_test": 0}
+        ),
     }
 
 

@@ -650,7 +650,7 @@ export function PropertyBrowser({
         )}
         {!loading && error && (
           <>
-            <div className="error">{error}</div>
+            <div className="error" role="alert">{error}</div>
             <button
               className="btn-small btn-ghost"
               style={{ marginTop: 10 }}
@@ -832,18 +832,13 @@ function PropertyCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: Math.min(index * 0.025, 0.25) }}
+      // Mouse convenience only. This is deliberately NOT role="button" +
+      // aria-label: that combination computed the card's accessible name from
+      // the label and so HID all its content (rent, beds, baths, badges,
+      // amenities) from assistive tech, and it also nested real <button>s
+      // inside a button role (axe: nested-interactive). The card title below
+      // is the real, focusable control instead.
       onClick={onOpen}
-      onKeyDown={(e) => {
-        // Ignore key presses on inner controls (e.g. the listing button).
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label={`View details for ${p.name}`}
     >
       {onToggleSave && (
         <button
@@ -870,9 +865,18 @@ function PropertyCard({
             gap: 8,
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.01em" }}>
+          {/* The card's real control: focusable, named by its own text, and
+              the keyboard path to the detail view. */}
+          <button
+            type="button"
+            className="prop-card-title"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+          >
             {p.name}
-          </div>
+          </button>
           {onOpenListing && (
             <button
               className="btn-ghost prop-open-btn"

@@ -167,7 +167,7 @@ export function ApplicantsDirectory({
 
         {listError && (
           <>
-            <div className="error">{listError}</div>
+            <div className="error" role="alert">{listError}</div>
             <button
               className="btn-small btn-ghost"
               style={{ marginTop: 10 }}
@@ -270,7 +270,7 @@ export function ApplicantsDirectory({
 
       {selectedId && detailError && (
         <div className="card">
-          <div className="error">{detailError}</div>
+          <div className="error" role="alert">{detailError}</div>
           <button
             className="btn-small btn-ghost"
             style={{ marginTop: 10 }}

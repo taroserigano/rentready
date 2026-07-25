@@ -77,10 +77,26 @@ server {
     root /opt/rentready/frontend/dist;
     index index.html;
 
+    # The app's own cap is settings.max_upload_mb (20). nginx's default here
+    # is 1MB, which would reject a real multi-page scan with its own HTML 413
+    # before the app ever sees it -- making the app-level cap dead code. Set
+    # slightly above the app's so the app remains the authority and returns
+    # its JSON 413.
+    client_max_body_size 21m;
+
     location /api/ {
         proxy_pass http://127.0.0.1:8000/;
         proxy_set_header Host $host;
+
+        # Both of these must be SET (not add_header'd) so a client-supplied
+        # value is OVERWRITTEN rather than appended/passed through.
+        # X-Forwarded-For matters specifically because uvicorn's
+        # ProxyHeadersMiddleware trusts it from 127.0.0.1 and uses it to
+        # rewrite request.client -- leaving it client-controlled let anyone
+        # forge their identity and bypass the rate limiter entirely.
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {
@@ -90,3 +106,41 @@ server {
 EOF
 rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
 systemctl enable --now nginx
+
+# certbot + AUTO-RENEWAL.
+#
+# Certbot prints "Certbot has set up a scheduled task to automatically renew
+# this certificate" -- on Amazon Linux 2023 that is NOT true. The dnf-packaged
+# certbot ships no systemd timer (only the snap/pip installs do) and crond is
+# inactive by default, so a cert issued here would simply expire after 90 days.
+# Install the timer explicitly.
+dnf install -y certbot python3-certbot-nginx
+
+cat > /etc/systemd/system/certbot-renew.service <<'EOF'
+[Unit]
+Description=Renew Let's Encrypt certificates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --deploy-hook only reloads nginx when a cert was actually renewed.
+ExecStart=/usr/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
+EOF
+
+cat > /etc/systemd/system/certbot-renew.timer <<'EOF'
+[Unit]
+Description=Run certbot renew twice daily (Let's Encrypt's recommendation)
+
+[Timer]
+OnCalendar=*-*-* 03,15:00:00
+# Spread load on Let's Encrypt and survive a boot that missed a window.
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now certbot-renew.timer

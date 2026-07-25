@@ -9,7 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -45,6 +45,7 @@ import risk_api
 import residents_risk
 import resident_api
 import monitoring
+from admin_auth import require_admin
 from ratelimit import rate_limit_middleware
 from evals import judges
 
@@ -476,8 +477,11 @@ def graph_ask(req: GraphAskRequest) -> dict:
     return graphrag.graph_ask(req.question)
 
 
-@app.post("/seed-graph")
+@app.post("/seed-graph", dependencies=[Depends(require_admin)])
 def seed() -> dict:
+    """Wipe and reseed the property graph. ADMIN ONLY -- seed_graph() runs
+    ``MATCH (n) DETACH DELETE n`` before reinserting, so an anonymous caller
+    could empty the graph (a no-op only while Neo4j is unreachable)."""
     return graph.seed_graph()
 
 

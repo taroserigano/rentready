@@ -227,6 +227,25 @@ def test_get_risk_batch_sorted_desc(client, monkeypatch):
         assert set(row.keys()) == {"applicant_id", "name", "probability", "band", "top_driver"}
 
 
+def test_risk_list_scales_are_documented_and_distinct(client, monkeypatch):
+    """avg_probability is a 0-1 PROBABILITY; high_risk_pct is already a 0-100
+    PERCENTAGE. The two look interchangeable and are not: the UI multiplied
+    both by 100, rendering "33.3" as "3330%" on the Elevated tile."""
+    applicants = [{"id": "s", "name": "Strong"}, {"id": "w", "name": "Weak"}]
+    profiles = {"s": STRONG, "w": WEAK}
+    monkeypatch.setattr(store, "list_applicants", lambda: applicants)
+    monkeypatch.setattr(store, "get_profile", lambda aid: profiles.get(aid))
+    body = client.get("/risk").json()
+
+    assert 0.0 <= body["avg_probability"] <= 1.0
+    assert 0.0 <= body["high_risk_pct"] <= 100.0
+
+    # high_risk_pct is the percentage of scored rows in the "high" band.
+    high = sum(1 for r in body["rows"] if r["band"] == "high")
+    expected = round(100.0 * high / body["scored"], 1)
+    assert body["high_risk_pct"] == pytest.approx(expected, abs=0.05)
+
+
 def test_model_card_keys(client):
     body = client.get("/risk/model-card").json()
     for key in ("name", "version", "description", "intended_use", "features",
@@ -234,3 +253,25 @@ def test_model_card_keys(client):
         assert key in body
     assert body["features"] == risk.FEATURE_ORDER
     assert all(set(e.keys()) == {"field", "reason"} for e in body["excluded"])
+
+
+def test_calibrated_probability_is_never_exactly_0_or_1():
+    """Isotonic calibration saturates to exactly 0.0/1.0 beyond its fitted
+    range. A live high-burden/low-credit applicant scored exactly 1.0 on the
+    deployed instance, which the UI renders as a 100% certainty that a real
+    person will pay late -- not something a calibrated estimate can support."""
+    extreme = ApplicantProfile(
+        name="Stress Test",
+        monthly_income=2100,
+        desired_rent=1950,
+        credit_score=500,
+        employment_status="unemployed",
+        evictions_count=3,
+        late_payments_12mo=9,
+        bankruptcies_count=2,
+        monthly_debt_payments=900,
+        savings_balance=0,
+    )
+    for profile in (extreme, STRONG, WEAK):
+        p = risk.predict(profile)["probability"]
+        assert 0.0 < p < 1.0, f"degenerate probability {p}"

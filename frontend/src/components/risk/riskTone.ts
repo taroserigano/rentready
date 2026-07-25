@@ -35,8 +35,9 @@ export const BAND_METER: Record<RiskBand, "good" | "warn" | "bad"> = {
 export const RISK_DISCLAIMER =
   "Decision-support only — not an automated decision. An estimated probability from a model " +
   "trained on synthetic data, to help a person review the application. It does not approve, deny, " +
-  "price, or condition any lease, and never uses race, national origin, sex, familial status, " +
-  "disability, age, or location.";
+  "price, or condition any lease. No protected attribute — race, national origin, sex, familial " +
+  "status, disability, age — or location field is a model input; dollar-denominated balance " +
+  "features can carry residual property-scale information, which is audited by slicing.";
 
 /** "~20% (12–28%)" style summary from a probability and its calibration range. */
 export function formatProbRange(probability: number, range: [number, number]): string {

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Cpu, Info, Link2, Search, X } from "lucide-react";
 import { getRiskModelCard, listRisk } from "../../api";
 import type { RiskBand, RiskListResponse, RiskModelCard as RiskModelCardT, RiskRow } from "../../types";
-import { RiskCard } from "./RiskCard";
+import { RiskCard, RiskDisclaimer } from "./RiskCard";
 import { RiskDistribution } from "./RiskDistribution";
 import { RiskModelCard } from "./RiskModelCard";
 import { RiskWhatIf } from "./RiskWhatIf";
@@ -228,6 +228,11 @@ export function Risk({
         </p>
       </header>
 
+      {/* Mandatory decision-support framing. This banner was documented in
+          riskTone.ts and in this file's own docstring but had never actually
+          been rendered anywhere in the app. */}
+      <RiskDisclaimer variant="banner" />
+
       {loading && (
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>
@@ -238,7 +243,7 @@ export function Risk({
 
       {!loading && error && (
         <div className="card">
-          <div className="error">{error}</div>
+          <div className="error" role="alert">{error}</div>
           <button
             className="btn-small btn-ghost"
             style={{ marginTop: 12 }}
@@ -271,7 +276,11 @@ export function Risk({
             <div className="stat-tile">
               <div className="label">Elevated</div>
               <div className="value bad">
-                {Math.round(list.high_risk_pct * 100)}%
+                {/* high_risk_pct is ALREADY a percentage (risk_api.py returns
+                    round(100.0 * high/scored, 1)) -- unlike avg_probability
+                    above, which is a 0-1 probability and does need x100.
+                    Multiplying here too rendered e.g. 33.3 as "3330%". */}
+                {Math.round(list.high_risk_pct)}%
               </div>
               <div className="sub">routed to human review</div>
             </div>
@@ -403,9 +412,23 @@ export function Risk({
                   </thead>
                   <tbody>
                     {capped.map((r) => (
+                      // Row selection is the ONLY way to reach the detail card,
+                      // what-if and chat rail, so it must be keyboard-operable:
+                      // tabIndex + role=button + Enter/Space, and aria-selected
+                      // so AT announces which applicant is active.
                       <tr
                         key={r.applicant_id}
                         onClick={() => setSelectedId(r.applicant_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedId(r.applicant_id);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-pressed={selectedId === r.applicant_id}
+                        aria-label={`Select ${r.name} — ${Math.round(r.probability * 100)}% risk, ${BAND_LABEL[r.band]}`}
                         style={
                           selectedId === r.applicant_id
                             ? { background: "var(--panel2)" }

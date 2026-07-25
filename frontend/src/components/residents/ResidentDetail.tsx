@@ -76,7 +76,7 @@ export function ResidentDetail({
   if (error) {
     return (
       <div className="card">
-        <div className="error">{error}</div>
+        <div className="error" role="alert">{error}</div>
       </div>
     );
   }
