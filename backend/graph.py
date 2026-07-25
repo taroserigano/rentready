@@ -9,6 +9,7 @@ same properties, so the app still works (just without the real graph DB).
 """
 
 import json
+import time
 from functools import lru_cache
 
 from settings import DATA_DIR, settings
@@ -22,20 +23,33 @@ def load_properties() -> list:
         return json.load(f)
 
 
+def _is_local_uri(uri: str) -> bool:
+    """True for a Neo4j on this machine (localhost / 127.0.0.1 / ::1)."""
+    host = uri.split("://", 1)[-1].split("/", 1)[0].rsplit("@", 1)[-1]
+    host = host.split(":", 1)[0].strip("[]").lower()
+    return host in ("localhost", "127.0.0.1", "::1", "")
+
+
 @lru_cache(maxsize=1)
 def _driver():
     from neo4j import GraphDatabase
 
-    # Short timeouts so `verify_connectivity()` fails FAST when Neo4j isn't
-    # running (the common local case). Without these the driver waits on long
-    # defaults, making every recommend() that falls back to the in-memory
-    # graph take several seconds.
+    # Timeouts depend on WHERE Neo4j is:
+    #
+    # * LOCAL -- fail FAST. If it isn't running (the common local case) the
+    #   default timeouts make every recommend() that falls back to the
+    #   in-memory graph take several seconds.
+    # * REMOTE (e.g. a free Neo4j Aura instance) -- a TLS handshake plus the
+    #   initial routing-table fetch across the internet regularly exceeds 2s,
+    #   so the local values would report a perfectly healthy database as
+    #   "not available". Give it real headroom instead.
+    local = _is_local_uri(settings.neo4j_uri)
     return GraphDatabase.driver(
         settings.neo4j_uri,
         auth=(settings.neo4j_username, settings.neo4j_password),
-        connection_timeout=2.0,
-        connection_acquisition_timeout=3.0,
-        max_transaction_retry_time=2.0,
+        connection_timeout=2.0 if local else 15.0,
+        connection_acquisition_timeout=3.0 if local else 20.0,
+        max_transaction_retry_time=2.0 if local else 10.0,
     )
 
 
@@ -89,15 +103,39 @@ def run_read_only_cypher(cypher: str, params: dict | None = None) -> list[dict]:
     return [r.data() for r in records]
 
 
-@lru_cache(maxsize=1)
-def is_available() -> bool:
-    """True if Neo4j is reachable.
+# Cached availability: (checked_at_monotonic, result).
+_AVAILABILITY: tuple[float, bool] | None = None
 
-    Memoized for the process: connectivity is fixed for a session (Neo4j is
-    either up or it isn't), and this is called on every recommend()/candidate
-    query. Caching turns N slow socket probes into one. Restart the app after
-    starting Neo4j.
-    """
+# A NEGATIVE result is re-checked after this long; a POSITIVE one is cached for
+# the process. Rationale: this is called on every recommend()/candidate query,
+# so an uncached slow socket probe per call is unacceptable -- but caching
+# "offline" forever meant one transient blip (or simply starting Neo4j after
+# the app) left the graph disabled until a restart. That was tolerable when
+# Neo4j could only be localhost; with a REMOTE instance a momentary network
+# hiccup would silently disable the feature for the life of the process.
+_UNAVAILABLE_RECHECK_S = 60.0
+
+
+def _availability_cached() -> bool:
+    """The real cache logic, kept separate from the public ``is_available`` so
+    it stays testable -- the test suite stubs ``is_available`` wholesale."""
+    global _AVAILABILITY
+    now = time.monotonic()
+    if _AVAILABILITY is not None:
+        checked_at, result = _AVAILABILITY
+        if result or (now - checked_at) < _UNAVAILABLE_RECHECK_S:
+            return result
+    result = _probe_connectivity()
+    _AVAILABILITY = (now, result)
+    return result
+
+
+def is_available() -> bool:
+    """True if Neo4j is reachable. Cheap: cached (see _UNAVAILABLE_RECHECK_S)."""
+    return _availability_cached()
+
+
+def _probe_connectivity() -> bool:
     try:
         _driver().verify_connectivity()
         return True

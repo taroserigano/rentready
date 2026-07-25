@@ -288,3 +288,83 @@ def test_graph_ask_free_form_path_has_no_graph(monkeypatch):
     an arbitrary query's result shape isn't predictable enough."""
     result = graphrag.graph_ask("How many properties are there?")
     assert result["graph"] is None
+
+
+# ---------------------------------------------------------------------------
+# Remote (hosted) Neo4j support -- e.g. a free Neo4j Aura instance
+# ---------------------------------------------------------------------------
+def test_local_vs_remote_uri_classification():
+    for uri in ("bolt://localhost:7687", "bolt://127.0.0.1:7687",
+                "neo4j://localhost", "bolt://[::1]:7687"):
+        assert graph._is_local_uri(uri), uri
+    for uri in ("neo4j+s://abc123.databases.neo4j.io",
+                "bolt+s://graph.example.com:7687",
+                "neo4j://10.0.0.5:7687"):
+        assert not graph._is_local_uri(uri), uri
+
+
+def test_remote_uri_gets_generous_timeouts(monkeypatch):
+    """A 2s connect timeout is right for localhost fast-fail but reports a
+    healthy HOSTED database as unavailable -- TLS + the routing-table fetch
+    regularly exceed it. Remote URIs must get real headroom."""
+    captured = {}
+
+    class _FakeGraphDatabase:
+        @staticmethod
+        def driver(uri, **kwargs):
+            captured.update(kwargs)
+            return object()
+
+    import sys
+    import types
+
+    fake = types.ModuleType("neo4j")
+    fake.GraphDatabase = _FakeGraphDatabase
+    monkeypatch.setitem(sys.modules, "neo4j", fake)
+
+    from settings import settings
+
+    for uri, expect_fast in (("bolt://localhost:7687", True),
+                             ("neo4j+s://abc.databases.neo4j.io", False)):
+        graph._driver.cache_clear()
+        captured.clear()
+        monkeypatch.setattr(settings, "neo4j_uri", uri)
+        graph._driver()
+        if expect_fast:
+            assert captured["connection_timeout"] == 2.0
+        else:
+            assert captured["connection_timeout"] >= 10.0
+            assert captured["connection_acquisition_timeout"] >= 10.0
+    graph._driver.cache_clear()
+
+
+def test_unavailable_is_rechecked_but_available_is_cached(monkeypatch):
+    """Caching "offline" for the whole process meant one transient blip (or
+    starting Neo4j after the app) disabled the graph until a restart."""
+    calls = {"n": 0}
+
+    def _probe():
+        calls["n"] += 1
+        return False
+
+    monkeypatch.setattr(graph, "_probe_connectivity", _probe)
+    graph._AVAILABILITY = None
+
+    assert graph._availability_cached() is False
+    assert graph._availability_cached() is False  # within window -> cached
+    assert calls["n"] == 1
+
+    # Pretend the recheck window elapsed and Neo4j came up.
+    graph._AVAILABILITY = (
+        graph.time.monotonic() - graph._UNAVAILABLE_RECHECK_S - 1, False
+    )
+    monkeypatch.setattr(graph, "_probe_connectivity", lambda: True)
+    assert graph._availability_cached() is True
+
+    # A POSITIVE result stays cached (this is on every recommend()).
+    monkeypatch.setattr(
+        graph, "_probe_connectivity",
+        lambda: (_ for _ in ()).throw(AssertionError("should not re-probe")),
+    )
+    assert graph._availability_cached() is True
+    graph._AVAILABILITY = None

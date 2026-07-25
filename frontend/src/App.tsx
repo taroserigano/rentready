@@ -328,13 +328,13 @@ function Nav({
         RentReady
       </button>
       {tab("apply", "Apply")}
+      {tab("residents", "Residents")}
       {tab("applicants", "Applicants")}
       {tab("properties", "Properties")}
       {tab("tours", "Tours")}
       {tab("ask", "Lease Q&A")}
       {tab("dashboard", "Dashboard")}
       {tab("risk", "Risk Assessment")}
-      {tab("residents", "Residents")}
       {tab("report", "AI Report")}
       <ThemeToggle />
       {commands && <CommandPalette commands={commands} />}

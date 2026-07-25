@@ -66,8 +66,30 @@ export function GraphAsk({ neo4jAvailable }: { neo4jAvailable?: boolean }) {
       </p>
 
       {offline ? (
-        <div className="alert bad" role="status" style={{ marginTop: 12 }}>
-          Graph search is offline — connect Neo4j to query the property graph.
+        // "warn", not "bad": this is an optional integration being absent, not
+        // a failure. Everything else on the page (eligibility, risk,
+        // recommendations) works without it -- graph.py falls back to an
+        // in-memory property list. Say what to DO, since the previous copy
+        // ("connect Neo4j") gave no actionable next step.
+        <div className="alert warn" role="status" style={{ marginTop: 12 }}>
+          <div>
+            <strong>Property graph not connected.</strong> This panel needs a Neo4j
+            instance to run Cypher against; the rest of the page works without it.
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12 }}>
+            To enable it, point the app at any Neo4j — a free{" "}
+            <a
+              href="https://neo4j.com/cloud/aura-free/"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Neo4j Aura
+            </a>{" "}
+            instance works, or run one locally with{" "}
+            <code>docker compose up -d</code> — then set{" "}
+            <code>NEO4J_URI</code>, <code>NEO4J_USERNAME</code> and{" "}
+            <code>NEO4J_PASSWORD</code> and restart.
+          </div>
         </div>
       ) : (
         <>
