@@ -122,6 +122,27 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # CACHING. Vite emits content-hashed asset filenames (index-C1-7skBD.js),
+    # so those bundles are immutable and safe to cache for a year. index.html
+    # must NOT be, because it is the file that names WHICH hashed bundles to
+    # load.
+    #
+    # Serving both with NO Cache-Control (the previous state) is the trap:
+    # browsers then apply *heuristic* freshness -- roughly 10% of the
+    # document's Last-Modified age -- so a returning visitor silently keeps
+    # executing an old index.html plus its old chunks, and sees UI copy that no
+    # longer exists in the repo. It looks exactly like a broken deploy, and no
+    # amount of redeploying fixes it, because the server is never asked.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location = /index.html {
+        # "no-cache" = always revalidate, NOT "never store". The ETag above
+        # makes that a cheap 304 in the common case.
+        add_header Cache-Control "no-cache";
+    }
+
     location / {
         try_files $uri /index.html;
     }
