@@ -1,5 +1,8 @@
 # 🏠 RentReady — AI Rental Operations Platform
 
+<img width="2727" height="1276" alt="image" src="https://github.com/user-attachments/assets/6c051846-a18b-492c-b790-cb981ffd9050" />
+
+
 **A full-stack, production-shaped AI application for the entire renter lifecycle** — application intake → eligibility → property matching → tour booking → lease Q&A → in-tenancy risk & retention — with **every AI decision deterministic-first, explainable, evaluated, and traced.**
 
 This isn't a chatbot wrapper. It's five independent AI agents (Concierge, Recommendations, Tour Scheduler, Applicant Risk, Resident Risk) sharing one hard rule: **the model never decides — it only explains a deterministic decision.** That rule, plus a two-tier evaluation suite that gates CI, is the whole design philosophy.
