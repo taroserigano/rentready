@@ -16,8 +16,14 @@ services:
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
     ports:
-      - "7474:7474" # HTTP browser UI
-      - "7687:7687" # Bolt protocol (the app connects here)
+      # Bound to 127.0.0.1 EXPLICITLY, not the "7474:7474" short form, which
+      # publishes on 0.0.0.0 -- i.e. every interface. That's harmless on a
+      # laptop but this same file is used on a public EC2 instance, where it
+      # would expose the Neo4j browser and bolt to the internet guarded only by
+      # a well-known default password. (The security group also blocks these
+      # ports, but the container should not depend on that being true.)
+      - "127.0.0.1:7474:7474" # HTTP browser UI
+      - "127.0.0.1:7687:7687" # Bolt protocol (the app connects here)
     volumes:
       - rentready_neo4j_data:/data
 

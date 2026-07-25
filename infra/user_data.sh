@@ -36,6 +36,29 @@ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin s
 mkdir -p /opt/rentready
 chown ec2-user:ec2-user /opt/rentready
 
+# --- OPTIONAL: Neo4j Community for the property-graph panel -----------------
+# The app works without this -- graph.py falls back to an in-memory property
+# list and the GraphAsk panel explains it's not connected. Enable it only with
+# eyes open, because it is a TIGHT fit on a t3.micro:
+#
+#   observed: java ~480MB + uvicorn ~120MB of 911MB total, ~50MB available,
+#   ~840MB in swap. It runs, but there is no headroom, and the
+#   instance-status-check alarm (see __main__.py) may reboot the box under load.
+#
+# Deliberately NOT started automatically at first boot: an OOM during
+# provisioning is much harder to debug than a graph panel that says it's off.
+# To enable, after deploy.sh has run:
+#
+#   sudo dnf install -y docker && sudo systemctl enable --now docker
+#   cd /opt/rentready && sudo docker compose up -d
+#   curl -s -X POST http://127.0.0.1:8000/seed-graph   # admin-gated: local only
+#
+# docker-compose.yml binds Neo4j to 127.0.0.1 ONLY (never 0.0.0.0) so bolt and
+# the browser UI are not reachable from the internet -- important, because the
+# password is a known default. Verify with: sudo ss -ltnp | grep 7687
+dnf install -y docker
+systemctl enable docker
+
 # systemd unit for the FastAPI backend (uvicorn). Deploy the app to
 # /opt/rentready first, then: sudo systemctl enable --now rentready-backend
 #

@@ -39,6 +39,12 @@ frontend/.playwright/
 # stale store copy
 chroma_db.bad-readonly/
 
+# Any .env backup/variant is still a secrets file (.env itself is covered
+# above). Named explicitly because a bare `git add -A` would otherwise sweep
+# something like .env.bak into a public repo.
+.env.*
+!.env.example
+
 # Pulumi (infra/) -- local state, secrets passphrase, downloaded SSH key.
 # Pulumi.dev.yaml is also excluded: it holds sshCidr (a real public IP) in
 # plaintext, which shouldn't land in a public repo -- recreate it locally
