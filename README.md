@@ -25,18 +25,162 @@ admin-only `/evals` API is gated off in production.
 
 ---
 
-## 📊 Performance report → **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)**
+## 📊 AI performance report
 
-The full measured results: all **24 resident-risk heads with the naive baseline each one
-has to beat** (18 win, 1 ties, 3 lose — and it says which), applicant-model calibration,
-both chat-evaluation methods, and every command to reproduce them. Every ML figure is read
-from the deployed artifact, so you can check it yourself against
-[`/api/health`](https://13-59-120-53.sslip.io/api/health).
-
-Also published as a **[styled web report](https://taroserigano.github.io/rentready/reports/ai_showcase.html)**
-(GitHub Pages — no clone, no server), an
-[interactive version inside the live app](https://13-59-120-53.sslip.io/#/report), and a
+Every ML figure below is read straight from the deployed model artifact —
+[`GET /api/health`](https://13-59-120-53.sslip.io/api/health) returns the same numbers, so
+none of it has to be taken on trust. Also available as a
+[styled web report](https://taroserigano.github.io/rentready/reports/ai_showcase.html),
+an [interactive version in the live app](https://13-59-120-53.sslip.io/#/report), and a
 [self-contained HTML file](docs/reports/ai_showcase.html) that opens offline.
+
+Because the data is synthetic (see the warning above), **every head is shown next to the
+naive baseline it has to beat** — that comparison, not the raw score, is what says whether
+a model earned its place.
+
+### Applicant late-payment risk
+
+Single-head XGBoost · 16,000 samples (12,000 train / 4,000 held-out) · 15 features.
+
+| Metric | Value | Reading |
+|---|---|---|
+| ROC-AUC | **0.784** | Ranks a random late payer above a random on-time payer 78% of the time |
+| Brier score | **0.135** | vs 0.171 for predicting the 22.0% base rate every time |
+| Calibration error (ECE) | **0.021** | When it says 30%, ≈30% of those applicants are late |
+| PR-AUC | 0.533 | At a 22.0% base rate |
+
+Calibration is the number that matters here: the output is shown to a human *as a
+probability*, so it has to mean something. ECE 0.021 means the stated percentage lands
+within ~2 points of the observed rate.
+
+### Resident risk — all 24 heads vs. their baselines
+
+Baselines: **persistence** ("assume the balance doesn't change") for dollar heads,
+**predict-the-mean** for counts, **predict-the-base-rate** for classifiers. `n_test` = 300.
+
+**18 heads beat their baseline, 1 ties, 3 lose.**
+
+| Family | Head | Discrimination | Model | Naive baseline | Verdict |
+|---|---|---|---|---|:--|
+| late | `late_1m` | AUC 0.683 | Brier 0.178 | base-rate 0.186 | ✅ model |
+| late | `late_3m` | AUC 0.815 | Brier **0.176** | base-rate 0.242 | ✅ model |
+| late | `late_6m` | AUC 0.800 | Brier 0.183 | base-rate 0.246 | ✅ model |
+| late | `late_12m` | AUC 0.822 | Brier **0.157** | base-rate 0.210 | ✅ model |
+| frequency | `late_count_3m` | R² 0.307 | MAE 0.58 mo | mean 0.84 | ✅ model |
+| frequency | `late_count_6m` | R² 0.488 | MAE 0.87 mo | mean 1.43 | ✅ model |
+| frequency | `late_count_9m` | R² 0.586 | MAE 1.18 mo | mean 2.06 | ✅ model |
+| frequency | `late_count_12m` | R² 0.621 | MAE **1.45 mo** | mean 2.62 | ✅ model |
+| frequency | `missed_count_12m` | R² 0.299 | MAE 0.37 mo | mean 0.58 | ✅ model |
+| severity | `max_days_late_12m` | R² 0.380 | MAE 11.6 days | mean 15.9 | ✅ model |
+| severity | `p_30d_12m` | AUC 0.826 | Brier **0.158** | base-rate 0.222 | ✅ model |
+| severity | `p_60d_12m` | AUC 0.667 | Brier 0.060 | base-rate 0.062 | ⚠️ marginal |
+| severity | `p_90d_12m` | AUC **0.522** | Brier 0.026 | base-rate 0.026 | ➖ tie (chance) |
+| severity | `serious` | AUC 0.823 | Brier **0.094** | base-rate 0.158 | ✅ model |
+| arrears | `arrears_3m` | R² 0.893 | MAE $334 | persistence **$242** | ❌ baseline |
+| arrears | `arrears_6m` | R² 0.916 | MAE $374 | persistence **$333** | ❌ baseline |
+| arrears | `arrears_9m` | R² 0.913 | MAE **$416** | persistence $426 | ✅ model (narrow) |
+| arrears | `arrears_12m` | R² 0.816 | MAE $506 | persistence **$461** | ❌ baseline |
+| arrears | `peak_balance_12m` | R² 0.890 | MAE **$678** | persistence $758 | ✅ model |
+| cure | `p_cure_6m` | AUC **0.888** | Brier 0.134 | base-rate 0.249 | ✅ model |
+| retention | `churn` | AUC 0.773 | Brier 0.180 | base-rate 0.238 | ✅ model |
+| retention | `churn_12m` | AUC 0.734 | Brier 0.198 | base-rate 0.237 | ✅ model |
+
+Two heads have no single-number baseline: `delinquency_bucket_12m` (5-class, accuracy
+0.503, log-loss 1.038) and `months_to_cure` (discrete-time hazard, AUC 0.869).
+
+#### Where the models do *not* beat doing nothing
+
+**1. The arrears family's impressive R² is mostly autocorrelation.** `arrears_6m` reports
+R² 0.916 — which looks excellent until you write the one-line baseline. Near-term arrears
+are dominated by the balance a resident is *already* carrying, so "assume it doesn't
+change" wins on 3 of 5 dollar heads. Only `peak_balance_12m` clearly earns its model.
+
+**2. `p_90d_12m` is at chance.** AUC 0.522, and its Brier score (0.026) is *identical* to
+predicting the base rate. Its flattering 0.011 ECE reflects how rare the event is (~8
+positives in a 300-row split), not skill. Flagged `low_confidence` and surfaced as "low
+power" on the in-app model card.
+
+**3. `p_60d_12m` is marginal** — Brier 0.060 vs a 0.062 baseline. Also `low_confidence`.
+
+These are visible because `train_residents.py` emits a `baseline_*` figure for every head
+and serves it on `/health`. Reporting R² 0.916 and moving on would have been easier and
+wrong.
+
+### Chat evaluation — verified two independent ways
+
+Six chat surfaces, graded by a **deterministic logic layer** (LLM off, reproducible) *and*
+an **LLM-as-judge** over live Claude prose. Two methods that fail differently.
+
+| Method 1 — logic layer | Items | Routing | Grounding | Safety |
+|---|--:|--:|--:|--:|
+| Risk | 77 | 100% | 100% | 100% |
+| Residents | 103 | 100% | 100% | 100% |
+| Concierge | 70 | 100% | 100% | 100% |
+| Applicant Q&A | 20 | 100% | — | 100% |
+| Tours | 20 | 100% | 100% | 100% |
+| Property-Graph | 10 | 100% | — | 100% |
+| **Overall** | **300** | **100%** | **100%** | **100%** |
+
+| Method 2 — LLM-as-judge | Answers | Faithful | Helpful | Safe |
+|---|--:|--:|--:|--:|
+| Risk | 25 | 100% | 100% | 100% |
+| Residents | 25 | 100% | 100% | 100% |
+| Concierge | 25 | 100% | 100% | 100% |
+| Applicant Q&A | 20 | 95% | 100% | 100% |
+| **Overall** | **95** | **99.0%** | **100%** | **100%** |
+
+**The judge was adversarially validated before being trusted.** A disguised fabrication, an
+ungrounded claim, and a laundered "SOC-2 audited, 99% accurate" line all still score
+`faithful=false` — so it measures accuracy, not leniency. A judge that rubber-stamps is
+worse than no judge, because it produces a number.
+
+| Robustness & coverage | Result |
+|---|---|
+| Routing stability under rewording | **98.6%** across 1,000 held-out paraphrases the router never saw |
+| Free-form questions through the live UI | **120 / 120** (20 per surface × 6, Playwright + live Claude) |
+| Backend tests | **390** passing (offline, deterministic, no API key needed) |
+| Frontend tests | **108** (Vitest) · End-to-end **65** (Playwright, real browser) |
+
+### Deterministic suites that gate CI
+
+| Metric | Score | CI threshold |
+|---|--:|--:|
+| Eligibility accuracy | **100%** | 100% |
+| Extraction field accuracy | **100%** | 90% |
+| Recommendation NDCG@5 | **85%** | 70% |
+| Recommendation-explanation groundedness (judge) | **93%** | — |
+| RAGAS faithfulness / correctness | **100% / 90%** | — |
+
+The LLM-as-judge earned its place by catching a real bug: recommendation explanations were
+hallucinating amenities (groundedness 0.30) until the judge and the explainer were fed the
+same facts (0.93).
+
+### Responsible by construction
+
+| Guarantee | How it's enforced |
+|---|---|
+| **The model never decides** | Estimates inform human outreach. Nothing approves, denies, evicts, or prices. |
+| **Protected classes excluded** | Race, national origin, sex, disability, age, familial status, and location never appear in any `feature_order` or input vector — absent, not merely unused. A test asserts no reason code can cite an excluded field. |
+| **Serious flags route to a human** | `routes_to_review` on the `serious` head; no automated adverse action. |
+| **Read-only graph queries** | LLM-written Cypher runs under `RoutingControl.READ`, enforced by Neo4j itself — not a keyword blocklist. |
+| **No false certainty** | Probabilities are clamped away from 0% and 100%, so the UI can never render an absolute claim. |
+
+### Reproduce every number
+
+```bash
+python backend/train_risk.py                 # applicant model + metrics
+python backend/train_residents.py            # 24-head model + baseline_* figures
+python backend/evals/chat_golden_eval.py     # logic layer, 300 items, LLM off
+python backend/evals/judge_eval.py           # LLM-as-judge over live prose
+python backend/evals/paraphrase_sweep.py     # 1,000 paraphrases
+pytest backend/tests                         # 390
+cd frontend && npm test && npx playwright test   # 108 + 65
+```
+
+⚠️ Retraining regenerates the artifact and **invalidates the golden eval set** (136 items
+bake in model outputs) — regenerate with `python backend/evals/gen_residents_ask_dataset.py`.
+Training is also not bit-reproducible across platforms; see the docstring in
+`train_residents.py`.
 
 ---
 
