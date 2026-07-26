@@ -25,6 +25,21 @@ admin-only `/evals` API is gated off in production.
 
 ---
 
+## 📊 Performance report → **[docs/PERFORMANCE.md](docs/PERFORMANCE.md)**
+
+The full measured results: all **24 resident-risk heads with the naive baseline each one
+has to beat** (18 win, 1 ties, 3 lose — and it says which), applicant-model calibration,
+both chat-evaluation methods, and every command to reproduce them. Every ML figure is read
+from the deployed artifact, so you can check it yourself against
+[`/api/health`](https://13-59-120-53.sslip.io/api/health).
+
+Also published as a **[styled web report](https://taroserigano.github.io/rentready/reports/ai_showcase.html)**
+(GitHub Pages — no clone, no server), an
+[interactive version inside the live app](https://13-59-120-53.sslip.io/#/report), and a
+[self-contained HTML file](docs/reports/ai_showcase.html) that opens offline.
+
+---
+
 ## 📸 What it looks like
 
 Captured from the live deployment above — [19 more in `docs/screenshots/`](docs/screenshots/).

@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RentReady — AI performance reports</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem;
+         font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+  .sub { opacity: .7; margin: 0 0 2rem; }
+  a.card { display: block; padding: 1rem 1.15rem; margin: .6rem 0; border-radius: 10px;
+           border: 1px solid color-mix(in oklab, currentColor 18%, transparent);
+           text-decoration: none; color: inherit; }
+  a.card:hover { border-color: color-mix(in oklab, currentColor 42%, transparent); }
+  a.card b { display: block; font-size: 1.02rem; }
+  a.card span { opacity: .7; font-size: .92rem; }
+  .note { margin-top: 2rem; padding: .9rem 1.1rem; border-radius: 10px;
+          background: color-mix(in oklab, currentColor 7%, transparent); font-size: .92rem; }
+</style>
+
+<h1>RentReady — AI performance reports</h1>
+<p class="sub">Calibrated risk models + a grounded agentic assistant, measured against naive baselines.</p>
+
+<a class="card" href="reports/ai_showcase.html">
+  <b>AI system report →</b>
+  <span>Two model families, 24 prediction heads, chat evaluated two independent ways.</span>
+</a>
+<a class="card" href="reports/eval_portfolio.html">
+  <b>Chat evaluation portfolio →</b>
+  <span>Logic layer (LLM off) and LLM-as-judge, side by side.</span>
+</a>
+<a class="card" href="https://github.com/taroserigano/rentready/blob/main/docs/PERFORMANCE.md">
+  <b>Full performance write-up →</b>
+  <span>Every head with the baseline it has to beat — including the three it loses to.</span>
+</a>
+<a class="card" href="https://13-59-120-53.sslip.io/">
+  <b>Live demo →</b>
+  <span>The running application on AWS.</span>
+</a>
+
+<p class="note">
+  <b>All data is synthetic.</b> Metrics are measured on a held-out split of the same
+  parametric simulator that produced the training data, so they show the pipeline recovers a
+  known data-generating process — not real-world predictive skill.
+  <a href="https://github.com/taroserigano/rentready">Source on GitHub</a>.
+</p>

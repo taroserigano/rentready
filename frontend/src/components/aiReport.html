@@ -212,7 +212,7 @@
     </p>
     <div class="chips">
       <span class="chip"><b>XGBoost</b> · 2 model families</span>
-      <span class="chip"><b>22</b> prediction heads</span>
+      <span class="chip"><b>24</b> prediction heads</span>
       <span class="chip"><b>Claude</b> synthesis</span>
       <span class="chip"><b>LangChain</b> · RAG</span>
       <span class="chip"><b>Neo4j</b> property graph</span>
@@ -223,7 +223,7 @@
       <div class="kpi">
         <div class="v num">0.92<small></small></div>
         <div class="l">Best-head discrimination (AUC / R²)</div>
-        <div class="s">held-out split of SYNTHETIC data · best of 22 heads, not the average</div>
+        <div class="s">held-out split of SYNTHETIC data · best of 24 heads, not the average</div>
       </div>
       <div class="kpi">
         <div class="v num">100<small>%</small></div>
@@ -280,7 +280,7 @@
 
       <div class="card">
         <h3>Resident multi-head model</h3>
-        <div class="tag">22 heads · late · frequency · severity · arrears · cure · retention</div>
+        <div class="tag">24 heads · late · frequency · severity · arrears · cure · retention</div>
         <div class="statrow">
           <div class="stat"><div class="n">0.90</div><div class="c">Best AUC (balance cure)</div></div>
           <div class="stat"><div class="n">0.92</div><div class="c">Best R² (arrears $)</div></div>
@@ -298,7 +298,7 @@
       <div class="tag">1.0 = perfect · 0.5 = random. These six heads clear random by a wide margin.</div>
       <div class="chart" id="aucChart" style="margin-top:26px;"></div>
       <div class="chart-foot">
-        ROC-AUC on the held-out test split. Higher is better. <b>This is 6 of 22 heads.</b>
+        ROC-AUC on the held-out test split. Higher is better. <b>This is 6 of 24 heads.</b>
         The rare-event heads are deliberately excluded here because they are weak, not because
         they are unimportant: <code>p_90d_12m</code> (90+ days late) scores about
         <b>0.51 — i.e. chance</b> — and <code>p_60d_12m</code> is also low-power. Both are flagged
@@ -428,8 +428,8 @@
     <div class="kpis" style="margin-top:28px;">
       <div class="kpi"><div class="v num">120<small>/120</small></div><div class="l">Custom questions answered</div><div class="s">20 per surface × 6</div></div>
       <div class="kpi"><div class="v num">6<small>/6</small></div><div class="l">Chat surfaces live</div><div class="s">incl. Neo4j graph Q&amp;A</div></div>
-      <div class="kpi"><div class="v num">275</div><div class="l">Backend tests passing</div><div class="s">unit + integration</div></div>
-      <div class="kpi"><div class="v num">56<small>/56</small></div><div class="l">End-to-end (Playwright)</div><div class="s">real browser</div></div>
+      <div class="kpi"><div class="v num">390</div><div class="l">Backend tests passing</div><div class="s">unit + integration</div></div>
+      <div class="kpi"><div class="v num">65<small>/65</small></div><div class="l">End-to-end (Playwright)</div><div class="s">real browser</div></div>
     </div>
   </section>
 
