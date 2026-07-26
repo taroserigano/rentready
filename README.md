@@ -25,6 +25,39 @@ admin-only `/evals` API is gated off in production.
 
 ---
 
+## 📸 What it looks like
+
+Captured from the live deployment above — [19 more in `docs/screenshots/`](docs/screenshots/).
+
+**Applicant risk — a probability, its confidence interval, and what moved it**
+
+![Late-payment risk with SHAP-style reason codes](docs/screenshots/17-risk-assessment-list.png)
+
+Every applicant gets a calibrated probability (35%, `~35% (13–56%)`) and signed
+per-feature attributions — `Credit score of 600  +0.90`, `No recent late payments  −0.37`.
+No LLM touches the score. The banner is load-bearing, not decoration: no protected
+attribute or location field is a model input, and Elevated cases route to a human.
+
+**Resident risk — 24 forecast heads per resident, each with its own driver**
+
+![Resident roster with per-head predictions](docs/screenshots/09-resident-risk-detail.png)
+
+One row per resident, one column per model family: P(late next quarter), expected late
+months over 12, expected balance, churn, serious-delinquency flag — plus the top driver
+behind each. Heads that don't beat their naive baseline are labelled `low_confidence`
+rather than quietly averaged in.
+
+**GraphRAG — natural language to Cypher against a real Neo4j graph**
+
+![Text-to-Cypher with the resulting property graph](docs/screenshots/05-graphrag-cypher.png)
+
+The question compiles to Cypher, runs read-only against Neo4j (enforced server-side by
+`RoutingControl.READ`, not a keyword blocklist), and the answer is rendered from the rows
+returned — with the subgraph that produced it. The `Template` badge means a deterministic
+template matched, so no LLM call was needed at all.
+
+---
+
 ## ⚡ Tech Stack
 
 <table>
