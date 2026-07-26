@@ -59,3 +59,11 @@ langsmith==0.2.10
 arize-phoenix==7.3.2
 openinference-instrumentation-llama-index==3.1.4
 ragas==0.2.10
+
+# Testing. Belongs here, not in a separate dev-requirements file, because the
+# documented setup path is "pip install -r backend/requirements.txt" followed by
+# "make test" -- and because CI installs only this file, so leaving pytest out
+# made every workflow run die with "No module named pytest" while the suite
+# passed locally. httpx (needed by fastapi.testclient.TestClient) arrives
+# transitively via the anthropic SDK.
+pytest==9.1.1
