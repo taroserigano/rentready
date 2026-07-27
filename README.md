@@ -1,5 +1,8 @@
 # 🏠 RentReady — AI Rental Operations Platform
 
+### 🔗 Live demo — **https://13-59-120-53.sslip.io/**
+
+
 <img width="2727" height="1276" alt="image" src="https://github.com/user-attachments/assets/6c051846-a18b-492c-b790-cb981ffd9050" />
 
 
@@ -9,7 +12,6 @@ This isn't a chatbot wrapper. It's five independent AI agents (Concierge, Recomm
 
 > Runs with **zero configuration.** No API keys required — a mock LLM, an offline embedder, in-memory graph fallback, and heuristic ML models kick in automatically. Add an `ANTHROPIC_API_KEY` and everything upgrades to real Claude reasoning, live tracing, and trained XGBoost models — same code path either way.
 
-### 🔗 Live demo — **https://13-59-120-53.sslip.io/**
 
 Running on a single AWS **t3.micro** (free tier), provisioned by the Pulumi stack in
 [infra/](infra/): nginx + Let's Encrypt TLS, uvicorn under systemd, Neo4j Community
