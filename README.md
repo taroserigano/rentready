@@ -1,6 +1,6 @@
 # 🏠 RentReady — AI Rental Operations Platform
 
-### 🔗 Live demo — **https://13-59-120-53.sslip.io/**
+### 🔗 Live demo — **https://13-59-120-53.sslip.io/** (AWS Ec2) 
 
 
 <img width="2727" height="1276" alt="image" src="https://github.com/user-attachments/assets/6c051846-a18b-492c-b790-cb981ffd9050" />
